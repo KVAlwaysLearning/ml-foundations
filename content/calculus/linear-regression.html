@@ -1,0 +1,276 @@
+<!--
+  Section: Multivariable calculus
+  Concept: Linear regression
+  data-part groups pages in the navigation: Concepts -> Derivation -> Worked example -> Going further.
+  One <template data-topic> per page. Page order in the nav follows the order here.
+-->
+
+<template data-topic data-section="calculus" data-concept="Linear regression" data-part="Concepts" data-id="multivariable-functions" data-title="Functions of several variables">
+<div class="prose">
+<p class="lede">A regression model is trained by treating its loss as a function of the weights. Before any derivatives, it helps to be clear about what such a function is.</p>
+
+<h2>One output, several inputs</h2>
+<p>A function \(f:\mathbb{R}^n\to\mathbb{R}\) takes \(n\) numbers and returns one. Familiar examples:</p>
+<ul class="plain">
+<li>Area of a rectangle: \(A(\ell, h) = \ell h\). Two inputs, one output.</li>
+<li>A bowl: \(f(x, y) = x^2 + y^2\). At \((1, 2)\) it returns \(1 + 4 = 5\).</li>
+<li>A saddle: \(g(x, y) = x^2 - y^2\). At \((1, 2)\) it returns \(1 - 4 = -3\).</li>
+</ul>
+
+<h2>Pictures: surfaces and contours</h2>
+<p>With two inputs you can draw the output as a height above the \((x, y)\) floor: a surface. Or you can draw the <b>level sets</b> (contours) on the floor: all points where \(f\) equals some constant \(C\). For the bowl, \(x^2 + y^2 = C\) is a circle of radius \(\sqrt{C}\): the contour map is a set of rings.</p>
+
+<h2>The regression loss is a function of the weights</h2>
+<p>Suppose we have two observations with one feature: \((x, y) = (1, 3)\) and \((2, 5)\), and the model \(\hat y = b + wx\). The mean squared error is</p>
+\[ L(b, w) = \tfrac12\big[(3 - b - w)^2 + (5 - b - 2w)^2\big]. \]
+<p>The data \(x\) and \(y\) are fixed numbers. The inputs of \(L\) are the <b>weights</b> \(b\) and \(w\). Try two settings:</p>
+<ul class="plain">
+<li>\(b = 0, w = 2\): errors are \(3 - 2 = 1\) and \(5 - 4 = 1\), so \(L = \tfrac12(1 + 1) = 1\).</li>
+<li>\(b = 1, w = 2\): errors are \(0\) and \(0\), so \(L = 0\). This line passes through both points.</li>
+</ul>
+<p>Training a regression model means searching this weight space for the lowest point. The rest of this section builds the tools to find it without guessing.</p>
+</div>
+</template>
+
+<template data-topic data-section="calculus" data-concept="Linear regression" data-part="Concepts" data-id="partial-derivatives" data-title="Partial derivatives">
+<div class="prose">
+<p class="lede">A partial derivative asks how the output changes when you nudge one input and freeze all the others.</p>
+
+<h2>Definition</h2>
+\[ \frac{\partial f}{\partial x}(x, y) = \lim_{h\to 0}\frac{f(x + h, y) - f(x, y)}{h}. \]
+<p>In practice: treat every other variable as a constant and differentiate as usual.</p>
+
+<h2>Examples</h2>
+<p>\(f(x, y) = x^2y^3 + \ln x + \cos y\):</p>
+\[ \frac{\partial f}{\partial x} = 2xy^3 + \frac1x, \qquad \frac{\partial f}{\partial y} = 3x^2y^2 - \sin y. \]
+<p>\(f(x, y, z) = xyz + z^2\):</p>
+\[ \frac{\partial f}{\partial x} = yz, \qquad \frac{\partial f}{\partial y} = xz, \qquad \frac{\partial f}{\partial z} = xy + 2z. \]
+
+<h2>Checking one with numbers</h2>
+<p>For \(f(x, y) = x^2 + 3y^2\) at \((1, 1)\): the formula gives \(\partial f/\partial x = 2x = 2\). Numerically, \(f(1.001, 1) = 1.002001 + 3 = 4.002001\) and \(f(1, 1) = 4\), so the slope is \(0.002001 / 0.001 \approx 2.001\). Same answer.</p>
+
+<h2>What it means geometrically</h2>
+<p>\(\partial f/\partial x\) is the slope of the surface if you walk exactly along the \(x\)-direction. \(\partial f/\partial y\) is the slope along \(y\). A surface has a different slope in every direction; the partial derivatives are the slopes along the axes.</p>
+
+<h2>Where this is going</h2>
+<p>For the regression loss we'll need \(\partial L/\partial b\), \(\partial L/\partial w_1\), \(\partial L/\partial w_2\): how the error changes when each weight is nudged on its own.</p>
+</div>
+</template>
+
+<template data-topic data-section="calculus" data-concept="Linear regression" data-part="Concepts" data-id="chain-rule" data-title="The chain rule and the sum rule">
+<div class="prose">
+<p class="lede">The loss is a sum of squared errors, and each error is a function of the weights. Two rules handle that: derivatives pass through sums, and through compositions via the chain rule.</p>
+
+<h2>Sum rule</h2>
+<p>The derivative of a sum is the sum of the derivatives:</p>
+\[ \frac{\partial}{\partial w}\sum_{i=1}^N g_i(w) = \sum_{i=1}^N \frac{\partial g_i}{\partial w}. \]
+<p>So we can differentiate the loss one observation at a time and add the results.</p>
+
+<h2>Chain rule, one variable</h2>
+<p>If \(L = u^2\) and \(u = 3 - 2w\), then</p>
+\[ \frac{dL}{dw} = \frac{dL}{du}\cdot\frac{du}{dw} = 2u\cdot(-2) = -4(3 - 2w). \]
+<p>At \(w = 1\): \(u = 1\) and \(dL/dw = -4\).</p>
+
+<h2>Chain rule for one squared error</h2>
+<p>One observation, two features, model \(\hat y = b + w_1x_1 + w_2x_2\), residual \(r = y - \hat y\), squared error \(r^2\). The outer function is \(r^2\) (derivative \(2r\)); the inner is \(r\), whose partials are</p>
+\[ \frac{\partial r}{\partial b} = -1, \qquad \frac{\partial r}{\partial w_1} = -x_1, \qquad \frac{\partial r}{\partial w_2} = -x_2. \]
+<p>So</p>
+\[ \frac{\partial (r^2)}{\partial b} = -2r, \qquad \frac{\partial (r^2)}{\partial w_1} = -2rx_1, \qquad \frac{\partial (r^2)}{\partial w_2} = -2rx_2. \]
+
+<h2>With numbers</h2>
+<p>Take \(x_1 = 2, x_2 = 3, y = 12\) and \(b = 0, w_1 = 1, w_2 = 1\). Then \(\hat y = 5\), \(r = 7\), and</p>
+\[ \frac{\partial (r^2)}{\partial b} = -14, \qquad \frac{\partial (r^2)}{\partial w_1} = -28, \qquad \frac{\partial (r^2)}{\partial w_2} = -42. \]
+<p>All negative: increasing any weight raises \(\hat y\) toward 12 and shrinks the error. \(w_2\) has the biggest effect because its feature value is largest.</p>
+</div>
+</template>
+
+<template data-topic data-section="calculus" data-concept="Linear regression" data-part="Concepts" data-id="gradient" data-title="The gradient and linear approximation">
+<div class="prose">
+<p class="lede">Stack the partial derivatives into one vector and you get the gradient: the single object that predicts how the function changes in any direction.</p>
+
+<h2>Definition</h2>
+\[ \nabla f = \begin{bmatrix} \partial f/\partial x_1 \\ \vdots \\ \partial f/\partial x_n \end{bmatrix}. \]
+<p>It has one entry per input, so it lives in the input space (the floor), not in the space where the surface is drawn.</p>
+
+<h2>Linear approximation</h2>
+<p>For a small step \(\Delta\mathbf{x}\), the change in \(f\) is approximately</p>
+\[ \Delta f \approx \nabla f^T\Delta\mathbf{x} = \frac{\partial f}{\partial x_1}\Delta x_1 + \dots + \frac{\partial f}{\partial x_n}\Delta x_n. \]
+<p><b>Example.</b> \(f(x, y) = x^2 + 3y^2\) at \((1, 1)\): \(\nabla f = [2x, 6y]^T = [2, 6]^T\). Step \(\Delta = [0.01, 0.02]^T\): predicted change \(2(0.01) + 6(0.02) = 0.14\). Actual: \(f(1.01, 1.02) = 1.0201 + 3.1212 = 4.1413\), a change of \(0.1413\). Close, and closer for smaller steps.</p>
+
+<h2>Direction of steepest ascent</h2>
+<p>Write \(\nabla f^T\Delta\mathbf{x} = \lVert\nabla f\rVert\,\lVert\Delta\mathbf{x}\rVert\cos\theta\). For steps of a fixed length, the change is largest when \(\theta = 0\): the gradient points uphill, as steeply as possible. \(-\nabla f\) points steepest downhill. At \(\theta = 90^\circ\) the change is zero: you are walking along a contour. So the gradient is always perpendicular to the level sets.</p>
+
+<h2>Gradient descent</h2>
+<p>That gives a way to minimise without solving anything: repeatedly step downhill.</p>
+\[ \mathbf{x}_{t+1} = \mathbf{x}_t - \eta\,\nabla f(\mathbf{x}_t). \]
+<p>From \((1, 1)\) with \(\eta = 0.1\): \(\mathbf{x}_1 = [1, 1] - 0.1[2, 6] = [0.8, 0.4]\), and \(f\) drops from 4 to \(0.64 + 0.48 = 1.12\).</p>
+</div>
+</template>
+
+<template data-topic data-section="calculus" data-concept="Linear regression" data-part="Concepts" data-id="hessian-convexity" data-title="Critical points, the Hessian and convexity">
+<div class="prose">
+<p class="lede">Setting the gradient to zero finds flat points. Second derivatives tell you whether a flat point is a bottom, a top, or a saddle, and whether it is the only one.</p>
+
+<h2>Critical points</h2>
+<p>At a minimum of a smooth function every partial derivative is zero: \(\nabla f = \mathbf{0}\). The converse isn't automatic, so check the second derivatives.</p>
+
+<h2>The Hessian</h2>
+<p>The matrix of second partial derivatives:</p>
+\[ H = \begin{bmatrix} \partial^2 f/\partial x^2 & \partial^2 f/\partial x\,\partial y \\ \partial^2 f/\partial y\,\partial x & \partial^2 f/\partial y^2 \end{bmatrix}. \]
+<p>It is symmetric when the second partials are continuous (Clairaut's theorem): the order of differentiation doesn't matter.</p>
+
+<h2>Three examples at \((0, 0)\)</h2>
+<div class="tbl"><table>
+<tr><th>Function</th><th>Gradient at 0</th><th>Hessian</th><th>What it is</th></tr>
+<tr><td>\(x^2 + y^2\)</td><td>\([0, 0]\)</td><td>\(\begin{bmatrix}2&0\\0&2\end{bmatrix}\)</td><td>Unique minimum (bowl)</td></tr>
+<tr><td>\(x^2 - y^2\)</td><td>\([0, 0]\)</td><td>\(\begin{bmatrix}2&0\\0&-2\end{bmatrix}\)</td><td>Saddle: up one way, down the other</td></tr>
+<tr><td>\(x^2\)</td><td>\([0, 0]\)</td><td>\(\begin{bmatrix}2&0\\0&0\end{bmatrix}\)</td><td>Minimum along a whole line \(x = 0\) (trough)</td></tr>
+</table></div>
+
+<h2>Positive definite means a unique minimum</h2>
+<p>\(H\) is <b>positive definite</b> if \(\mathbf{z}^TH\mathbf{z} \gt 0\) for every nonzero \(\mathbf{z}\), and <b>positive semi-definite</b> if \(\mathbf{z}^TH\mathbf{z} \ge 0\). A quick test for positive definiteness (Sylvester's criterion): every leading principal minor is positive. For a \(2\times2\) matrix that is \(h_{11} \gt 0\) and \(\det H \gt 0\).</p>
+
+<h2>Convexity</h2>
+<p>If \(H\) is positive semi-definite <em>everywhere</em>, the function is convex: any point where \(\nabla f = \mathbf{0}\) is a global minimum, and there are no false bottoms. If \(H\) is positive definite, that minimum is also unique. The regression loss has a constant Hessian, so one check settles it for every weight vector at once.</p>
+</div>
+</template>
+
+<template data-topic data-section="calculus" data-concept="Linear regression" data-part="Derivation" data-id="calc-derivation" data-title="Deriving linear regression with calculus">
+<div class="prose">
+<p class="lede">Using only sums and partial derivatives, no matrices: set up the model and the loss, differentiate, set to zero, solve, and prove it is a minimum.</p>
+
+<h2>1. The model</h2>
+<p>\(N\) observations, each with \(d\) features \(x_{i1},\dots,x_{id}\) and a target \(y_i\). The prediction is a weighted sum plus a bias:</p>
+\[ \hat y_i = b + \sum_{j=1}^d w_jx_{ij}. \]
+
+<h2>2. The loss</h2>
+<p>Mean squared error over the dataset:</p>
+\[ L(b, w_1, \dots, w_d) = \frac1N\sum_{i=1}^N r_i^2, \qquad r_i = y_i - \hat y_i. \]
+<p>Why squares: they are always non-negative, they punish large errors more than small ones, and they are smooth, so derivatives exist everywhere. (Absolute errors have a kink at zero.)</p>
+
+<h2>3. Partial derivatives</h2>
+<p>By the sum rule and the chain rule (\(\partial r_i/\partial b = -1\), \(\partial r_i/\partial w_k = -x_{ik}\)):</p>
+\[ \frac{\partial L}{\partial b} = -\frac2N\sum_i r_i, \qquad \frac{\partial L}{\partial w_k} = -\frac2N\sum_i x_{ik}\,r_i. \]
+
+<h2>4. Set them to zero</h2>
+<p>\(\partial L/\partial b = 0\) gives \(\sum_i r_i = 0\): <b>at the optimum the residuals sum to zero</b>. Substituting \(r_i\):</p>
+\[ \sum_i y_i = Nb + \sum_j w_j\sum_i x_{ij}. \]
+<p>\(\partial L/\partial w_k = 0\) gives \(\sum_i x_{ik}r_i = 0\) for each \(k\):</p>
+\[ \sum_i x_{ik}y_i = b\sum_i x_{ik} + \sum_j w_j\sum_i x_{ik}x_{ij}. \]
+<p>That is \(d + 1\) linear equations in \(d + 1\) unknowns, the <b>normal equations</b>. Every coefficient is a sum computed from the data.</p>
+
+<h2>5. What the bias equation says</h2>
+<p>Divide the first equation by \(N\): \(\bar y = b + \sum_j w_j\bar x_j\), so</p>
+\[ b = \bar y - \sum_j w_j\bar x_j. \]
+<p>The fitted plane always passes through the point of averages \((\bar x_1,\dots,\bar x_d,\bar y)\).</p>
+
+<h2>6. One feature: a closed form</h2>
+<p>With \(d = 1\), substitute \(b = \bar y - w\bar x\) into the second equation and simplify:</p>
+\[ w = \frac{\sum_i (x_i - \bar x)(y_i - \bar y)}{\sum_i (x_i - \bar x)^2}, \qquad b = \bar y - w\bar x. \]
+<p>The slope is the covariance of \(x\) and \(y\) divided by the variance of \(x\).</p>
+
+<h2>7. It is a minimum</h2>
+<p>Second derivatives (differentiate the first derivatives again; the \(r_i\) are linear in the weights):</p>
+\[ \frac{\partial^2L}{\partial b^2} = 2, \qquad \frac{\partial^2L}{\partial b\,\partial w_k} = \frac2N\sum_i x_{ik}, \qquad \frac{\partial^2L}{\partial w_j\,\partial w_k} = \frac2N\sum_i x_{ij}x_{ik}. \]
+<p>None depend on the weights, so the Hessian is constant. For any direction \(\mathbf{z} = (z_0, z_1, \dots, z_d)\):</p>
+\[ \mathbf{z}^TH\mathbf{z} = \frac2N\sum_i\Big(z_0 + \sum_j z_jx_{ij}\Big)^2 \ \ge\ 0. \]
+<p>So the loss is convex and any solution of the normal equations is a global minimum. It is <b>unique</b> exactly when no nonzero \(\mathbf{z}\) makes \(z_0 + \sum_j z_jx_{ij} = 0\) for every observation, meaning no feature (or the constant) is an exact linear combination of the others.</p>
+
+<h2>8. Or walk downhill</h2>
+<p>Instead of solving the equations, gradient descent repeats</p>
+\[ b \leftarrow b + \frac{2\eta}{N}\sum_i r_i, \qquad w_k \leftarrow w_k + \frac{2\eta}{N}\sum_i x_{ik}r_i. \]
+<p>Each update pushes a weight in proportion to how strongly its feature lines up with the current errors.</p>
+</div>
+</template>
+
+<template data-topic data-section="calculus" data-concept="Linear regression" data-part="Worked example" data-id="calc-worked" data-title="Worked example, step by step">
+<div class="prose">
+<p class="lede">Four students. \(x_1\) is hours studied, \(x_2\) is practice tests taken, \(y\) is quiz score. Fit \(\hat y = b + w_1x_1 + w_2x_2\) using only the calculus route.</p>
+
+<div class="tbl"><table>
+<tr><th class="num">\(i\)</th><th class="num">\(x_1\)</th><th class="num">\(x_2\)</th><th class="num">\(y\)</th></tr>
+<tr><td class="num">1</td><td class="num">1</td><td class="num">0</td><td class="num">3</td></tr>
+<tr><td class="num">2</td><td class="num">2</td><td class="num">0</td><td class="num">6</td></tr>
+<tr><td class="num">3</td><td class="num">3</td><td class="num">1</td><td class="num">6</td></tr>
+<tr><td class="num">4</td><td class="num">4</td><td class="num">3</td><td class="num">13</td></tr>
+</table></div>
+
+<h2>Step 1: the sums the normal equations need</h2>
+<div class="tbl"><table>
+<tr><th class="num">\(i\)</th><th class="num">\(x_1^2\)</th><th class="num">\(x_1x_2\)</th><th class="num">\(x_2^2\)</th><th class="num">\(x_1y\)</th><th class="num">\(x_2y\)</th></tr>
+<tr><td class="num">1</td><td class="num">1</td><td class="num">0</td><td class="num">0</td><td class="num">3</td><td class="num">0</td></tr>
+<tr><td class="num">2</td><td class="num">4</td><td class="num">0</td><td class="num">0</td><td class="num">12</td><td class="num">0</td></tr>
+<tr><td class="num">3</td><td class="num">9</td><td class="num">3</td><td class="num">1</td><td class="num">18</td><td class="num">6</td></tr>
+<tr><td class="num">4</td><td class="num">16</td><td class="num">12</td><td class="num">9</td><td class="num">52</td><td class="num">39</td></tr>
+<tr><th class="num">Σ</th><th class="num">30</th><th class="num">15</th><th class="num">10</th><th class="num">85</th><th class="num">45</th></tr>
+</table></div>
+<p>Also \(N = 4\), \(\sum x_1 = 10\), \(\sum x_2 = 4\), \(\sum y = 28\).</p>
+
+<h2>Step 2: write the three equations</h2>
+\[ \begin{aligned}
+\partial L/\partial b = 0:&\quad 28 = 4b + 10w_1 + 4w_2 \\
+\partial L/\partial w_1 = 0:&\quad 85 = 10b + 30w_1 + 15w_2 \\
+\partial L/\partial w_2 = 0:&\quad 45 = 4b + 15w_1 + 10w_2
+\end{aligned} \]
+
+<h2>Step 3: solve by substitution</h2>
+<p>From the first equation, \(b = 7 - 2.5w_1 - w_2\) (the averages form: \(\bar y = 7\), \(\bar x_1 = 2.5\), \(\bar x_2 = 1\)). Substitute into the second:</p>
+\[ 10(7 - 2.5w_1 - w_2) + 30w_1 + 15w_2 = 85 \;\Rightarrow\; 5w_1 + 5w_2 = 15 \;\Rightarrow\; w_1 + w_2 = 3. \]
+<p>Substitute into the third:</p>
+\[ 4(7 - 2.5w_1 - w_2) + 15w_1 + 10w_2 = 45 \;\Rightarrow\; 5w_1 + 6w_2 = 17. \]
+<p>Subtract 5 times \(w_1 + w_2 = 3\): \(w_2 = 2\). Then \(w_1 = 1\) and \(b = 7 - 2.5 - 2 = 2.5\).</p>
+\[ \hat y = 2.5 + 1\cdot x_1 + 2\cdot x_2. \]
+
+<h2>Step 4: confirm it is a minimum</h2>
+<p>The Hessian entries are \(\frac2N\) times the sums above:</p>
+\[ H = \frac24\begin{bmatrix} 4 & 10 & 4 \\ 10 & 30 & 15 \\ 4 & 15 & 10 \end{bmatrix} = \begin{bmatrix} 2 & 5 & 2 \\ 5 & 15 & 7.5 \\ 2 & 7.5 & 5 \end{bmatrix}. \]
+<p>Leading principal minors: \(2 \gt 0\); \(2\cdot15 - 5^2 = 5 \gt 0\); \(\det H = 2.5 \gt 0\). All positive, so \(H\) is positive definite and this is the unique global minimum.</p>
+
+<h2>Step 5: predictions, residuals, loss</h2>
+<div class="tbl"><table>
+<tr><th class="num">\(i\)</th><th class="num">\(\hat y = 2.5 + x_1 + 2x_2\)</th><th class="num">\(r = y - \hat y\)</th><th class="num">\(r^2\)</th></tr>
+<tr><td class="num">1</td><td class="num">3.5</td><td class="num">−0.5</td><td class="num">0.25</td></tr>
+<tr><td class="num">2</td><td class="num">4.5</td><td class="num">1.5</td><td class="num">2.25</td></tr>
+<tr><td class="num">3</td><td class="num">7.5</td><td class="num">−1.5</td><td class="num">2.25</td></tr>
+<tr><td class="num">4</td><td class="num">12.5</td><td class="num">0.5</td><td class="num">0.25</td></tr>
+</table></div>
+<p>\(L = 5/4 = 1.25\). Not zero: no plane passes through all four points.</p>
+
+<h2>Step 6: check the gradient really is zero</h2>
+\[ \sum r_i = -0.5 + 1.5 - 1.5 + 0.5 = 0, \quad \sum x_{i1}r_i = -0.5 + 3 - 4.5 + 2 = 0, \quad \sum x_{i2}r_i = 0 + 0 - 1.5 + 1.5 = 0. \]
+
+<h2>Step 7: the same answer by gradient descent</h2>
+<p>Start at \(b = w_1 = w_2 = 0\) with \(\eta = 0.05\). At the start every \(r_i = y_i\), so the gradient is \(-\frac24[28, 85, 45] = [-14, -42.5, -22.5]\).</p>
+<div class="tbl"><table>
+<tr><th class="num">step</th><th class="num">\(b\)</th><th class="num">\(w_1\)</th><th class="num">\(w_2\)</th><th class="num">\(L\)</th></tr>
+<tr><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">62.5</td></tr>
+<tr><td class="num">1</td><td class="num">0.700</td><td class="num">2.125</td><td class="num">1.125</td><td class="num">1.538</td></tr>
+<tr><td class="num">2</td><td class="num">0.686</td><td class="num">2.059</td><td class="num">1.102</td><td class="num">1.488</td></tr>
+<tr><td class="num">3</td><td class="num">0.693</td><td class="num">2.055</td><td class="num">1.111</td><td class="num">1.486</td></tr>
+</table></div>
+<p>The loss drops fast, then crawls: the Hessian's eigenvalues range from about 0.09 to 20.6, so one direction is nearly flat. It reaches \(b = 2.5, w_1 = 1, w_2 = 2\) after about 2,000 steps. Run it yourself in <a href="#/intuition/lab-gd">Lab 3</a>, which starts from this dataset.</p>
+
+<div class="note"><b>Same data, other route</b>
+<p>The Linear algebra section solves this exact dataset with matrices and projection, and arrives at the same \(b = 2.5,\ w_1 = 1,\ w_2 = 2\).</p></div>
+</div>
+</template>
+
+<template data-topic data-section="calculus" data-concept="Linear regression" data-part="Going further" data-id="matrix-calculus" data-title="The matrix-calculus shortcut">
+<div class="prose">
+<p class="lede">The derivation used sums. Matrix notation writes the same thing in one line, using two identities that are just stacked partial derivatives.</p>
+
+<h2>Identity 1: \(\nabla_{\mathbf{w}}(\mathbf{w}^T\mathbf{b}) = \mathbf{b}\)</h2>
+<p>\(\mathbf{w}^T\mathbf{b} = w_1b_1 + w_2b_2\), so \(\partial/\partial w_1 = b_1\) and \(\partial/\partial w_2 = b_2\).</p>
+
+<h2>Identity 2: \(\nabla_{\mathbf{w}}(\mathbf{w}^TA\mathbf{w}) = (A + A^T)\mathbf{w}\)</h2>
+<p>With \(A = \begin{bmatrix}a_{11}&a_{12}\\a_{21}&a_{22}\end{bmatrix}\): \(A\mathbf{w} = [a_{11}w_1 + a_{12}w_2,\ a_{21}w_1 + a_{22}w_2]^T\), and</p>
+\[ \mathbf{w}^TA\mathbf{w} = a_{11}w_1^2 + (a_{12} + a_{21})w_1w_2 + a_{22}w_2^2. \]
+\[ \frac{\partial}{\partial w_1} = 2a_{11}w_1 + (a_{12}+a_{21})w_2, \qquad \frac{\partial}{\partial w_2} = (a_{12}+a_{21})w_1 + 2a_{22}w_2, \]
+<p>which stack into \((A + A^T)\mathbf{w}\), or \(2A\mathbf{w}\) when \(A\) is symmetric.</p>
+
+<h2>The loss in one line</h2>
+<p>Put a column of ones and the features into a matrix \(X\), so the predictions are \(X\mathbf{w}\). Then \(L = \frac1N(\mathbf{y}^T\mathbf{y} - 2\mathbf{w}^TX^T\mathbf{y} + \mathbf{w}^TX^TX\mathbf{w})\) and the identities give</p>
+\[ \nabla L = -\frac2N X^T(\mathbf{y} - X\mathbf{w}), \qquad H = \frac2N X^TX. \]
+<p>Each entry of \(X^T\mathbf{r}\) is exactly a sum \(\sum_i x_{ik}r_i\) from step 3 of the derivation, and each entry of \(X^TX\) is a sum \(\sum_i x_{ij}x_{ik}\) from the worked example's table. Nothing new, only compressed.</p>
+</div>
+</template>
