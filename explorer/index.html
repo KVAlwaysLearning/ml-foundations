@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Linear regression explorer | ML Foundations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/styles.css">
+<link rel="stylesheet" href="explorer.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕸</text></svg>">
+</head>
+<body class="explorer">
+<header class="ex-top">
+  <a class="ex-back" href="../index.html#/">← ML Foundations</a>
+  <div>
+    <h1>Linear regression explorer</h1>
+    <p>Every assumption and factor that affects linear regression, as a web. Pick an attribute and a variant: the data, the fit, the diagnostics, the loss curve, the matrices and the repeated-sampling truth all update together.</p>
+  </div>
+</header>
+<nav class="ex-nav" aria-label="Sections of this page">
+  <a href="#web-sec">Web</a><a href="#charts">Charts</a><a href="#process">Process</a><a href="#numbers">Numbers</a><a href="#matrices">Matrices</a><a href="#basics">Basics</a><a href="#symbols">Symbols</a>
+</nav>
+<main class="ex-main">
+  <section class="ex-hero" id="web-sec">
+    <div class="web-wrap" id="web"></div>
+    <aside class="ex-panel" id="panel" aria-live="polite"></aside>
+  </section>
+  <section class="ex-charts" id="charts"></section>
+  <section class="ex-process" id="process" aria-labelledby="proc-h"></section>
+  <section class="ex-bottom">
+    <div id="numbers"></div>
+    <div id="matrices"></div>
+  </section>
+  <section class="ex-symbols" id="basics" aria-labelledby="basics-h"></section>
+  <section class="ex-symbols" id="symbols" aria-labelledby="sym-h"></section>
+</main>
+<script src="../js/helpers.js"></script>
+<script src="../js/lab/linalg.js"></script>
+<script src="../js/lab/ui.js"></script>
+<script src="../js/canvas2d.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/generators.js"></script>
+<script src="js/plots.js"></script>
+<script src="js/web.js"></script>
+<script src="js/pipeline.js"></script>
+<script src="js/process.js"></script>
+<script src="js/processviz.js"></script>
+<script src="js/explain.js"></script>
+<script src="js/flow.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!--
+  Section: Linear algebra
+  Concept: Linear regression
+  data-part groups pages in the navigation: Concepts -> Derivation -> Worked example.
+-->
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Concepts" data-id="vectors" data-title="Vectors, dot products and length">
+<div class="prose">
+<p class="lede">A vector is an ordered list of numbers. In regression, one list holds all the targets, another all the predictions, another all the errors.</p>
+
+<h2>Vectors</h2>
+\[ \mathbf{a} = \begin{bmatrix}1\\2\\2\end{bmatrix}, \qquad \mathbf{b} = \begin{bmatrix}2\\0\\-1\end{bmatrix}. \]
+<p>You can read \(\mathbf{a}\) as a point in 3D space, or as an arrow from the origin to that point. Adding vectors adds entry by entry; scaling multiplies every entry.</p>
+
+<h2>Dot product</h2>
+\[ \mathbf{a}\cdot\mathbf{b} = \mathbf{a}^T\mathbf{b} = \sum_i a_ib_i = 1\cdot2 + 2\cdot0 + 2\cdot(-1) = 0. \]
+
+<h2>Length (norm)</h2>
+\[ \lVert\mathbf{a}\rVert = \sqrt{\mathbf{a}^T\mathbf{a}} = \sqrt{1 + 4 + 4} = 3. \]
+<p>So a <b>sum of squares is a squared length</b>: \(\sum_i r_i^2 = \lVert\mathbf{r}\rVert^2\). The regression loss is the squared length of the error vector.</p>
+
+<h2>Angles and orthogonality</h2>
+\[ \cos\theta = \frac{\mathbf{a}^T\mathbf{b}}{\lVert\mathbf{a}\rVert\,\lVert\mathbf{b}\rVert}. \]
+<p>When the dot product is zero the vectors are <b>orthogonal</b> (perpendicular). Above, \(\mathbf{a}^T\mathbf{b} = 0\), so \(\mathbf{a}\perp\mathbf{b}\).</p>
+
+<h2>Pythagoras in any dimension</h2>
+<p>If \(\mathbf{u}\perp\mathbf{v}\), then \(\lVert\mathbf{u} + \mathbf{v}\rVert^2 = \lVert\mathbf{u}\rVert^2 + \lVert\mathbf{v}\rVert^2\), because the cross term \(2\mathbf{u}^T\mathbf{v}\) vanishes. Check: \(\mathbf{a} + \mathbf{b} = [3, 2, 1]^T\) has squared length \(14 = 9 + 5\). This one fact will prove that least squares finds the best fit.</p>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Concepts" data-id="matrices" data-title="Matrices and matrix–vector products">
+<div class="prose">
+<p class="lede">A matrix times a vector can be read two ways. Both matter for regression.</p>
+
+<h2>Example</h2>
+\[ A = \begin{bmatrix} 1 & 2 \\ 3 & 0 \\ 1 & 1 \end{bmatrix}_{3\times2}, \qquad \mathbf{x} = \begin{bmatrix}2\\1\end{bmatrix}. \]
+<p>A \(3\times2\) matrix times a length-2 vector gives a length-3 vector. The inner sizes must match.</p>
+
+<h2>View 1: rows dotted with \(\mathbf{x}\)</h2>
+\[ A\mathbf{x} = \begin{bmatrix} 1\cdot2 + 2\cdot1 \\ 3\cdot2 + 0\cdot1 \\ 1\cdot2 + 1\cdot1 \end{bmatrix} = \begin{bmatrix}4\\6\\3\end{bmatrix}. \]
+
+<h2>View 2: a combination of columns</h2>
+\[ A\mathbf{x} = 2\begin{bmatrix}1\\3\\1\end{bmatrix} + 1\begin{bmatrix}2\\0\\1\end{bmatrix} = \begin{bmatrix}4\\6\\3\end{bmatrix}. \]
+<p>The entries of \(\mathbf{x}\) say how much of each column to use.</p>
+
+<h2>The design matrix</h2>
+<p>Put each observation in a row, each feature in a column, and add a column of ones for the bias. For three students with hours \(x_1\) and practice tests \(x_2\):</p>
+\[ X = \begin{bmatrix} 1 & 1 & 0 \\ 1 & 2 & 0 \\ 1 & 3 & 1 \end{bmatrix}, \qquad \mathbf{w} = \begin{bmatrix}b\\w_1\\w_2\end{bmatrix}, \qquad X\mathbf{w} = \begin{bmatrix} b + w_1 \\ b + 2w_1 \\ b + 3w_1 + w_2 \end{bmatrix}. \]
+<p>View 1 says each row gives one student's prediction. View 2 says the whole prediction vector is \(b\) times the ones column plus \(w_1\) times the hours column plus \(w_2\) times the tests column.</p>
+
+<h2>Matrix times matrix</h2>
+<p>\(AB\) is \(A\) applied to each column of \(B\). Entry \((i,j)\) is row \(i\) of \(A\) dotted with column \(j\) of \(B\). Order matters: \(AB \ne BA\) in general.</p>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Concepts" data-id="transpose" data-title="Transpose and symmetric matrices">
+<div class="prose">
+<p class="lede">The transpose turns rows into columns. It is how "dot every column of \(X\) with a vector" gets written in one symbol.</p>
+
+<h2>Transpose</h2>
+\[ A = \begin{bmatrix} 1 & 2 \\ 3 & 0 \\ 1 & 1 \end{bmatrix} \quad\Rightarrow\quad A^T = \begin{bmatrix} 1 & 3 & 1 \\ 2 & 0 & 1 \end{bmatrix}. \]
+<p>Rules: \((A + B)^T = A^T + B^T\); \((AB)^T = B^TA^T\) (the order reverses); a \(1\times1\) number equals its own transpose.</p>
+
+<h2>\(A^T\mathbf{v}\): dot each column with \(\mathbf{v}\)</h2>
+<p>With \(\mathbf{v} = [1, 1, 2]^T\): \(A^T\mathbf{v} = [1 + 3 + 2,\ 2 + 0 + 2]^T = [6, 4]^T\). Entry \(j\) is column \(j\) of \(A\) dotted with \(\mathbf{v}\). So \(A^T\mathbf{v} = \mathbf{0}\) means <b>\(\mathbf{v}\) is orthogonal to every column of \(A\)</b>.</p>
+
+<h2>\(A^TA\): all column-by-column dot products</h2>
+\[ A^TA = \begin{bmatrix} 1\cdot1 + 3\cdot3 + 1\cdot1 & 1\cdot2 + 3\cdot0 + 1\cdot1 \\ 2\cdot1 + 0\cdot3 + 1\cdot1 & 2\cdot2 + 0\cdot0 + 1\cdot1 \end{bmatrix} = \begin{bmatrix} 11 & 3 \\ 3 & 5 \end{bmatrix}. \]
+<p>This is the <b>Gram matrix</b>. It is square (columns × columns) even when \(A\) is tall, and always symmetric: \((A^TA)^T = A^T(A^T)^T = A^TA\).</p>
+
+<h2>Symmetric matrices</h2>
+<p>\(S\) is symmetric when \(S^T = S\), that is \(s_{ij} = s_{ji}\): mirroring across the diagonal changes nothing. For a design matrix \(X\), the entries of \(X^TX\) are sums like \(\sum x_{i1}x_{i2}\). When the features are mean-centred, \(\frac1N X^TX\) (without the ones column) is their covariance matrix.</p>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Concepts" data-id="span-rank" data-title="Span, column space, independence and rank">
+<div class="prose">
+<p class="lede">The column space of \(X\) is the set of every prediction vector the model can possibly produce. Its size is the rank.</p>
+
+<h2>Span</h2>
+<p>The span of some vectors is every combination \(c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + \dots\). In 3D, the span of \([1, 0, 0]\) and \([0, 1, 0]\) is the flat \(xy\)-plane: you can reach any \([a, b, 0]\) but never a point with a nonzero third entry.</p>
+
+<h2>Column space</h2>
+<p>By the column view of \(X\mathbf{w}\), the set of all possible predictions \(\{X\mathbf{w}\}\) is exactly the span of the columns of \(X\): the <b>column space</b> \(\operatorname{Col}(X)\). With \(N\) observations, it is a flat subspace inside \(\mathbb{R}^N\).</p>
+
+<h2>Linear independence</h2>
+<p>Vectors are independent if none of them is a combination of the others; equivalently \(c_1\mathbf{v}_1 + \dots + c_k\mathbf{v}_k = \mathbf{0}\) only when every \(c = 0\).</p>
+<ul class="plain">
+<li>\([1, 2, 3]\) and \([2, 4, 6]\) are dependent: the second is twice the first. Together they span only a line.</li>
+<li>\([1, 2, 3]\) and \([0, 1, 1]\) are independent. Together they span a plane.</li>
+</ul>
+
+<h2>Rank</h2>
+<p>The rank of a matrix is the number of independent columns (equivalently, rows). A matrix with \(p\) columns has <b>full column rank</b> when its rank is \(p\).</p>
+<ul class="plain">
+<li>If \(x_2 = 2x_1\) for every observation, the \(x_2\) column is twice the \(x_1\) column: rank drops, and different weight vectors give identical predictions.</li>
+<li>With \(N\) rows and \(p\) columns, rank \(\le\min(N, p)\). Two observations can never give rank 3.</li>
+</ul>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Concepts" data-id="linear-systems" data-title="Solving linear systems: elimination, inverse, determinant">
+<div class="prose">
+<p class="lede">A square system with independent columns has exactly one solution. A tall system (more equations than unknowns) usually has none, which is exactly regression's situation.</p>
+
+<h2>Gaussian elimination</h2>
+\[ \begin{aligned} 2x + y &= 5 \\ 4x + 3y &= 13 \end{aligned} \qquad\Rightarrow\qquad \left[\begin{array}{cc|c} 2 & 1 & 5 \\ 4 & 3 & 13 \end{array}\right]. \]
+<p>Row 2 minus 2 × row 1: \([0\ \ 1 \mid 3]\), so \(y = 3\). Back-substitute: \(2x + 3 = 5\), \(x = 1\).</p>
+
+<h2>Inverse and determinant</h2>
+<p>\(A^{-1}\) is the matrix with \(A^{-1}A = I\). For \(2\times2\):</p>
+\[ \begin{bmatrix} a & b \\ c & d \end{bmatrix}^{-1} = \frac{1}{ad - bc}\begin{bmatrix} d & -b \\ -c & a \end{bmatrix}, \qquad \det = ad - bc. \]
+<p>For the system above, \(\det = 2\cdot3 - 1\cdot4 = 2\) and \(A^{-1} = \frac12\begin{bmatrix}3&-1\\-4&2\end{bmatrix}\), so \(\mathbf{x} = A^{-1}[5, 13]^T = [1, 3]^T\). The inverse exists exactly when \(\det \ne 0\), which for a square matrix is the same as full rank.</p>
+
+<h2>Three possibilities</h2>
+<ul class="plain">
+<li><b>One solution</b>: square, independent columns.</li>
+<li><b>Infinitely many</b>: dependent columns, and the right side is reachable.</li>
+<li><b>None</b>: the right side is outside the column space.</li>
+</ul>
+
+<h2>Why regression has no exact solution</h2>
+<p>Three points \((1, 1), (2, 2), (3, 2)\) and a line \(y = b + wx\):</p>
+\[ \begin{bmatrix}1&1\\1&2\\1&3\end{bmatrix}\begin{bmatrix}b\\w\end{bmatrix} = \begin{bmatrix}1\\2\\2\end{bmatrix}. \]
+<p>The first two equations force \(w = 1, b = 0\), but then the third says \(3 = 2\). The target vector lies outside the column space. The best we can do is find the reachable vector closest to it, which is a projection.</p>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Concepts" data-id="projection-concept" data-title="Orthogonal projection">
+<div class="prose">
+<p class="lede">The closest point to \(\mathbf{b}\) inside a line or a plane is where the leftover is perpendicular to it.</p>
+
+<h2>Onto a line</h2>
+<p>Project \(\mathbf{b} = [2, 3]^T\) onto the direction \(\mathbf{a} = [1, 1]^T\). The projection is \(\mathbf{p} = c\mathbf{a}\) with the error \(\mathbf{b} - c\mathbf{a}\) perpendicular to \(\mathbf{a}\):</p>
+\[ \mathbf{a}^T(\mathbf{b} - c\mathbf{a}) = 0 \;\Rightarrow\; c = \frac{\mathbf{a}^T\mathbf{b}}{\mathbf{a}^T\mathbf{a}} = \frac{5}{2}, \qquad \mathbf{p} = [2.5, 2.5]^T, \qquad \mathbf{b} - \mathbf{p} = [-0.5, 0.5]^T. \]
+<p>Check: \([1, 1]\cdot[-0.5, 0.5] = 0\).</p>
+
+<h2>Why perpendicular means closest</h2>
+<p>Take any other point \(c'\mathbf{a}\) on the line. Then \(\mathbf{b} - c'\mathbf{a} = (\mathbf{b} - \mathbf{p}) + (c - c')\mathbf{a}\), a sum of two perpendicular vectors. By Pythagoras</p>
+\[ \lVert\mathbf{b} - c'\mathbf{a}\rVert^2 = \lVert\mathbf{b} - \mathbf{p}\rVert^2 + (c - c')^2\lVert\mathbf{a}\rVert^2 \ \ge\ \lVert\mathbf{b} - \mathbf{p}\rVert^2, \]
+<p>with equality only at \(c' = c\).</p>
+
+<h2>Onto a subspace spanned by several columns</h2>
+<p>For the column space of a matrix \(A\), the projection is \(A\hat{\mathbf{x}}\), and the error must be perpendicular to <em>every</em> column. That is one dot product per column, which is exactly \(A^T(\cdot)\):</p>
+\[ A^T(\mathbf{b} - A\hat{\mathbf{x}}) = \mathbf{0} \quad\Longleftrightarrow\quad A^TA\,\hat{\mathbf{x}} = A^T\mathbf{b}. \]
+<p>The projection onto a line is the special case with one column.</p>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Concepts" data-id="eigen-pd" data-title="Eigenvalues and positive definite matrices">
+<div class="prose">
+<p class="lede">Eigenvalues tell you whether \(X^TX\) can be inverted and how elongated the loss surface is.</p>
+
+<h2>Eigenvectors</h2>
+<p>\(\mathbf{v}\) is an eigenvector of \(S\) with eigenvalue \(\lambda\) if \(S\mathbf{v} = \lambda\mathbf{v}\): the matrix only stretches it. Example:</p>
+\[ S = \begin{bmatrix} 2 & 1 \\ 1 & 2 \end{bmatrix}: \quad S\begin{bmatrix}1\\1\end{bmatrix} = 3\begin{bmatrix}1\\1\end{bmatrix}, \qquad S\begin{bmatrix}1\\-1\end{bmatrix} = 1\begin{bmatrix}1\\-1\end{bmatrix}. \]
+<p>Eigenvalues solve \(\det(S - \lambda I) = 0\): here \((2 - \lambda)^2 - 1 = 0\), so \(\lambda = 3\) or \(1\).</p>
+
+<h2>Symmetric matrices are well behaved</h2>
+<p>A real symmetric matrix always has real eigenvalues and mutually perpendicular eigenvectors (the spectral theorem). Its determinant is the product of the eigenvalues, so it is invertible exactly when no eigenvalue is zero.</p>
+
+<h2>Positive (semi-)definite</h2>
+<p>\(S\) is positive semi-definite if \(\mathbf{z}^TS\mathbf{z} \ge 0\) for every \(\mathbf{z}\) (all eigenvalues \(\ge 0\)), and positive definite if \(\mathbf{z}^TS\mathbf{z} \gt 0\) for every nonzero \(\mathbf{z}\) (all eigenvalues \(\gt 0\)).</p>
+
+<h2>\(X^TX\) is always positive semi-definite</h2>
+\[ \mathbf{z}^TX^TX\mathbf{z} = (X\mathbf{z})^T(X\mathbf{z}) = \lVert X\mathbf{z}\rVert^2 \ \ge\ 0. \]
+<p>It equals zero only if \(X\mathbf{z} = \mathbf{0}\), a nonzero combination of columns that vanishes. So <b>\(X^TX\) is positive definite, and invertible, exactly when \(X\) has full column rank</b>.</p>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Derivation" data-id="la-derivation" data-title="Deriving linear regression with linear algebra">
+<div class="prose">
+<p class="lede">No derivatives at all: least squares is the projection of the target vector onto the column space of \(X\).</p>
+
+<h2>1. The setup</h2>
+<p>\(N\) observations, \(d\) features. Build \(X\) (\(N\times p\), \(p = d + 1\), with the ones column), the target vector \(\mathbf{y}\in\mathbb{R}^N\) and the weights \(\mathbf{w}\in\mathbb{R}^p\). We want \(X\mathbf{w}\approx\mathbf{y}\).</p>
+
+<h2>2. Why "approximately"</h2>
+<p>With more observations than weights, \(X\mathbf{w} = \mathbf{y}\) has no solution unless the data lie exactly on a plane: \(\mathbf{y}\) sits outside \(\operatorname{Col}(X)\).</p>
+
+<h2>3. Measure the miss as a length</h2>
+<p>The residual vector is \(\mathbf{r} = \mathbf{y} - X\mathbf{w}\), and the sum of squared errors is its squared length:</p>
+\[ \text{SSE}(\mathbf{w}) = \lVert\mathbf{y} - X\mathbf{w}\rVert^2. \]
+<p>Minimising it means: find the point \(X\mathbf{w}\) in the column space closest to \(\mathbf{y}\).</p>
+
+<h2>4. The closest point is the projection</h2>
+<p>The residual must be perpendicular to every column of \(X\):</p>
+\[ X^T(\mathbf{y} - X\mathbf{w}^*) = \mathbf{0} \quad\Longleftrightarrow\quad X^TX\,\mathbf{w}^* = X^T\mathbf{y}. \]
+<p>These are the normal equations.</p>
+
+<h2>5. Proof that it is the minimum</h2>
+<p>For any \(\mathbf{w}\), split \(\mathbf{y} - X\mathbf{w} = (\mathbf{y} - X\mathbf{w}^*) + X(\mathbf{w}^* - \mathbf{w})\). The second part lies in the column space, so it is perpendicular to the first. By Pythagoras:</p>
+\[ \lVert\mathbf{y} - X\mathbf{w}\rVert^2 = \lVert\mathbf{y} - X\mathbf{w}^*\rVert^2 + \lVert X(\mathbf{w}^* - \mathbf{w})\rVert^2 \ \ge\ \lVert\mathbf{y} - X\mathbf{w}^*\rVert^2. \]
+<p>Equality needs \(X(\mathbf{w}^* - \mathbf{w}) = \mathbf{0}\). With full column rank that forces \(\mathbf{w} = \mathbf{w}^*\): the minimiser is unique.</p>
+
+<h2>6. The solution</h2>
+<p>With full column rank, \(X^TX\) is positive definite and invertible, so</p>
+\[ \mathbf{w}^* = (X^TX)^{-1}X^T\mathbf{y}, \qquad \hat{\mathbf{y}} = X\mathbf{w}^* = H\mathbf{y}, \qquad H = X(X^TX)^{-1}X^T. \]
+<p>\(H\) is the projection ("hat") matrix: symmetric, and \(H^2 = H\) because projecting twice changes nothing. In code, solve the system (QR or <code>numpy.linalg.lstsq</code>) rather than forming the inverse.</p>
+
+<h2>7. Consequences you can check</h2>
+<ul class="plain">
+<li>The ones column gives \(\mathbf{1}^T\mathbf{r}^* = 0\): <b>residuals sum to zero</b>.</li>
+<li>Each feature column gives \(\mathbf{x}_{(j)}^T\mathbf{r}^* = 0\): residuals are uncorrelated with every feature.</li>
+<li>\(\lVert\mathbf{y}\rVert^2 = \lVert\hat{\mathbf{y}}\rVert^2 + \lVert\mathbf{r}^*\rVert^2\): the target splits into a fitted part and a perpendicular leftover.</li>
+<li>\(\mathbf{r}^*\) is usually not zero. It is the part of \(\mathbf{y}\) no combination of columns can reach.</li>
+</ul>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Derivation" data-id="not-unique" data-title="When the solution isn't unique">
+<div class="prose">
+<p class="lede">If \(X\) doesn't have full column rank, \(X^TX\) has no inverse and many weight vectors fit equally well.</p>
+
+<h2>Too few observations</h2>
+<p>Rank \(\le N\). Two students cannot pin down three weights: \(X^TX\) is \(3\times3\) with rank at most 2, and a whole line of \((b, w_1, w_2)\) fits both exactly.</p>
+
+<h2>Perfect collinearity</h2>
+<p>If \(x_2 = 2x_1\) for every row, raising \(w_1\) by 2 and lowering \(w_2\) by 1 leaves every prediction unchanged. With \(x_1 = [1, 2, 3]\), \(x_2 = [2, 4, 6]\) (no intercept for brevity):</p>
+\[ X^TX = \begin{bmatrix} 14 & 28 \\ 28 & 56 \end{bmatrix}, \qquad \det = 14\cdot56 - 28^2 = 0. \]
+
+<h2>Near-collinearity</h2>
+<p>\(X^TX\) is invertible but its smallest eigenvalue is tiny. The condition number \(\kappa = \lambda_{\max}/\lambda_{\min}\) is large, and small changes in the data swing the weights. Predictions can still be fine; individual weights become unreliable.</p>
+
+<h2>Ridge</h2>
+<p>Add a penalty \(\lambda(w_1^2 + \dots + w_d^2)\) to the mean squared error. The normal equations become \((X^TX + N\lambda D)\mathbf{w} = X^T\mathbf{y}\), where \(D\) is the identity with a 0 in the bias position. Every weight eigen-direction gets extra curvature, so the matrix is invertible for any \(\lambda \gt 0\). Try the collinear dataset in <a href="#/intuition/lab-loss">Lab 2</a> and raise λ.</p>
+</div>
+</template>
+
+<template data-topic data-section="linalg" data-concept="Linear regression" data-part="Worked example" data-id="la-worked" data-title="Worked example, step by step">
+<div class="prose">
+<p class="lede">The same four students as the calculus example, solved with matrices only.</p>
+
+<h2>Step 1: build \(X\) and \(\mathbf{y}\)</h2>
+\[ X = \begin{bmatrix} 1 & 1 & 0 \\ 1 & 2 & 0 \\ 1 & 3 & 1 \\ 1 & 4 & 3 \end{bmatrix}, \qquad \mathbf{y} = \begin{bmatrix} 3 \\ 6 \\ 6 \\ 13 \end{bmatrix}. \]
+<p>Columns: ones (for \(b\)), hours studied \(x_1\), practice tests \(x_2\).</p>
+
+<h2>Step 2: \(X^TX\), entry by entry</h2>
+<p>Each entry is one column dotted with another. Ones·ones \(= 4\); ones·\(x_1 = 1 + 2 + 3 + 4 = 10\); ones·\(x_2 = 4\); \(x_1\cdot x_1 = 1 + 4 + 9 + 16 = 30\); \(x_1\cdot x_2 = 0 + 0 + 3 + 12 = 15\); \(x_2\cdot x_2 = 0 + 0 + 1 + 9 = 10\).</p>
+\[ X^TX = \begin{bmatrix} 4 & 10 & 4 \\ 10 & 30 & 15 \\ 4 & 15 & 10 \end{bmatrix}. \]
+
+<h2>Step 3: \(X^T\mathbf{y}\)</h2>
+<p>Each column dotted with \(\mathbf{y}\): ones·\(\mathbf{y} = 28\); \(x_1\cdot\mathbf{y} = 3 + 12 + 18 + 52 = 85\); \(x_2\cdot\mathbf{y} = 0 + 0 + 6 + 39 = 45\).</p>
+\[ X^T\mathbf{y} = \begin{bmatrix} 28 \\ 85 \\ 45 \end{bmatrix}. \]
+
+<h2>Step 4: solve \(X^TX\mathbf{w} = X^T\mathbf{y}\) by elimination</h2>
+\[ \left[\begin{array}{ccc|c} 4 & 10 & 4 & 28 \\ 10 & 30 & 15 & 85 \\ 4 & 15 & 10 & 45 \end{array}\right]
+\xrightarrow[R_3 - R_1]{R_2 - 2.5R_1}
+\left[\begin{array}{ccc|c} 4 & 10 & 4 & 28 \\ 0 & 5 & 5 & 15 \\ 0 & 5 & 6 & 17 \end{array}\right]
+\xrightarrow{R_3 - R_2}
+\left[\begin{array}{ccc|c} 4 & 10 & 4 & 28 \\ 0 & 5 & 5 & 15 \\ 0 & 0 & 1 & 2 \end{array}\right]. \]
+<p>Back-substitute: \(w_2 = 2\); \(5w_1 + 10 = 15 \Rightarrow w_1 = 1\); \(4b + 10 + 8 = 28 \Rightarrow b = 2.5\).</p>
+
+<h2>Step 5: cross-check with the inverse</h2>
+<p>Determinant by cofactor expansion along the first row:</p>
+\[ \det = 4(30\cdot10 - 15^2) - 10(10\cdot10 - 15\cdot4) + 4(10\cdot15 - 30\cdot4) = 300 - 400 + 120 = 20. \]
+\[ (X^TX)^{-1} = \frac{1}{20}\begin{bmatrix} 75 & -40 & 30 \\ -40 & 24 & -20 \\ 30 & -20 & 20 \end{bmatrix}, \qquad \mathbf{w}^* = (X^TX)^{-1}\begin{bmatrix}28\\85\\45\end{bmatrix} = \frac1{20}\begin{bmatrix} 2100 - 3400 + 1350 \\ -1120 + 2040 - 900 \\ 840 - 1700 + 900 \end{bmatrix} = \begin{bmatrix} 2.5 \\ 1 \\ 2 \end{bmatrix}. \]
+
+<h2>Step 6: predictions and residuals</h2>
+\[ \hat{\mathbf{y}} = X\mathbf{w}^* = \begin{bmatrix} 3.5 \\ 4.5 \\ 7.5 \\ 12.5 \end{bmatrix}, \qquad \mathbf{r} = \mathbf{y} - \hat{\mathbf{y}} = \begin{bmatrix} -0.5 \\ 1.5 \\ -1.5 \\ 0.5 \end{bmatrix}. \]
+
+<h2>Step 7: check orthogonality</h2>
+\[ X^T\mathbf{r} = \begin{bmatrix} -0.5 + 1.5 - 1.5 + 0.5 \\ -0.5 + 3 - 4.5 + 2 \\ 0 + 0 - 1.5 + 1.5 \end{bmatrix} = \begin{bmatrix}0\\0\\0\end{bmatrix}. \]
+<p>The residual is perpendicular to every column: this really is the projection.</p>
+
+<h2>Step 8: Pythagoras</h2>
+<p>\(\lVert\mathbf{y}\rVert^2 = 9 + 36 + 36 + 169 = 250\), \(\lVert\hat{\mathbf{y}}\rVert^2 = 12.25 + 20.25 + 56.25 + 156.25 = 245\), \(\lVert\mathbf{r}\rVert^2 = 5\). And \(250 = 245 + 5\). The mean squared error is \(5/4 = 1.25\).</p>
+
+<h2>Step 9: the projection matrix</h2>
+\[ H = X(X^TX)^{-1}X^T = \frac1{20}\begin{bmatrix} 19 & 3 & -3 & 1 \\ 3 & 11 & 9 & -3 \\ -3 & 9 & 11 & 3 \\ 1 & -3 & 3 & 19 \end{bmatrix}. \]
+<p>It is symmetric, and \(H\mathbf{y}\) reproduces \(\hat{\mathbf{y}}\): the first entry is \((57 + 18 - 18 + 13)/20 = 3.5\).</p>
+
+<div class="note"><b>Same answer as the calculus route</b>
+<p>\(b = 2.5,\ w_1 = 1,\ w_2 = 2\), \(L = 1.25\). Load this dataset in <a href="#/intuition/lab-feature">Lab 1</a> (it is the default) and press "Fit" to see every one of these matrices live.</p></div>
+</div>
+</template>

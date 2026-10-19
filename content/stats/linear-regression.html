@@ -1,0 +1,161 @@
+<!--
+  Section: Statistics
+  Concept: Linear regression
+  One <template data-topic> per page. Page order in the nav follows the order here.
+-->
+
+<template data-topic data-section="stats" data-concept="Linear regression" data-id="why-assumptions" data-title="What the assumptions are for">
+<div class="prose">
+<p class="lede">You can always compute \(\mathbf{w}^* = (X^TX)^{-1}X^T\mathbf{y}\). The assumptions decide what that number means: whether it's unbiased, whether its standard errors are right, and whether its p-values can be trusted.</p>
+
+<h2>The statistical model</h2>
+\[ \mathbf{y} = X\boldsymbol\beta + \boldsymbol\varepsilon. \]
+<p>\(\boldsymbol\beta\) is the true, unknown coefficient vector and \(\boldsymbol\varepsilon\) is noise. OLS produces an estimate \(\hat{\boldsymbol\beta}\) (the \(\mathbf{w}^*\) of the other sections). The residuals \(\mathbf{e}\) are our observable stand-ins for the unobservable errors \(\boldsymbol\varepsilon\).</p>
+
+<h2>What each assumption buys</h2>
+<div class="tbl"><table>
+<tr><th>Assumption</th><th>If it fails</th></tr>
+<tr><td>Linear in parameters</td><td>Estimates are biased; residuals show a systematic pattern</td></tr>
+<tr><td>Errors have mean zero given \(X\) (no omitted confounders)</td><td>Estimates are biased, even with infinite data</td></tr>
+<tr><td>Independent errors</td><td>Estimates stay unbiased, but standard errors are wrong (usually too small)</td></tr>
+<tr><td>Constant error variance</td><td>Estimates stay unbiased, but standard errors are wrong and OLS is no longer the most efficient</td></tr>
+<tr><td>No perfect multicollinearity</td><td>No unique estimate at all</td></tr>
+<tr><td>Normal errors</td><td>Needed only for exact t and F tests in small samples</td></tr>
+</table></div>
+<p>Under the first five (the Gauss–Markov conditions), OLS is the <b>best linear unbiased estimator</b>: no other linear unbiased estimator has smaller variance. Normality is not part of that result.</p>
+
+<h2>A note on estimating the error variance</h2>
+<p>The maximum-likelihood estimate \(\tilde\sigma^2 = \frac1N\sum e_i^2\) is <em>biased</em> downward. The unbiased estimate divides by the degrees of freedom, \(s^2 = \frac{1}{N-p}\sum e_i^2\), where \(p\) counts all coefficients including the intercept. Standard errors use \(s^2\).</p>
+</div>
+</template>
+
+<template data-topic data-section="stats" data-concept="Linear regression" data-id="linearity" data-title="Linearity (in the parameters)">
+<div class="prose">
+<p class="lede">"Linear" means the prediction is a weighted sum of columns. The columns themselves can be any fixed transformation of the raw inputs.</p>
+
+<h2>Allowed and not allowed</h2>
+<div class="tbl"><table>
+<tr><th>Model</th><th>Linear regression?</th></tr>
+<tr><td>\(y = \beta_0 + \beta_1x_1 + \beta_2x_2\)</td><td>Yes</td></tr>
+<tr><td>\(y = \beta_0 + \beta_1x + \beta_2x^2\)</td><td>Yes: add a column \(x^2\) to \(X\)</td></tr>
+<tr><td>\(y = \beta_0 + \beta_1\sin x_2 + \beta_2\log x_1\)</td><td>Yes: the columns are \(\sin x_2\) and \(\log x_1\)</td></tr>
+<tr><td>\(y = \beta_0 + x^{\beta_1}\) or \(y = \beta_0 e^{\beta_1 x}\)</td><td>No: a parameter sits inside a nonlinear function</td></tr>
+</table></div>
+
+<h2>What the assumption really demands</h2>
+<p>That your chosen columns capture the true shape. If salary rises quickly early in a career and then plateaus, a straight line in "years of experience" underpredicts in the middle and overpredicts at both ends. The residuals trace a curve instead of scattering randomly.</p>
+
+<h2>How to check</h2>
+<p>Plot residuals against fitted values (and against each feature). A U-shape or arch means a missing transformation. Try the "Curved relationship" scenario in the diagnostics playground.</p>
+<p><b>Fixes:</b> add polynomial or spline terms, transform a feature (log, square root), or transform the target.</p>
+</div>
+</template>
+
+<template data-topic data-section="stats" data-concept="Linear regression" data-id="independence" data-title="Independence of errors">
+<div class="prose">
+<p class="lede">The error on one observation should tell you nothing about the error on another.</p>
+
+<h2>Example</h2>
+<p><b>Holds:</b> house sales sampled from unrelated buyers in random neighbourhoods. <b>Breaks:</b> monthly prices in one city during a boom. If the model underpredicts January, momentum means it will likely underpredict February and March too. This is <b>autocorrelation</b>.</p>
+
+<h2>What goes wrong</h2>
+<p>The coefficient estimates stay unbiased. The problem is the standard errors. With positive autocorrelation, consecutive observations carry overlapping information, so you effectively have fewer independent data points than \(N\). The usual formula treats them as independent and <b>underestimates</b> the standard errors. Confidence intervals come out too narrow and p-values too small: the model looks more certain than it is.</p>
+
+<h2>How to check</h2>
+<ul class="plain">
+<li>Plot residuals in time order: runs of same-sign residuals are the signature.</li>
+<li>The Durbin–Watson statistic \(DW = \sum_t (e_t - e_{t-1})^2 / \sum_t e_t^2\) is about 2 with no autocorrelation, and drops toward 0 with positive autocorrelation.</li>
+</ul>
+<p><b>Fixes:</b> autocorrelation-robust (Newey–West) standard errors, adding lagged variables, or a proper time-series model.</p>
+</div>
+</template>
+
+<template data-topic data-section="stats" data-concept="Linear regression" data-id="homoscedasticity" data-title="Constant variance and the Breusch–Pagan test">
+<div class="prose">
+<p class="lede">MSE gives one average error. Homoscedasticity asks whether the spread of the errors stays the same across the range of \(x\).</p>
+
+<h2>Example</h2>
+<p>Monthly food spending against household income. Low-income households spend close to a fixed amount on essentials, so their points hug the line. High-income households vary wildly, so their residuals spread out. The residual-versus-fitted plot fans out into a cone: heteroscedasticity.</p>
+<p><b>Why it matters:</b> OLS estimates stay unbiased, but the usual standard errors are wrong, and OLS is no longer the most efficient estimator. <b>Fixes:</b> heteroscedasticity-robust (HC) standard errors, weighted least squares, or a log transform of the target.</p>
+
+<h2>The Breusch–Pagan test</h2>
+<p>Idea: if the variance depends on \(x\), then squared residuals should be predictable from \(x\).</p>
+<ol class="plain">
+<li>Fit OLS and get residuals \(e_i\).</li>
+<li>Compute \(\tilde\sigma^2 = \frac1N\sum e_i^2\) (the MLE; it is biased, which doesn't matter for this scaling step) and \(g_i = e_i^2/\tilde\sigma^2\).</li>
+<li>Regress \(g_i\) on \(x_i\) and compute the explained sum of squares \(ESS\).</li>
+<li>\(LM = \tfrac12 ESS \sim \chi^2(p)\) under the null of constant variance, where \(p\) is the number of regressors in the auxiliary regression. Koenker's robust variant uses \(N R^2_{aux}\) instead and doesn't rely on normal errors.</li>
+</ol>
+
+<h2>Worked example with real OLS residuals</h2>
+<p>Eight observations. Fitting \(y\) on \(x\) with an intercept gives \(\hat y = 0.55 + 1.8667x\). The residuals sum to exactly zero, as OLS residuals must.</p>
+<div class="tbl"><table>
+<tr><th class="num">\(x\)</th><th class="num">\(y\)</th><th class="num">\(\hat y\)</th><th class="num">\(e\)</th><th class="num">\(e^2\)</th><th class="num">\(g = e^2/\tilde\sigma^2\)</th></tr>
+<tr><td class="num">1</td><td class="num">2.2</td><td class="num">2.417</td><td class="num">−0.217</td><td class="num">0.047</td><td class="num">0.018</td></tr>
+<tr><td class="num">2</td><td class="num">3.8</td><td class="num">4.283</td><td class="num">−0.483</td><td class="num">0.234</td><td class="num">0.088</td></tr>
+<tr><td class="num">3</td><td class="num">6.3</td><td class="num">6.150</td><td class="num">0.150</td><td class="num">0.023</td><td class="num">0.008</td></tr>
+<tr><td class="num">4</td><td class="num">7.7</td><td class="num">8.017</td><td class="num">−0.317</td><td class="num">0.100</td><td class="num">0.038</td></tr>
+<tr><td class="num">5</td><td class="num">11.5</td><td class="num">9.883</td><td class="num">1.617</td><td class="num">2.614</td><td class="num">0.985</td></tr>
+<tr><td class="num">6</td><td class="num">10.2</td><td class="num">11.750</td><td class="num">−1.550</td><td class="num">2.403</td><td class="num">0.905</td></tr>
+<tr><td class="num">7</td><td class="num">16.8</td><td class="num">13.617</td><td class="num">3.183</td><td class="num">10.134</td><td class="num">3.818</td></tr>
+<tr><td class="num">8</td><td class="num">13.1</td><td class="num">15.483</td><td class="num">−2.383</td><td class="num">5.680</td><td class="num">2.140</td></tr>
+</table></div>
+<p><b>Step 1.</b> \(\sum e_i^2 = 21.233\), so \(\tilde\sigma^2 = 21.233/8 = 2.654\). (The unbiased \(s^2 = 21.233/6 = 3.539\).)</p>
+<p><b>Step 2.</b> The \(g_i\) above average exactly 1.</p>
+<p><b>Step 3.</b> With \(\bar x = 4.5\), \(\sum(x_i-\bar x)^2 = 42\) and \(\sum(x_i-\bar x)(g_i - 1) = 18.572\):</p>
+\[ \hat\gamma_1 = \frac{18.572}{42} = 0.4422, \qquad ESS = \hat\gamma_1^2\sum(x_i-\bar x)^2 = \frac{18.572^2}{42} = 8.212. \]
+<p><b>Step 4.</b> \(LM = 8.212/2 = 4.106\). The 5% critical value of \(\chi^2(1)\) is 3.841, so we reject constant variance (\(p \approx 0.043\)). The residuals visibly grow with \(x\).</p>
+<div class="note"><b>Small-sample caveat</b>
+<p>Breusch–Pagan is a large-sample test; with 8 points it is a demonstration of the mechanics, not a reliable verdict. On real data, look at the residual plot as well.</p></div>
+</div>
+</template>
+
+<template data-topic data-section="stats" data-concept="Linear regression" data-id="normality" data-title="Normality of errors">
+<div class="prose">
+<p class="lede">Normality isn't needed to fit the line or to make predictions. It's needed for exact inference in small samples.</p>
+
+<h2>What it buys</h2>
+<p>If \(\boldsymbol\varepsilon \sim \mathcal N(\mathbf 0, \sigma^2 I)\), then t-statistics follow an exact t distribution and F-statistics an exact F distribution, at any sample size. Without normality, the central limit theorem makes those tests approximately valid once \(N\) is reasonably large, provided the other assumptions hold. So normality matters most for small datasets.</p>
+
+<h2>Allowed and not allowed</h2>
+<p>\(\varepsilon \sim \mathcal N(0,1)\): symmetric bell shape around zero. A strongly skewed error distribution (say, a shifted exponential) or a handful of extreme outliers violates it. Example: on a very hard exam many students cluster near the floor score, so errors pile up on one side.</p>
+
+<h2>How to check</h2>
+<p>A histogram or Q–Q plot of residuals; formal tests such as Shapiro–Wilk (which with large \(N\) flag tiny, harmless deviations). Try the "Skewed errors" scenario in the playground.</p>
+<p><b>Fixes:</b> transform the target, use robust regression for outliers, or rely on large-sample or bootstrap inference.</p>
+</div>
+</template>
+
+<template data-topic data-section="stats" data-concept="Linear regression" data-id="multicollinearity" data-title="No perfect multicollinearity">
+<div class="prose">
+<p class="lede">Perfect collinearity makes the estimate undefined. High collinearity makes it unstable. They are different problems.</p>
+
+<h2>Perfect</h2>
+<p>Square footage and floor area in square metres: \(x_1 = 10.764\,x_2\) exactly. The columns are linearly dependent, \(X^TX\) is singular, and infinitely many weight pairs give identical predictions. Software either errors or silently drops a column. Linear-algebra view: "When the solution isn't unique". Geometric view: load the collinear dataset in Lab 2 (Intuition and 3D).</p>
+
+<h2>High but not perfect</h2>
+<p>Features strongly but not exactly related (square footage and number of rooms). \(X^TX\) is invertible but ill-conditioned, so coefficient standard errors inflate and individual weights can flip sign between samples, while predictions stay fine.</p>
+
+<h2>How to check</h2>
+<p>The variance inflation factor for feature \(j\) is</p>
+\[ VIF_j = \frac{1}{1 - R_j^2}, \]
+<p>where \(R_j^2\) comes from regressing feature \(j\) on all the other features. Values above about 5 to 10 are a warning. The condition number of \(X^TX\) is the matrix-level version.</p>
+<p><b>Fixes:</b> drop or combine redundant features, use ridge regression, or use PCA on the correlated group.</p>
+</div>
+</template>
+
+<template data-topic data-section="stats" data-concept="Linear regression" data-id="diagnostics" data-title="Residual diagnostics playground">
+<div class="prose">
+<p class="lede">Pick a way for the data to be generated, fit a line, and see which diagnostic notices.</p>
+</div>
+<figure class="viz" data-viz="diagnostics"></figure>
+<div class="prose">
+<h2>Reading the three panels</h2>
+<ul class="plain">
+<li><b>Data and fit:</b> the OLS line with an intercept.</li>
+<li><b>Residuals vs fitted:</b> should be a shapeless horizontal band. Curves point to linearity problems; funnels to non-constant variance; long same-sign runs (the points are in \(x\) order, like time) to dependence.</li>
+<li><b>Residual histogram:</b> roughly bell-shaped if errors are normal.</li>
+</ul>
+<p>The residual sum is always zero to rounding, whatever the scenario. That is linear algebra (\(\mathbf 1^T\mathbf e = 0\)), not evidence that anything is fine.</p>
+</div>
+</template>

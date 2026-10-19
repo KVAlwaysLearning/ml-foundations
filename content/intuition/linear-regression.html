@@ -1,0 +1,134 @@
+<!--
+  Section: Intuition and 3D
+  Concept: Linear regression
+  data-part: First principles -> Labs. All labs share one dataset and one set of weights (js/lab/store.js).
+-->
+
+<template data-topic data-section="intuition" data-concept="Linear regression" data-part="First principles" data-id="first-principles" data-title="What regression is, from first principles">
+<div class="prose">
+<p class="lede">Strip away the notation and linear regression is three decisions: what a prediction looks like, how to measure a miss, and how to pick the best rule.</p>
+
+<h2>1. We have points</h2>
+<p>Each observation is a set of feature values and a measured outcome. Four students: hours studied \(x_1\), practice tests \(x_2\), quiz score \(y\). Put the features on a floor and each score becomes a height above its floor position. Four dots floating in 3D.</p>
+
+<h2>2. A linear rule is a flat plane</h2>
+<p>"Linear" means the prediction is a starting value plus a fixed amount per unit of each feature:</p>
+\[ \hat y = b + w_1x_1 + w_2x_2. \]
+<p>Every choice of \((b, w_1, w_2)\) is one tilted flat plane over the floor. \(b\) lifts the whole plane; \(w_1\) and \(w_2\) tilt it along each floor axis. With one feature the plane is a line; with more it is a flat hyperplane.</p>
+
+<h2>3. A miss is a vertical gap</h2>
+<p>For each observation, the plane predicts \(\hat y_i\) directly above it. The miss is the <b>residual</b> \(e_i = y_i - \hat y_i\): the vertical gap between the dot and the plane. Vertical, because we are predicting \(y\), not moving the features.</p>
+
+<h2>4. "Best" means the smallest average squared gap</h2>
+\[ L(b, w_1, w_2) = \frac1N\sum_i e_i^2. \]
+<p>Squaring makes every miss count positively, makes big misses count a lot more than small ones, and keeps the loss smooth so it has a single, well-defined bottom. The least-squares plane is the one plane with the smallest \(L\).</p>
+
+<h2>5. The same thing, packed into matrices</h2>
+<div class="tbl"><table>
+<tr><th>Object</th><th>Shape</th><th>What it holds</th><th>Four students</th></tr>
+<tr><td class="c-floor">\(X\)</td><td>\(N\times3\)</td><td>One row per observation: \([1, x_1, x_2]\)</td><td>\(4\times3\)</td></tr>
+<tr><td>\(\mathbf{w}\)</td><td>\(3\times1\)</td><td>\([b, w_1, w_2]\): the plane</td><td>\(3\times1\)</td></tr>
+<tr><td class="c-surface">\(\hat{\mathbf{y}} = X\mathbf{w}\)</td><td>\(N\times1\)</td><td>Height of the plane above each observation</td><td>\(4\times1\)</td></tr>
+<tr><td class="c-res">\(\mathbf{y}\)</td><td>\(N\times1\)</td><td>Measured heights</td><td>\(4\times1\)</td></tr>
+<tr><td class="c-res">\(\mathbf{e} = \mathbf{y} - \hat{\mathbf{y}}\)</td><td>\(N\times1\)</td><td>Vertical gaps</td><td>\(4\times1\)</td></tr>
+<tr><td class="c-normal">\(L = \mathbf{e}^T\mathbf{e}/N\)</td><td>scalar</td><td>Average squared gap</td><td>one number</td></tr>
+</table></div>
+
+<h2>6. Two pictures of the same search</h2>
+<div class="tbl"><table>
+<tr><th></th><th>Feature space (Lab 1)</th><th>Weight space (Lab 2)</th></tr>
+<tr><td>Floor</td><td class="c-floor">feature values \(x_1, x_2\)</td><td class="c-floor">weight values \(w_1, w_2\)</td></tr>
+<tr><td>A point on the floor</td><td>one observation</td><td>one whole candidate plane</td></tr>
+<tr><td>Height</td><td class="c-surface">prediction \(\hat y\)</td><td class="c-surface">loss \(L\) over all \(N\) observations</td></tr>
+<tr><td>Surface</td><td>flat plane</td><td>curved bowl</td></tr>
+<tr><td>Fitting means</td><td>tilting the plane to shrink the gaps</td><td>finding the lowest point of the bowl</td></tr>
+</table></div>
+<p>The two are linked point for point: pick a spot on the weight floor, that spot <em>is</em> a plane in feature space, and the height of the bowl there is the average squared gap of that plane. Gradient descent (Lab 3) walks down the bowl, and you can watch the plane swing into place as it does.</p>
+
+<h2>7. What the answer looks like</h2>
+<p>At the bottom of the bowl, nudging any weight no longer reduces the error. The leftover gaps are not zero, but they sum to zero and are unrelated to every feature: whatever pattern the features could explain has been explained. The Calculus and Linear algebra sections prove this two different ways; the labs let you see it.</p>
+
+<div class="note"><b>How the labs work</b>
+<p>All three labs share one dataset and one set of weights, saved in your browser. Edit the data table, load a preset, or move a weight in any lab, and the others show the same state. Click a row number to trace one observation through every matrix. Colours: <span class="c-floor">teal</span> for the floor, <span class="c-surface">violet</span> for surfaces, <span class="c-res">amber</span> for targets and residuals, <span class="c-normal">rose</span> for normals, minima and descent.</p></div>
+</div>
+</template>
+
+<template data-topic data-section="intuition" data-concept="Linear regression" data-part="Labs" data-id="lab-feature" data-title="Lab 1: data, weights and the prediction plane">
+<div class="prose">
+<p class="lede">The feature-space picture, with the matrices that produce it. Start with all weights at zero (a flat plane on the floor), then build the plane yourself: raise \(b\), tilt with \(w_1\) and \(w_2\), and watch \(\hat{\mathbf{y}}\), \(\mathbf{e}\) and \(L\) respond.</p>
+</div>
+<figure class="viz" data-viz="lab-feature"></figure>
+<div class="prose">
+<h2>Things to try</h2>
+<ul class="plain">
+<li><b>Trace one row.</b> Click row 3. Its line of \(X\), its entry of \(\hat{\mathbf{y}}\), \(\mathbf{y}\) and \(\mathbf{e}\) highlight, the calculation is written out above the matrices, and the point is enlarged in 3D.</li>
+<li><b>One weight at a time.</b> Move only \(b\): every entry of \(\hat{\mathbf{y}}\) rises by the same amount, because the ones column multiplies \(b\). Move only \(w_2\): rows 1 and 2 don't change, because their \(x_2\) is 0.</li>
+<li><b>Fit.</b> Press "Fit by least squares". \(L\) drops to 1.25, the same number the Calculus and Linear algebra worked examples reach. The residuals are \([-0.5, 1.5, -1.5, 0.5]\) and sum to zero.</li>
+<li><b>Edit the data.</b> Change \(y_4\) from 13 to 20 and refit: one point pulls the whole plane.</li>
+<li><b>Perfect fit.</b> Load "Perfect fit": after fitting every residual is 0 and \(L = 0\).</li>
+<li><b>Contour lines of ŷ.</b> Click anywhere on the plane in 3D, or anywhere in the top-down view, to highlight the line where the prediction equals that value. In 3D it shows as a rose line on the plane with a horizontal slice through it; in 2D the level lines are straight, parallel, and crossed at right angles by the arrow \((w_1, w_2)\).</li>
+<li><b>Move a point.</b> Drag a data point in the top-down view: its \(x_1, x_2\) in the table and in \(X\) change as you drag.</li>
+<li><b>Geometry.</b> Turn on "Gradient on the floor": \(\nabla_{\mathbf{x}}\hat y = (w_1, w_2)\) is the same arrow at every point, pointing uphill across the plane. "Steepest line and normal" shows the climb direction and the normal \([w_1, w_2, -1]\).</li>
+</ul>
+</div>
+</template>
+
+<template data-topic data-section="intuition" data-concept="Linear regression" data-part="Labs" data-id="lab-loss" data-title="Lab 2: the loss surface and the best weights">
+<div class="prose">
+<p class="lede">Swap the floor: now each floor point is a pair \((w_1, w_2)\), and the height is the loss of that plane on all your data. \(b\) has no axis left, so the surface is drawn with \(b\) held at its current value.</p>
+</div>
+<figure class="viz" data-viz="lab-loss"></figure>
+<div class="prose">
+<h2>Reading the matrices</h2>
+<p>\(X^TX\) and \(X^T\mathbf{y}\) are all the data the minimisation needs: every entry is a column-by-column dot product. The Hessian \(H = \frac2N X^TX\) is the same everywhere, which is why the surface is an exact bowl. Its lower-right \(2\times2\) block is the curvature of the surface drawn, and its eigenvalues say how steep the steepest and flattest directions are. The gradient at the current weights is \(\frac2N(X^TX\mathbf{w} - X^T\mathbf{y})\); the floor arrow shows its \(w_1, w_2\) part.</p>
+
+<h2>Things to try</h2>
+<ul class="plain">
+<li><b>Contours in both views.</b> With "Follow the current point" on, the highlighted contour is the one through your weights. Switch it off and click the surface or the top-down map to pick any level: the ring on the bowl and the ellipse on the map are the same set of weights.</li>
+<li><b>Drag the weights.</b> Drag the black point in the top-down view and watch the gradient arrow stay perpendicular to the contour it sits on.</li>
+<li><b>Start from zero weights.</b> The point sits high on the rim; the gradient arrow points away from the bottom and the normal leans out.</li>
+<li><b>Jump to the minimum.</b> The gradient becomes \([0, 0, 0]\), but \(L\) stays at 1.25 and the bottom of the bowl floats above the floor. Zero gradient means \(X^T\mathbf{e} = \mathbf{0}\) (residuals orthogonal to every column), not \(\mathbf{e} = \mathbf{0}\).</li>
+<li><b>Move \(b\) only.</b> The whole surface shifts and its lowest point moves: the best \(w_1, w_2\) depend on \(b\), which is why all three are solved together.</li>
+<li><b>Load "Perfect fit"</b> and jump to the minimum: now the bowl touches the floor, \(L = 0\).</li>
+<li><b>Load "Collinear features".</b> \(\det(X^TX) = 0\), one eigenvalue is 0, and the bowl becomes a trough with a line of equally good minima. Raise the ridge penalty λ and it bends back into a bowl with one bottom.</li>
+<li><b>Load "Too few points".</b> Two observations, three weights: \(X^TX\) is singular even though the drawn slice looks like a bowl, because the missing direction involves \(b\).</li>
+</ul>
+</div>
+</template>
+
+<template data-topic data-section="intuition" data-concept="Linear regression" data-part="Labs" data-id="lab-gd" data-title="Lab 3: gradient descent, step by step">
+<div class="prose">
+<p class="lede">Instead of solving the normal equations, walk downhill. Each step computes the residuals, turns them into a gradient with \(X^T\), and moves the weights a little against it. The plane in 3D is the plane of the current step.</p>
+\[ \mathbf{w}_{t+1} = \mathbf{w}_t - \eta\,\nabla L(\mathbf{w}_t), \qquad \nabla L = -\frac2N X^T(\mathbf{y} - X\mathbf{w}_t). \]
+</div>
+<figure class="viz" data-viz="lab-gd"></figure>
+<div class="prose">
+<h2>Things to try</h2>
+<ul class="plain">
+<li><b>Restart from zero, then take 1 step at a time</b> on the worked-example data. The first step is the one in the Calculus worked example: gradient \([-14, -42.5, -22.5]\), and \(L\) falls from 62.5 to about 1.54.</li>
+<li><b>Then take 100 steps a few times.</b> \(L\) creeps toward 1.25. The Hessian's eigenvalues span 0.09 to 20.6 (κ ≈ 228): the step size is capped by the steepest direction, so the flattest one moves slowly.</li>
+<li><b>Push η past 2/λ_max</b> (shown in the readout) and step: the loss grows each step instead of shrinking.</li>
+<li><b>Watch a contour move.</b> Pick a level with the slider or by clicking the plane: as the steps run, the plane tilts and its contour line of that height swings across the floor in both views.</li>
+<li><b>Load "Collinear features" and descend.</b> The loss still falls to its minimum, but where the weights end up depends on where you started.</li>
+</ul>
+</div>
+</template>
+
+<template data-topic data-section="intuition" data-concept="Linear regression" data-part="Labs" data-id="contour-directions" data-title="Contours and where the gradient points">
+<div class="prose">
+<p class="lede">Near its minimum, any quadratic loss is \(L(\mathbf{w}) = L^* + \frac12(\mathbf{w} - \mathbf{w}^*)^TA(\mathbf{w} - \mathbf{w}^*)\), with gradient \(A(\mathbf{w} - \mathbf{w}^*)\). Rotate the ellipse, move the point, and see where that gradient points.</p>
+</div>
+<figure class="viz" data-viz="contour"></figure>
+<div class="prose">
+<h2>What the matrices show</h2>
+<p>The eigenvectors of \(A\) are the ellipse's axes, and the eigenvalues are the curvatures along them (a big eigenvalue means a steep wall and a short axis). The gradient is \(A\) applied to the displacement \(\mathbf{d} = \mathbf{w} - \mathbf{w}^*\). A matrix keeps a vector's direction only when that vector is an eigenvector, so the gradient points straight away from the centre only on the two axes. Everywhere else it is perpendicular to the contour but bent toward the steep axis.</p>
+<ul class="plain">
+<li><b>Drag the black point</b> around the ellipse: the angle between \(\nabla L\) and the line to \(\mathbf{w}^*\) drops to zero exactly on the dashed eigenvector axes.</li>
+<li><b>Drag anywhere else</b> (or use the rotation slider) to rotate the ellipse. \(\Lambda\) stays the same, \(V\) turns, and every entry of \(A = V\Lambda V^T\) changes.</li>
+<li><b>Slide the level</b> of the point: it moves along the line from \(\mathbf{w}^*\), jumps between contours, and the gradient grows in proportion to the distance.</li>
+<li>Set \(\lambda_1 = \lambda_2\): \(A\) is a multiple of \(I\), the contours are circles, and the angle is always 0.</li>
+<li>Make \(\lambda_1\) much bigger than \(\lambda_2\): a long thin ellipse, and the gradient mostly points across it. That is why gradient descent zig-zags in narrow valleys.</li>
+</ul>
+<p>In regression, \(A\) is the Hessian \(\frac2N X^TX\) restricted to the weights shown; Lab 2 shows the real one for your data.</p>
+</div>
+</template>
