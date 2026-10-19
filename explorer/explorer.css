@@ -234,3 +234,16 @@ a.term:hover{color:var(--surface)}
 .flow .fa.tick{stroke:var(--rule);stroke-width:1;stroke-dasharray:2 2}
 .sub > *,.how-body,.hw,.hw > div,.hw > p,.steps,.step{min-width:0}
 .hw p,.sub-val{overflow-wrap:anywhere}
+
+/* worked steps, decisions, interview Q&A */
+.wsteps{margin:2px 0 6px;padding-left:22px;display:grid;gap:8px;font:14.5px/1.6 var(--sans)}
+.wsteps li{padding-left:4px;overflow-wrap:anywhere;min-width:0}
+.wsteps li::marker{font-weight:700;color:var(--muted)}
+.wdec{margin:6px 0 0;padding:8px 12px;border-radius:8px;font:14.5px/1.55 var(--sans);border-left:4px solid var(--rule);background:var(--paper)}
+.wdec.rej{border-left-color:var(--normal)}
+.wdec.acc{border-left-color:var(--floor)}
+.qa{display:grid;gap:4px}
+.qa details{border:1px solid var(--rule);border-radius:8px;padding:5px 10px;background:var(--paper)}
+.qa summary{cursor:pointer;font:600 14px/1.5 var(--sans);width:auto;color:var(--ink);overflow-wrap:anywhere}
+.qa,.qa details{min-width:0}
+.qa p{margin:6px 0 2px;font:14px/1.6 var(--sans)}

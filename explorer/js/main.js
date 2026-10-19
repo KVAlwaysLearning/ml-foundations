@@ -343,9 +343,12 @@
         if (xf) { try { const x = xf(ctx);
           how = `<details class="how" data-key="${key}"${S.expandAll || openHow.has(key) ? ' open' : ''}><summary>How is this calculated?</summary>
             <div class="how-body"><div class="hw"><span class="hw-h">In plain words</span><p>${x.plain}</p></div>
+            ${x.hyp ? `<div class="hw"><span class="hw-h">Hypotheses</span><p>${x.hyp}</p></div>` : ''}
             <div class="hw"><span class="hw-h">Formula</span><p class="hw-f">${x.formula}</p></div>
             <div class="hw"><span class="hw-h">Worked on this data</span><div>${x.calc}</div></div>
-            <div class="hw"><span class="hw-h">How to read it</span><p>${x.read}</p></div></div></details>`; } catch (err) { console.error(err); } }
+            <div class="hw"><span class="hw-h">How to read it</span><p>${x.read}</p></div>
+            ${x.pit ? `<div class="hw"><span class="hw-h">Assumes and misses</span><p>${x.pit}</p></div>` : ''}
+            ${x.qa ? `<div class="hw"><span class="hw-h">Interview questions</span><div class="qa">${x.qa.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div></div>` : ''}</div></details>`; } catch (err) { console.error(err); } }
         return `<div class="sub"><div class="sub-sym">${sym}</div><div class="sub-lbl">${typeof label === 'function' ? label(ctx) : label}</div><div class="sub-val">${(() => { try { return val(ctx); } catch (err) { return '—'; } })()}</div>${how}</div>`;
       }).join('');
       const html = subs + (inf[st.id] ? inf[st.id][1] : '');

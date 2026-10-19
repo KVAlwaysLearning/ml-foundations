@@ -33,6 +33,7 @@ const SYM = {
   reset: ['RESET', 'Ramsey test for missing non-linear terms', 'p-value'], bp: ['BP', 'Breusch–Pagan test for non-constant variance', 'p-value'],
   dw: ['DW', 'Durbin–Watson statistic, ≈ 2 when errors are independent', 'scalar'], jb: ['JB', 'Jarque–Bera test for normal residuals', 'p-value'],
   vif: ['VIF', 'variance inflation factor 1 / (1 − R²_j)', 'scalar'], cook: ['D_i', "Cook's distance: influence of row i", 'scalar'],
+  F: ['F', 'F statistic: drop in SSE per added term ÷ noise variance (nested-model test)', 'scalar'],
   rmse: ['RMSE', 'root mean squared error', 'scalar'], r2: ['R²', 'share of variance in y explained', 'scalar']
 };
 const sy = k => { const s = SYM[k]; return `<abbr class="sym" title="${esc(s[1])} (${s[2]})">${s[0]}</abbr>`; };
@@ -231,6 +232,8 @@ const STEPS = [
         const lo = f.ci[j][0] / c.P.sd[j], hi = f.ci[j][1] / c.P.sd[j], tr = c.d.truth.coef[j];
         return `${sy('t')} = ${num(f.t[j], 2)}, ${sy('pv')} ${pEq(f.pv[j]).slice(2)}, ${sy('ci')} = [${num(lo, 3)}, ${num(hi, 3)}]` +
           (tr != null ? ` ${lo <= tr && tr <= hi ? mark(true) + ' covers' : mark(false) + ' misses'} the true ${tr}` : ''); }],
+      [sy('F'), 'Overall F-test: do the features explain anything?', c => { const f = c.P.f, q = f.rank - 1, d2 = c.P.nTr - f.rank; if (q < 1 || !(d2 > 0)) return '—';
+        const F = ((f.SST - f.SSE) / q) / (f.SSE / d2), p = ST.fSF(F, q, d2); return `${p < 0.05 ? mark(true) : mark(false, true)} ${sy('F')} = ${num(F, 2)} on (${q}, ${d2}) df, ${pEq(p)}; training ${sy('r2')} = ${num(1 - f.SSE / f.SST, 3)}`; }],
       ['', 'Which standard error fixes it?', c => c.isBase ? 'classical SEs are valid for the baseline' :
         c.variant.id === 'dupes' ? 'none needed: remove the duplicate rows in step 2, then classical SEs are fine' : c.attr.id === 'independence' ? `${c.variant.id === 'cluster' ? 'clustered' : 'Newey–West'} (highlighted above)` : c.attr.id === 'homoscedasticity' ? 'heteroscedasticity-robust HC1 (highlighted above)' :
         c.attr.id === 'exogeneity' ? `${mark(false)} none: the estimate itself is biased, so no standard error can rescue the interval` :
