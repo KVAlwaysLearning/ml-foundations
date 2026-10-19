@@ -247,3 +247,35 @@ a.term:hover{color:var(--surface)}
 .qa summary{cursor:pointer;font:600 14px/1.5 var(--sans);width:auto;color:var(--ink);overflow-wrap:anywhere}
 .qa,.qa details{min-width:0}
 .qa p{margin:6px 0 2px;font:14px/1.6 var(--sans)}
+
+/* what to look for */
+.ex-sig,.ex-notes{margin-top:30px;scroll-margin-top:60px}
+.ex-sig h2,.ex-notes h2{font:700 26px var(--serif);margin:0 0 8px}
+.ex-sig h3,.ex-notes h3{font:700 15px var(--sans);margin:0 0 6px}
+.sig-grid,.nt-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:12px;margin:10px 0 12px}
+.sig-card,.nt-box{border:1px solid var(--rule);border-radius:12px;padding:12px 14px;background:var(--panel);min-width:0}
+.sig-card p,.nt-box p{margin:0;font:14.5px/1.6 var(--sans)}
+.sig-see{margin:0;padding-left:18px;display:grid;gap:6px;font:14.5px/1.55 var(--sans)}
+.sig-b{color:var(--muted);font-size:13px}
+.sig-th{margin:6px 0 6px !important}
+.sig-tbl{overflow-x:auto}
+.sig-tbl table{font-size:13px}
+.sig-tbl th,.sig-tbl td{padding:3px 10px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sig-tbl tr.hl td{background:color-mix(in srgb,var(--residual) 16%,transparent)}
+.sig-tbl tr.gap td{color:var(--muted)}
+.sig-tf{margin:4px 0 0;font:13px/1.5 var(--sans);color:var(--muted)}
+/* interview notes */
+.nt-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.nt-card{margin:0;display:grid;gap:7px}
+.nt-card div{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px}
+.nt-card dt{font:700 12px var(--sans);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding-top:2px}
+.nt-card dd{margin:0;font:14.5px/1.55 var(--sans)}
+.nt-h3{margin:16px 0 8px !important}
+.nt-steps{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.nt-steps li{border:1px solid var(--rule);border-radius:10px;padding:9px 13px;min-width:0}
+.nt-steps li.nt-hit{border-left:4px solid var(--residual)}
+.nt-steps h4{margin:0 0 3px;font:700 14.5px var(--sans)}
+.nt-steps h4 a{display:inline-block;min-width:28px;color:var(--muted);text-decoration:none;font-weight:600}
+.nt-steps p{margin:0;font:14.5px/1.6 var(--sans);overflow-wrap:anywhere}
+.nt-call{margin-top:6px !important;padding:6px 10px;border-radius:8px;background:var(--paper);font-size:14px !important}
+@media (max-width: 760px){ .sig-grid,.nt-grid{grid-template-columns:1fr} .nt-card div{grid-template-columns:1fr;gap:2px} }

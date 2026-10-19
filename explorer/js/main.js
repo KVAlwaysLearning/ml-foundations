@@ -32,7 +32,7 @@
     <div class="ex-sliders" id="sliders"></div>
     <div class="ex-checks"><label><input type="checkbox" id="cmp"> Compare with the baseline</label><label><input type="checkbox" id="res"> Show residuals</label></div>
     <div class="btns"><button type="button" class="btn" id="resample">New sample</button><span class="seed" id="seedlbl"></span><button type="button" class="btn ghost" id="copylink">Copy link to this view</button></div>
-    <a class="to-proc" href="#process">See this variant in the process ↓</a>`;
+    <a class="to-proc" href="#lookfor">What it looks like in the data ↓</a> <a class="to-proc" href="#process">The process ↓</a> <a class="to-proc" href="#notes">Interview notes ↓</a>`;
   const sl = $('#sliders');
   const sN = slider(sl, { label: 'Sample size N', min: 8, max: 300, step: 1, value: S.N, digits: 0, onInput: v => { S.N = v; update(); } });
   const sS = slider(sl, { label: 'Noise σ', min: 0, max: 5, step: 0.05, value: S.sigma, onInput: v => { S.sigma = v; update(); } });
@@ -76,7 +76,7 @@
     cur = model(v.id, S.strength); base = isBase ? cur : model(baseId, 0);
     const k1 = [v.id, S.strength, S.N, S.sigma].join('|'), k0 = [baseId, 0, S.N, S.sigma].join('|');
     mcCur = mcCache.get(k1) || null; mcBase = mcCache.get(k0) || null;
-    renderPanel(a, v, isBase); renderAll(); renderProcess(a, v, isBase);
+    renderPanel(a, v, isBase); renderAll(); renderSig(a, v, isBase); renderProcess(a, v, isBase);
     clearTimeout(mcTimer);
     if (!mcCur || (S.cmp && !mcBase)) {
       mcRO.innerHTML = '<span class="muted">Running 200 fresh datasets…</span>';
@@ -307,6 +307,13 @@
       `</div>`;
   }
 
+  // ---- what to look for ----
+  const sigEl = $('#lookfor'), notesEl = $('#notes'); let sigCharts = [];
+  function renderSig(a, v, isBase){
+    sigCharts.forEach(c => c.dispose()); sigCharts = [];
+    try { sigCharts = SIG.render(sigEl, { cur, base, a, v, isBase, S }); } catch (err) { console.error(err); sigEl.innerHTML = `<p class="pv-note">Could not draw this view: ${esc(err.message)}</p>`; }
+  }
+
   // ---- process ----
   const procEl = $('#process'), symEl = $('#symbols'), basicsEl = $('#basics');
   let usedSyms = {}, procCharts = [];
@@ -321,6 +328,7 @@
     const P = PIPE.run(cur.d, { seed: S.seed }), inf = influence(a.id, v, isBase, S.strength);
     const ctx = { P, d: cur.d, S, attr: a, variant: v, isBase, focus: cur.d.focus[0] };
     const lvOf = id => inf[id] ? inf[id][0] : 'none';
+    try { NOTES.render(notesEl, { P, d: cur.d, a, v, isBase, inf, S, cur }); } catch (err) { console.error(err); }
     const groupsBy = { origin: [], major: [], minor: [], none: [] }; STEPS.forEach(st => groupsBy[lvOf(st.id)].push(st.id));
     const legend = Object.entries(LEVELS).map(([k, L]) => `<span class="lv ${L.cls}"><b>${L.glyph}</b> ${L.label}</span>`).join('') +
       Object.entries(MARKS).map(([k, m]) => `<span class="lv"><span class="mk mk-${k}">${m[0]}</span> ${m[1]}</span>`).join('');
