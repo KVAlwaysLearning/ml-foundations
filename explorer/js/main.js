@@ -32,7 +32,7 @@
     <div class="ex-sliders" id="sliders"></div>
     <div class="ex-checks"><label><input type="checkbox" id="cmp"> Compare with the baseline</label><label><input type="checkbox" id="res"> Show residuals</label></div>
     <div class="btns"><button type="button" class="btn" id="resample">New sample</button><span class="seed" id="seedlbl"></span><button type="button" class="btn ghost" id="copylink">Copy link to this view</button></div>
-    <a class="to-proc" href="#lookfor">What it looks like in the data ↓</a> <a class="to-proc" href="#process">The process ↓</a> <a class="to-proc" href="#notes">Interview notes ↓</a>`;
+    <a class="to-proc" href="#changed">What changed ↓</a> <a class="to-proc" href="#lookfor">What it looks like ↓</a> <a class="to-proc" href="#process">The process ↓</a> <a class="to-proc" href="#notes">Interview notes ↓</a>`;
   const sl = $('#sliders');
   const sN = slider(sl, { label: 'Sample size N', min: 8, max: 300, step: 1, value: S.N, digits: 0, onInput: v => { S.N = v; update(); } });
   const sS = slider(sl, { label: 'Noise σ', min: 0, max: 5, step: 0.05, value: S.sigma, onInput: v => { S.sigma = v; update(); } });
@@ -76,7 +76,7 @@
     cur = model(v.id, S.strength); base = isBase ? cur : model(baseId, 0);
     const k1 = [v.id, S.strength, S.N, S.sigma].join('|'), k0 = [baseId, 0, S.N, S.sigma].join('|');
     mcCur = mcCache.get(k1) || null; mcBase = mcCache.get(k0) || null;
-    renderPanel(a, v, isBase); renderAll(); renderSig(a, v, isBase); renderProcess(a, v, isBase);
+    renderPanel(a, v, isBase); renderAll(); renderChanged(a, v, isBase); renderSig(a, v, isBase); renderProcess(a, v, isBase);
     clearTimeout(mcTimer);
     if (!mcCur || (S.cmp && !mcBase)) {
       mcRO.innerHTML = '<span class="muted">Running 200 fresh datasets…</span>';
@@ -306,6 +306,17 @@
       scalarBox('eᵀe / N', num(f.SSE / N, 4), 'mean squared error', 'normal') +
       `</div>`;
   }
+
+  // ---- what changed ----
+  const chgEl = $('#changed'); let chgCharts = [];
+  function renderChanged(a, v, isBase){
+    chgCharts.forEach(c => c.dispose()); chgCharts = [];
+    try { chgCharts = CHG.render(chgEl, { cur, base, a, v, isBase, S, inf: influence(a.id, v, isBase, S.strength) }); } catch (err) { console.error(err); chgEl.innerHTML = `<p class="pv-note">Could not draw this view: ${esc(err.message)}</p>`; }
+  }
+  document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (!g) return; e.preventDefault();
+    if (g.dataset.diag) { S.diag = g.dataset.diag; drawDiag(); }
+    const t = document.getElementById(g.dataset.goto); if (!t) return; t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const hl = g.dataset.diag ? cDiag.wrap : t; hl.classList.remove('flash'); void hl.offsetWidth; hl.classList.add('flash'); setTimeout(() => hl.classList.remove('flash'), 2200); });
 
   // ---- what to look for ----
   const sigEl = $('#lookfor'), notesEl = $('#notes'); let sigCharts = [];

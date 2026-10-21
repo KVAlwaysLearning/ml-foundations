@@ -64,6 +64,8 @@ const EXPLAIN = (() => {
   }
   const sum = a => a.reduce((s, v) => s + v, 0), mean = a => sum(a) / a.length;
   const ex = (plain, formula, calc, read, more = {}) => ({ plain, formula, calc, read, ...more });
+  const lgam = x => { const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7]; x -= 1; let a = c[0]; const t = x + 7.5; for (let i = 1; i < 9; i++) a += c[i] / (x + i); return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a); };
+  const tDens = (t, v) => Math.exp(lgam((v + 1) / 2) - lgam(v / 2) - 0.5 * Math.log(v * Math.PI) - (v + 1) / 2 * Math.log(1 + t * t / v));
   const ol = items => `<ol class="wsteps">${items.filter(Boolean).map(s => `<li>${s}</li>`).join('')}</ol>`;
   const bis = (sf, a) => { let lo = 0, hi = 1e4; for (let i = 0; i < 90; i++) { const m = (lo + hi) / 2; if (sf(m) > a) lo = m; else hi = m; } return (lo + hi) / 2; };
   const fCrit = (d1, d2, a = 0.05) => bis(F => ST.fSF(F, d1, d2), a), chiCrit = (k, a = 0.05) => bis(x => ST.chi2SF(x, k), a);
@@ -109,7 +111,8 @@ const EXPLAIN = (() => {
       return ex(`${g('skew', 'Skewness')} measures how lopsided a ${g('distribution')} is. Take each value's ${g('deviation')} from the ${g('mean')}. Cubing keeps the sign, so big deviations to the right push the sum up and big ones to the left push it down. Divide by the spread cubed so the answer has no units.`,
         'γ₁ = m₃ / m₂<sup>1.5</sup>,  where m₂ = mean of d², m₃ = mean of d³, d = value − mean',
         `For y (all ${y.length} rows), mean = ${n(m)}:` + T(['y', 'd = y − mean', 'd²', 'd³'], y.map((v, i) => [v, dd[i], dd[i] ** 2, dd[i] ** 3]), { total: ['mean', n(m), '0', m2, m3] }) +
-        `γ₁ = ${n(m3, 4)} / ${n(m2, 4)}<sup>1.5</sup> = ${n(m3, 4)} / ${n(m2 ** 1.5, 4)} = <b>${n(m3 / m2 ** 1.5, 2)}</b>` +
+        `m₂<sup>1.5</sup> = m₂ × √m₂ = ${n(m2, 4)} × ${n(Math.sqrt(m2), 4)} = ${n(m2 ** 1.5, 4)} (the standard deviation cubed, so the units cancel). γ₁ = ${n(m3, 4)} / ${n(m2 ** 1.5, 4)} = <b>${n(m3 / m2 ** 1.5, 2)}</b>.` +
+        (y.length > 2 ? `<p>Some software prints the sample-adjusted version, which corrects small samples for understating skewness: G₁ = γ₁ × √(N(N − 1)) / (N − 2) = ${n(m3 / m2 ** 1.5, 4)} × √(${y.length} × ${y.length - 1}) / ${y.length - 2} = <b>${n(m3 / m2 ** 1.5 * Math.sqrt(y.length * (y.length - 1)) / (y.length - 2), 3)}</b>.</p>` : '') +
         `<p>The same steps for each feature: ` + c.P.names.slice(1).map((nm, k) => { const x = c.d.X.map(r => r[k + 1]), mx_ = mean(x), d = x.map(v => v - mx_), a2 = mean(d.map(v => v * v)), a3 = mean(d.map(v => v ** 3));
           return `${nm}: mean ${n(mx_)}, m₂ = ${n(a2, 4)}, m₃ = ${n(a3, 4)}, γ₁ = ${n(a3, 4)} / ${n(a2 ** 1.5, 4)} = <b>${a2 > 0 ? n(a3 / a2 ** 1.5, 2) : '0'}</b>`; }).join('; ') + '.</p>',
         'Roughly: |γ₁| < 0.5 fairly symmetric, 0.5–1 moderately skewed, > 1 strongly skewed. Skewed y can hint at skewed errors or a needed log transform.'); },
@@ -209,7 +212,21 @@ const EXPLAIN = (() => {
         `With w̃ = 0, every ŷᵢ = 0, so eᵢ = yᵢ − 0 = yᵢ.` + T(['e = y (true) − 0', ...c.P.names.slice(1).map(nm => `x̃ (${nm}) · e`)], X.map((r, i) => [y[i], ...r.slice(1).map(v => v * y[i])]), { total: ['Σ', sum(y), ...c.P.names.slice(1).map((_, k) => sum(X.map((r, i) => r[k + 1] * y[i])))] }) +
         `∇L = −(2/${N}) × ${vec([sum(y), ...c.P.names.slice(1).map((_, k) => sum(X.map((r, i) => r[k + 1] * y[i])))], 3)} = ${vec(g0, 4)}<br>w̃₁ = 0 − ${n(c.P.eta, 4)} × ${vec(g0, 4)} = <b>${vec(it.next, 4)}</b> (row t = 1 of the table)`,
         'The loss falls fastest early, then the steps shrink because the gradient shrinks near the bottom.'); },
-    c => ex('Gradient descent should end where the closed form landed.', '|L_GD − L_closed| → 0', `After ${c.P.iters[c.P.iters.length - 1].t} steps: ${n(c.P.iters[c.P.iters.length - 1].L, 6)} vs ${n(c.P.f.SSE / c.P.nTr, 6)}.`, 'If they differ, it needs more iterations (large κ) or η is too big.')
+    c => { const P = c.P, lam = P.eigH, eta = P.eta, fac = lam.map(l => 1 - eta * l), slow = Math.max(...fac.map(Math.abs)), last = P.iters[P.iters.length - 1], Lstar = P.f.SSE / P.nTr;
+      const dist = P.wHist.map(w => Math.sqrt(w.reduce((s2, v, k) => s2 + (v - P.f.w[k]) ** 2, 0))), steps = slow > 0 && slow < 1 ? Math.log(0.001) / Math.log(slow) : NaN;
+      const alt = [0.05, 0.2, 0.5, 0.9, 1.05].map(fr => { const e2 = fr * P.lim, fsg = lam.map(l => 1 - e2 * l).reduce((m, v) => Math.abs(v) > Math.abs(m) ? v : m, 0), fs = Math.abs(fsg);
+        return [`${fr} × limit = ${n(e2, 4)}`, n(fsg, 3), fs >= 1 ? 'diverges: each overshoot is bigger than the last' : fsg < -0.05 ? 'overshoots and flips side every step, but still shrinks' : fs < 0.05 ? 'lands almost at once' : fs > 0.85 ? 'safe but slow' : 'fast and smooth']; });
+      return ex(`Why does the distance to the answer shrink steadily, and why does η decide everything? Along each special direction of the bowl (an ${g('eigen', 'eigenvector')} of H with curvature λ), one step multiplies the remaining distance by exactly (1 − η·λ). The slowest direction sets the pace, and if any |1 − η·λ| ≥ 1 the steps overshoot by more than they correct, so the iterations blow up. That is the 2/λ_max rule.`,
+        'distance after a step = (1 − η·λₖ) × distance before, for each direction k.   Stable iff |1 − η·λₖ| < 1 for every k  ⇔  η < 2/λ_max',
+        ol([`Curvatures (eigenvalues of H): ${lam.map(l => n(l, 4)).join(', ')}. With η = ${n(eta, 4)}, the factors 1 − η·λ are ${fac.map(f2 => n(f2, 4)).join(', ')}. The slowest is |${n(slow, 4)}|.`,
+          `So each step keeps ${n(100 * slow, 1)}% of the remaining distance in the slowest direction. Reaching 0.1% of the starting distance takes ln(0.001) / ln(${n(slow, 4)}) ≈ <b>${isFinite(steps) ? n(Math.ceil(steps), 0) : '—'}</b> steps.`,
+          `Measured on this run, the distance from w̃ to the closed-form answer: ` + [0, 1, 2, 3, 10, 50].filter(t => t < dist.length).map(t => `t = ${t}: ${n(dist[t], 4)}`).join(', ') + (dist[1] && dist[0] ? `. Ratio of step 2 to step 1: ${n(dist[2] / dist[1], 4)}.` : '.'),
+          `Other step sizes on this same data:` + T(['factor in slowest direction', 'what happens'], alt.map(r => [r[1], r[2]]), { label: 'η', k: 5 }).replace(/<tr><td>(\d)<\/td>/g, (m0, k) => `<tr><td>${alt[+k - 1][0]}</td>`),
+          `When to stop: when the gradient length ‖∇L‖ falls below a tolerance (say 10⁻⁶), when the loss stops changing, or at a maximum number of iterations. After ${last.t} steps here, L = ${n(last.L, 6)} against the closed-form minimum ${n(Lstar, 6)} (gap ${n(Math.abs(last.L - Lstar), 8)}).`]),
+        'Without standardising, the bowl is a long narrow valley (very different λs). The steep wall forces a tiny η, and that makes progress along the flat direction painfully slow. That is the real reason we scale before gradient descent.',
+        { qa: [['Batch vs stochastic vs mini-batch?', 'Batch uses all rows per step (what is shown here): smooth but costly per step. Stochastic uses one row: cheap and noisy. Mini-batch uses a few rows: the usual compromise in deep learning.'],
+          ['Can gradient descent get stuck in a bad minimum here?', 'No. The squared-error loss of linear regression is convex (a single bowl), so any stable run reaches the same minimum as the closed form.'],
+          ['What do momentum or Adam add?', 'They reuse past gradients to speed up along consistent directions and damp zig-zags, which helps most when the curvatures are very different.']] }); },
   ];
   E[10] = E10();
   E[11] = [
@@ -260,6 +277,8 @@ const EXPLAIN = (() => {
         't = ŵⱼ / SE(ŵⱼ),   p = 2 · P(T_{N−p} ≥ |t|),   CI = ŵⱼ ± t_crit · SE,   t_crit: P(|T_{N−p}| ≥ t_crit) = 0.05',
         ol([`t = ${n(w, 4)} / ${n(se, 4)} = <b>${n(f.t[j], 3)}</b> (the same ratio on the standardised scale).`,
           `Degrees of freedom: N − p = ${c.P.nTr} − ${f.rank} = ${f.df}.`,
+          (() => { const at = Math.abs(f.t[j]), v = f.df, M = 400, hi = at + 60, wdt = (hi - at) / M; let area = 0; for (let k = 0; k < M; k++) area += tDens(at + (k + 0.5) * wdt, v) * wdt;
+            return `How the p-value is found. The t(${v}) curve has height f(t) = Γ((ν+1)/2) / (√(νπ) Γ(ν/2)) × (1 + t²/ν)<sup>−(ν+1)/2</sup> with ν = ${v}; at our t its height is f(${n(at, 3)}) = ${n(tDens(at, v), 6)} (at 0 it is ${n(tDens(0, v), 4)}). The p-value is the area under this curve beyond ±${n(at, 3)}. Cutting the right tail from ${n(at, 3)} to ${n(hi, 1)} into ${M} thin strips of width ${n(wdt, 4)} and adding height × width gives ${n(area, 6)}; doubling for both tails gives ≈ ${n(2 * area, 6)}.`; })(),
           `p-value = 2 × (area of the t(${f.df}) curve beyond ${n(Math.abs(f.t[j]), 3)}): <b>${pEq(f.pv[j])}</b>. (A normal-curve approximation gives ${pEq(zApprox)}; they agree when df is large.) It is computed with the regularised incomplete beta function, the exact formula for the t tail.`,
           `t_crit: the value with 2.5% in each tail of t(${f.df}) = ${n(f.tc, 4)} (the normal curve would give 1.96).`,
           `CI = ${n(w, 4)} ± ${n(f.tc, 4)} × ${n(se, 4)} = ${n(w, 4)} ± ${n(f.tc * se, 4)} = [<b>${n(lo, 3)}</b>, <b>${n(hi, 3)}</b>].`,
@@ -272,6 +291,20 @@ const EXPLAIN = (() => {
             ['Why t and not normal?', 'Because σ² was replaced by its estimate s². That extra uncertainty fattens the tails; with normal errors the ratio follows t(N − p) exactly.'],
             ['Statistically significant vs important?', 'With huge N a tiny, useless effect gets p ≈ 0. Report the effect size and its CI, not just p.'],
             ['Many coefficients tested?', 'Each has a 5% false-alarm rate, so with 20 tests about one is "significant" by chance. Use an F test for joint questions, or a multiple-testing correction (Bonferroni, Holm, FDR).']] }); },
+    c => { const P = c.P, f = P.f; if (!f.inv) return ex('Not defined without an inverse.', '—', '—', '—');
+      const cv = P.mu.map((m, k) => k === 0 ? 1 : -m / P.sd[k]), q = cv.reduce((s2, ci, a) => s2 + ci * cv.reduce((s3, cj, b) => s3 + f.inv[a][b] * cj, 0), 0), se = Math.sqrt(f.s2 * q), b = P.wOrig[0], t = b / se, p = ST.tP2(t, f.df);
+      return ex(`The intercept b is the predicted y when every feature equals 0 <i>in its original units</i>. We fitted on standardised features, so b is a combination of the fitted weights: b = w̃₀ − Σ w̃ⱼ μⱼ / sⱼ = cᵀw̃ with c = [1, −μ₁/s₁, …]. The same variance rule as for the slope gives Var(b) = s² · cᵀ(X̃ᵀX̃)⁻¹c. Then it gets the same t-test.`,
+        'SE(b) = √( s² · cᵀ (X̃ᵀX̃)⁻¹ c ),   t = b / SE(b),   CI = b ± t_crit · SE(b).   With one feature this equals √( s² (1/N + x̄² / Σ(x − x̄)²) )',
+        ol([`c = ${vec(cv, 4)}.`,
+          `cᵀ(X̃ᵀX̃)⁻¹c = ${n(q, 6)}${P.P === 2 ? ` (with one standardised feature: 1/N + μ²/(s²N) = 1/${P.nTr} + ${n(P.mu[1], 3)}²/(${n(P.sd[1], 3)}² × ${P.nTr}) = ${n(1 / P.nTr + P.mu[1] ** 2 / (P.sd[1] ** 2 * P.nTr), 6)})` : ''}. The second part grows the further x = 0 is from the data, which is why intercepts are often imprecise.`,
+          `SE(b) = √(${n(f.s2, 4)} × ${n(q, 6)}) = <b>${n(se, 4)}</b>.`,
+          `t = ${n(b, 4)} / ${n(se, 4)} = <b>${n(t, 3)}</b> with ${f.df} df: <b>${pEq(p)}</b>.`,
+          `95% CI = ${n(b, 4)} ± ${n(f.tc, 4)} × ${n(se, 4)} = [<b>${n(b - f.tc * se, 3)}</b>, <b>${n(b + f.tc * se, 3)}</b>]${c.d.truth.coef[0] != null ? `; the true intercept is ${c.d.truth.coef[0]}` : ''}.`])
+          + decide(p, Math.abs(t), f.tc, '|t|', 'the intercept is distinguishable from 0.', 'the data cannot tell the intercept from 0, which does not mean it is 0.'),
+        'The intercept is often not interesting in itself (x = 0 may be far outside the data). Testing it matters when "y at x = 0" has a meaning, for example a fixed cost.',
+        { hyp: H('the true intercept is 0.', 'it is not 0.'),
+          qa: [['Should you drop an insignificant intercept?', 'Almost never. Forcing the line through the origin biases the slope unless you know y must be 0 at x = 0, and R² stops having its usual meaning.'],
+            ['Why does centring x change the intercept\'s SE?', 'After centring, the intercept is the prediction at the average x, where the data are densest, so it is estimated most precisely (its SE becomes s/√N).']] }); },
     c => { const f = c.P.f, N = c.P.nTr, q = f.rank - 1, d2 = N - f.rank;
       if (q < 1) return ex('No slopes to test.', '—', '—', '—');
       const y = c.P.ytr, ym = mean(y), SSEw = f.SSE, SSEo = f.SST, F = ((SSEo - SSEw) / q) / (SSEw / d2), p = ST.fSF(F, q, d2), Fc = fCrit(q, d2), R2 = 1 - SSEw / SSEo, adj = 1 - (1 - R2) * (N - 1) / d2;

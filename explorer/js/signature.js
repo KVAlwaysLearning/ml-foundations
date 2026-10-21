@@ -29,6 +29,7 @@ const SIG = (() => {
     const c = d.truth.coef, ks = Object.keys(c);
     if (ks.length === d.X[0].length) return d.y.map((y, i) => y - d.X[i].reduce((s, v, j) => s + v * c[j], 0));
     if (d.truth.fn) return d.y.map((y, i) => y - d.truth.fn(d.X[i][1], i));
+    if (d.truth.byGroup && d.group) return d.y.map((y, i) => y - d.truth.byGroup[d.group[i]](d.X[i][1]));
     return null;
   }
   const signTxt = v => v > 0 ? '+' : '−';

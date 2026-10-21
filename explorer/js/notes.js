@@ -53,29 +53,6 @@ const NOTES = (() => {
     reverse: { what: 'y also influences x.', real: 'Police numbers and crime, price and demand.', see: 'Nothing in the residuals.', breaks: 'The slope mixes the effect of x on y with the effect of y on x.', fine: 'Prediction of y from x, if the system does not change.', detect: 'Thinking about the timing and the mechanism.', fix: 'Instrumental variables, a structural model, or lagged x.', line: 'With feedback from y to x, OLS cannot separate cause from effect; an instrument or a natural experiment is needed.' }
   };
 
-  function steps(c){
-    const { P, d, a, v, inf, isBase } = c, f = P.f, j = c.d.focus[0], nm = d.names[j], dg = P.dg || {};
-    const call = id => { const x = inf[id]; return x && x[0] !== 'none' && !isBase ? `<p class="nt-call ${LEVELS[x[0]].cls}"><b>${LEVELS[x[0]].glyph} ${v.name}:</b> ${esc(x[1])}</p>` : ''; };
-    const ok = (p, good, bad) => p >= 0.05 ? good : bad;
-    const S = [
-      [1, 'Collect the data', `We have ${P.N} rows. Each row is one example: the input${d.names.length > 2 ? 's' : ''} (${d.names.slice(1).join(', ')}) and the answer y we want to predict. The model assumes y = a starting value + a weight for each input + some noise.`],
-      [2, 'Clean it', `Before learning anything, we look for problems: repeated rows (found ${P.dupes}), empty cells (none), and extreme values more than 3 standard deviations from the average (found ${P.outY + P.outX}). We also make sure no input secretly contains the answer.`],
-      [3, 'Look at it', `We plot y against each input and summarise. y rises with ${d.names[1]} with a correlation of ${n(P.eda.corrXY[0])} (1 would be a perfect straight-line link). How lopsided y is: skewness ${n(P.eda.skewY)} (0 means symmetric).${isFinite(P.eda.maxFeatCorr) ? ` The two most similar inputs have correlation ${n(P.eda.maxFeatCorr)}.` : ''} This is where a curve, a funnel or overlapping inputs should first catch your eye.`],
-      [4, 'Hide some rows for the final exam', `We randomly set aside ${P.nTe} of the ${P.N} rows (20%) and do not touch them until the end. The model learns from the other ${P.nTr}. That way the final score is an honest test on unseen data.`],
-      [5, 'Put the inputs on the same ruler', `We rescale each input to "how many standard deviations from its average" (average ${n(P.mu[1])}, standard deviation ${n(P.sd[1])} for ${d.names[1]}). The average and spread come from the training rows only, so the exam rows stay unseen. This does not change the predictions; it makes the arithmetic stable and gradient descent fast.`],
-      [6, 'Arrange it as a table', `We stack the inputs into a table with one row per example and an extra column of 1s (that column lets the model have a starting value, the intercept). We check that no column is a copy or combination of the others: the table has ${f.rank} independent columns out of ${P.P}${f.rank < P.P ? ', so one is redundant' : ', so it is fine'}.`],
-      [7, 'Write down the prediction rule', `A prediction is: starting value + weight × each input. "Linear" means the weights are just multiplied and added.`],
-      [8, 'Decide what "best" means', `For each row, error = actual y − predicted y. We square every error (so positive and negative both count, and big errors count more) and take the average. That average, the mean squared error, is the score we want as small as possible.`],
-      ['9a', 'Find the best weights: by solving equations', `At the lowest point of the score, nudging any weight does not help. Writing that down gives one equation per weight, and solving them gives the best weights directly. Here the best straight line has slope ${n(P.wOrig[j], 3)} for ${nm}${f.full ? '' : ', but the equations have no unique solution'}.`],
-      ['9b', 'Or by walking downhill', `Gradient descent starts with all weights at 0, checks which direction lowers the score, takes a small step that way (step size ${n(P.eta, 3)}), and repeats. After ${P.iters[P.iters.length - 1].t} steps it lands on the same answer as solving the equations.`],
-      [10, 'Check the leftovers', `The errors that are left over should look like pure noise. We test: is the shape right? (curvature test: ${ok(dg.reset?.p, 'no curve found', 'a curve is missing')}, p ${pv(dg.reset?.p)}); is the spread even? (${ok(dg.bp?.p, 'yes', 'no, it changes with x')}, p ${pv(dg.bp?.p)}); are neighbouring errors unrelated? (Durbin–Watson ${n(dg.dw)}, ideal 2); are they bell-shaped? (${ok(dg.jb?.p, 'yes', 'no')}, p ${pv(dg.jb?.p)}); are inputs overlapping? (largest VIF ${dg.vif?.length ? (isFinite(Math.max(...dg.vif)) ? n(Math.max(...dg.vif), 1) : '∞') : '—'}, ideal 1); does any single row dominate? (largest Cook's distance ${f.cook ? n(Math.max(...f.cook), 2) : '—'}, worry above 1).`],
-      [11, 'Say how sure we are', isFinite(P.seOrig[j]) ? `The slope is ${n(P.wOrig[j], 3)} give or take ${n(P.seOrig[j], 3)} (its standard error). The 95% range is about ${n(P.wOrig[j] - f.tc * P.seOrig[j], 3)} to ${n(P.wOrig[j] + f.tc * P.seOrig[j], 3)}. If the true slope were 0, a result this far from 0 would happen with probability ${pv(f.pv[j])}. These numbers are only trustworthy if the checks in the previous step passed. Other ways of measuring the same uncertainty: allowing uneven spread (HC1) ${P.hc ? n(P.hc[j], 3) : '—'}, also allowing neighbouring rows to be related (Newey–West) ${P.nw ? n(P.nw.se[j], 3) : '—'}${P.cl ? `, allowing rows of a group to share shocks (clustered) ${n(P.cl.se[j], 3)}` : ''}.${!isBase ? ({ independence: v.id === 'cluster' ? ' For this data the clustered one is the right one.' : v.id === 'dupes' ? ' For this data none of them helps: remove the duplicates first.' : ' For this data Newey–West is the right one.', homoscedasticity: ' For this data HC1 is the right one.', exogeneity: ' None of them helps here: the slope itself is biased.' }[a.id] || '') : ''}` : 'The standard error cannot be computed, because the weights are not unique.'],
-      [12, 'Take the final exam', `On the ${P.nTe} hidden rows the typical error (RMSE) is ${n(P.rmseTe)}, compared with ${n(P.rmseTr)} on the training rows. Test R² is ${n(P.r2Te, 3)}: the model explains that share of the variation in y on unseen data.${P.rmseTe > 1.3 * P.rmseTr ? ' The exam score is clearly worse, which signals overfitting or a split that leaked.' : ''}`],
-      [13, 'Explain the result', `Undo the rescaling so the weights are back in the original units. One more unit of ${nm} goes with ${n(P.wOrig[j], 3)} more y, holding the other inputs fixed. That is an association; calling it a cause needs the exogeneity assumption.${d.truth.coef[j] != null ? ` (Because this is a simulation we know the truth: ${d.truth.coef[j]}.)` : ''}`]
-    ];
-    return S.map(([id, t, body]) => `<li class="${inf[id] && inf[id][0] !== 'none' && !isBase ? 'nt-hit' : ''}"><h4><a href="#step-${id}">${id}</a> ${t}</h4><p>${body}</p>${call(id)}</li>`).join('');
-  }
-
   function elevator(c){
     const { P, a, v, isBase } = c, j = c.d.focus[0], nm = c.d.names[j], k = V[v.id] || {};
     let s = `Linear regression predicts a number as a weighted sum of the inputs plus a starting value. It picks the weights that make the average squared error as small as possible, which can be solved exactly (the normal equations) or approached step by step (gradient descent). I split the data first, so I can test on rows the model never saw. After fitting, I check that the leftover errors look like random noise, because the uncertainty numbers (standard errors, p-values, intervals) rely on that. Here the slope for ${nm} is ${n(P.wOrig[j], 3)}${isFinite(P.seOrig[j]) ? ` ± ${n(P.seOrig[j], 3)}` : ''}, and the test error is ${n(P.rmseTe)}.`;
@@ -100,14 +77,162 @@ const NOTES = (() => {
     ['How do you know the model generalises?', 'Hold out data before fitting (or cross-validate), fit every preprocessing step on the training rows only, and compare the train and test error.']
   ];
 
+  /* ---------- the deep walk-through: one collapsible block per step ---------- */
+  const ul = a => `<ul>${a.filter(Boolean).map(s => `<li>${s}</li>`).join('')}</ul>`;
+  const sec = (h, body) => body ? `<div class="nt-sec"><h5>${h}</h5>${body}</div>` : '';
+  function W(c, id, i, title){
+    const fn = EXPLAIN[id]?.[i]; if (!fn) return ''; let x; try { x = fn(c.ex); } catch (err) { console.error(err); return ''; }
+    return `<div class="nt-w"><h6>${title}</h6>${x.hyp ? `<p><b>Hypotheses.</b> ${x.hyp}</p>` : ''}<p><b>The idea.</b> ${x.plain}</p><p class="hw-f">${x.formula}</p><div class="nt-calc">${x.calc}</div><p><b>How to read it.</b> ${x.read}</p>` +
+      (x.pit ? `<p><b>What it assumes and can miss.</b> ${x.pit}</p>` : '') + (x.qa ? `<div class="qa">${x.qa.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>` : '') + `</div>`;
+  }
+
+  function stepDefs(c){
+    const { P, d, v, isBase } = c, f = P.f, j = d.focus[0], nm = d.names[j], dg = P.dg || {}, fn = d.names.slice(1);
+    const vifMax = dg.vif?.length ? Math.max(...dg.vif) : NaN;
+    const need = isBase || v.id === 'dupes' ? null : c.a.id === 'independence' ? (v.id === 'cluster' ? 'clustered' : 'Newey–West') : c.a.id === 'homoscedasticity' ? 'HC1' : null;
+    return [
+      { id: '0', title: 'What problem are we solving?', sum: 'y = b + w·x + ε: estimate b and w, and say how sure we are.',
+        why: 'We want a rule that turns an input x into a guess for y, and that tells us how x and y are related.',
+        fp: ul(['y is never fully decided by x: two houses of the same size sell for different prices. So split y into a part explained by x and a part that is not.',
+          'Linear regression assumes the explained part is a straight line, so <b>y = b + w·x + ε</b>. b (intercept) is the predicted y when x = 0. w (slope) is how much y changes on average when x goes up by 1. ε (error) is everything else: noise, causes we did not measure, measurement slips.',
+          'We never see b, w or ε, only x and y. The job is to <b>estimate</b> b and w from data, and to say how sure we are.',
+          `In this simulation we chose the truth ourselves (${d.truth.coef[1] != null ? `slope ${d.truth.coef[1]}` : 'a curved rule'}), so we can check whether the method recovers it.`]),
+        ip: ['"Linear" means linear in the <i>weights</i>: y = b + w·x² is still linear regression, because w just multiplies something and gets added.'] },
+      { id: 1, title: 'Collect the data', sum: `N = ${P.N} rows, p = ${P.P} coefficients, ${P.N - P.P} rows to spare.`,
+        why: 'Every estimate is learned from examples, so the examples decide what we can learn.',
+        what: `A table with one row per observation: the input${fn.length > 1 ? 's' : ''} ${fn.join(', ')} and the answer y.`,
+        fp: ul([`Each row is one equation, yᵢ = b + w·xᵢ + εᵢ. We have N = ${P.N} equations and p = ${P.P} unknowns.`,
+          'We need N > p, and preferably many more rows. With N = p the line passes exactly through the points and we learn nothing about the noise.',
+          `The leftover N − p rows (here ${P.N - P.P}) are what lets us measure the noise. They are the <b>degrees of freedom</b>.`]),
+        work: [[1, 0, 'N and p'], [1, 1, 'The true rule (known only in a simulation)'], [1, 2, 'How the errors were made']],
+        ip: ['Precision grows with √N: four times the data halves the uncertainty.'] },
+      { id: 2, title: 'Clean the data', sum: `duplicates ${P.dupes}, missing 0, outliers ${P.outY + P.outX}, leakage none.`,
+        why: 'If the rows are wrong, everything after is wrong.',
+        what: 'Four checks: duplicates, missing values, outliers and leakage.',
+        fp: ul(['<b>Duplicates.</b> Turn each row into a text key (all its values joined). A key seen before is a copy. A copy adds no information, but the model counts it as new evidence and becomes overconfident.',
+          '<b>Missing values.</b> Count empty cells per column. Rows with gaps cannot be used as they are, so drop them or fill them in, and know <i>why</i> they are missing.',
+          '<b>Outliers.</b> A z-score z = (value − mean)/sd says how many standard deviations a value is from the average. For bell-shaped data |z| > 3 happens only 0.27% of the time, so flag it and look at it.',
+          '<b>Leakage.</b> Ask of every input: is it computed from y, or known only after y? Such an input makes the model look brilliant in testing and useless in real use.']),
+        work: [[2, 0, 'Duplicate rows'], [2, 2, 'Outliers by z-score']],
+        ip: ['A flag means "investigate", not "delete": an outlier can be a typo or the most informative point you have.'] },
+      { id: 3, title: 'Explore the data (EDA)', sum: `r(${d.names[1]}, y) = ${n(P.eda.corrXY[0], 3)}, skewness of y = ${n(P.eda.skewY)}.`,
+        why: 'Look before you fit. A picture shows curves, funnels and clusters that a single number hides.',
+        what: 'Plot y against each input, then summarise the relationship (correlation) and the shape of y (skewness).',
+        fp: ul(['<b>Correlation.</b> For each row, multiply x\'s deviation from its mean by y\'s deviation. The product is positive when both are on the same side of their means (they agree) and negative when they disagree. Add them up, then divide by both spreads so the answer always lies between −1 and 1.',
+          '<b>Skewness.</b> The average of d is always 0, so it is useless. The average of d² loses the direction (it is the spread). The average of d³ keeps the sign and makes big deviations count far more, so a long tail on one side wins. Dividing by sd³ removes the units.',
+          '<b>Correlation between inputs.</b> The same formula on two inputs: a high value warns that their effects will be hard to separate.']),
+        work: [[3, 0, 'Skewness γ₁'], [3, 1, 'Correlation of x with y'], [3, 2, 'Largest correlation between two inputs']],
+        ip: ['r only measures straight-line association: a perfect U-shape can have r = 0.', 'Skewness of y is a hint, not a verdict. The assumption is about the errors, re-checked in step 10.'] },
+      { id: 4, title: 'Split into training and test data', sum: `${P.nTr} rows to learn from, ${P.nTe} hidden for the final exam.`,
+        why: 'A model always looks good on the data it learned from. To know how it does on new data, some data must be hidden before anything is learned: a student who saw the exam questions proves nothing.',
+        what: 'Shuffle the rows, keep 80% for learning (training) and 20% for the final check (test).',
+        fp: ul(['Every step that <i>learns numbers from data</i> (means for scaling, the weights, any choice about the model) must use training rows only. Otherwise information leaks from the test rows and the test score becomes optimistic.',
+          'A random shuffle is fair only if rows are independent. With time series, train on the past and test on the future; with groups, keep a whole group on one side.']),
+        work: [[4, 0, 'The 80 / 20 split'], [4, 1, 'Is a random split appropriate?']],
+        ip: ['Fit scaling, imputation and feature selection on the training set only, then <i>apply</i> them to the test set.'] },
+      { id: 5, title: 'Put the inputs on the same ruler (scaling)', sum: `x̃ = (x − ${n(P.mu[1])}) / ${n(P.sd[1])}.`,
+        why: 'Inputs come in different units, and the arithmetic of fitting (especially gradient descent) works best when every input is on a similar scale.',
+        what: 'Standardise each input: x̃ = (x − μ)/s, with μ and s from the training rows.',
+        fp: ul(['Subtracting μ moves the centre to 0; dividing by s makes the typical spread 1. Both only change the ruler, not the shape of the data.',
+          '<b>Predictions do not change.</b> Only the weights are expressed in different units ("per standard deviation"), and step 13 converts them back.',
+          'Why it helps: the loss surface becomes a round bowl instead of a long narrow valley, so one step size suits every direction (see step 9b).']),
+        work: [[5, 0, 'Training mean and standard deviation'], [5, 1, 'Standardising a row'], [5, 2, 'Categories']],
+        ip: ['Scaling does not matter for plain OLS predictions. It matters a lot for gradient descent and for ridge and lasso, whose penalties compare weight sizes.'] },
+      { id: 6, title: 'Build the design matrix', sum: `${P.nTr} × ${P.P}, rank ${f.rank}, κ = ${isFinite(f.kappa) ? n(f.kappa, 1) : '∞'}.`,
+        why: 'Writing all N equations at once as one matrix equation lets one formula solve them all.',
+        what: 'Stack the rows into X̃: a column of 1s first, then one column per input. Stack y into a column.',
+        fp: ul(['The column of 1s is how the intercept gets in: row i of X̃ times [w̃₀, w̃₁, …] = 1·w̃₀ + x̃ᵢ₁·w̃₁ + …, which is exactly the prediction.',
+          '<b>Rank.</b> If one column can be built from the others (x₂ = 2·x₁, or dummies adding up to the 1s), the data cannot tell their effects apart and there is no single best answer.',
+          '<b>Condition number κ.</b> Even without an exact copy, nearly dependent columns make some combination of weights barely pinned down. κ measures how uneven that is.']),
+        work: [[6, 1, 'Full column rank?'], [6, 2, 'Condition number']] },
+      { id: 7, title: 'Write the prediction rule', sum: 'ŷ = X̃w̃: start value + weight × each input.',
+        why: 'We need an exact rule for a prediction before we can say how wrong it is.',
+        fp: ul(['A prediction is a <b>weighted sum</b>: start at the intercept and add each input times its weight. For all rows at once this is a matrix times a vector.']),
+        work: [[7, 0, 'One prediction, worked']] },
+      { id: 8, title: 'Define "best": the loss', sum: `L = mean of e² = ${n(f.SSE / P.nTr, 4)} at the best line.`,
+        why: 'Infinitely many lines could be drawn. We need one number that scores how wrong a line is, so that "best" means "lowest score".',
+        what: 'Residual e = y − ŷ for each row, square it, average: the mean squared error. The sum of squares is called SSE.',
+        fp: ul(['Squaring makes positive and negative errors both count, and makes one big error count more than two small ones.',
+          'Why squares rather than absolute values: squares are smooth, so calculus finds the minimum exactly; the best constant guess under squares is the mean; and if the noise is bell-shaped, least squares is the statistically optimal (maximum-likelihood) choice.',
+          'With an intercept, the residuals of the best line always add up to 0.']),
+        work: [[8, 0, 'Residuals'], [8, 1, 'Mean squared error']] },
+      { id: '9a', title: 'Find the best weights by solving equations', sum: `slope ${n(P.wOrig[j], 3)} for ${nm}${f.full ? '' : ' (not unique)'}.`,
+        why: 'We want the weights that make L as small as possible.',
+        fp: ul(['At the bottom of a bowl the ground is flat: nudging any weight neither raises nor lowers L. So set the slope of L with respect to each weight to zero.',
+          '<b>For the intercept</b>: ∂L/∂b = −(2/N) Σ(yᵢ − b − w·xᵢ) = 0, so Σe = 0 and <b>b = ȳ − w·x̄</b>: the line passes through the point of averages.',
+          '<b>For the slope</b>: ∂L/∂w = −(2/N) Σ xᵢ(yᵢ − b − w·xᵢ) = 0. Substituting b gives <b>w = Σ(x − x̄)(y − ȳ) / Σ(x − x̄)²</b>: how much x and y move together, divided by how much x moves on its own.',
+          'For any number of inputs, all these equations together are <b>X̃ᵀX̃ w̃ = X̃ᵀy</b> (the normal equations), so w̃ = (X̃ᵀX̃)⁻¹X̃ᵀy.']),
+        work: [['9a', 0, 'X̃ᵀX̃ and its determinant'], ['9a', 1, 'Solving the normal equations'], ['9a', 2, 'Loss at the solution']],
+        ip: ['Exact, but (X̃ᵀX̃)⁻¹ costs about p³ and needs X̃ᵀX̃ to be invertible, which is why the rank check in step 6 matters.'] },
+      { id: '9b', title: 'Or walk downhill (gradient descent)', sum: `η = ${n(P.eta, 4)}, ${P.iters[P.iters.length - 1].t} steps, same answer.`,
+        why: 'With millions of rows or features, solving the equations directly is too expensive. Walking downhill works at any size, even on data that do not fit in memory.',
+        what: 'Start with all weights at 0. Repeat: predict → residuals → gradient → small step against the gradient.',
+        fp: ul([`<b>The landscape.</b> Every choice of weights has a loss, so the loss is a surface over the weights. For linear regression it is a bowl. At w̃ = 0 the loss is ${n(P.iters[0].L, 3)}: high up the bowl wall.`,
+          '<b>Which way is downhill.</b> One row\'s squared error is u² with u = y − b − w·x̃. By the chain rule its derivative is 2u × (derivative of u): u falls by 1 when b rises by 1, and by x̃ when w rises by 1. Averaging gives ∂L/∂b = −(2/N)Σe and ∂L/∂w = −(2/N)Σx̃·e. The gradient points uphill, so we step the other way.',
+          '<b>The update.</b> w̃ ← w̃ − η·∇L. η, the learning rate, is the step size.',
+          '<b>Why η matters.</b> Along each direction of the bowl with curvature λ, a step multiplies the remaining distance by (1 − η·λ). If that factor exceeds 1 in size, each overshoot is bigger than the last and the run blows up. Hence η < 2/λ_max.',
+          '<b>When to stop.</b> When the gradient is tiny, when the loss stops changing, or after a maximum number of steps.']),
+        work: [['9b', 0, 'Curvature and the largest safe step'], ['9b', 1, 'Step size used'], ['9b', 2, 'Iteration 1, row by row'], ['9b', 3, 'How fast it converges, and other step sizes']] },
+      { id: 10, title: 'Check the leftovers (diagnostics)', sum: `RESET p ${pv(dg.reset?.p)}, BP p ${pv(dg.bp?.p)}, DW ${n(dg.dw)}, JB p ${pv(dg.jb?.p)}, VIF ${isFinite(vifMax) ? n(vifMax, 1) : '∞'}, Cook ${f.cook ? n(Math.max(...f.cook), 2) : '—'}.`,
+        why: 'The weights are always "the best straight line". But the uncertainty numbers in step 11 are only right if the residuals behave like pure random noise. So we check every way they could fail to.',
+        what: 'Look at the residual pictures first, then run one test per assumption.',
+        fp: ul(['<b>The logic every test shares.</b> (1) Assume the boring explanation, H₀ ("nothing is wrong"). (2) Compute a number, the test statistic, that would be small if H₀ were true and large if not. (3) Work out how that number is distributed when H₀ is true (an F, χ² or t distribution). (4) The p-value is the probability of a value at least this extreme under H₀. (5) If p < 0.05, reject H₀.',
+          '<b>Two kinds of mistakes.</b> Type I: rejecting a true H₀ (a false alarm), which happens 5% of the time by design. Type II: missing a real problem. Power is the chance of catching a real problem; it grows with N, so small samples miss things and huge samples flag trivia.',
+          '<b>Pictures first.</b> Residuals vs fitted (a pattern means a wrong shape or uneven spread), residuals in order (streaks mean dependence), Q–Q plot (bends mean non-normal tails), leverage plot (lone far-out points).',
+          '<b>Which failures matter how.</b> A wrong shape or errors related to x <i>bias the coefficients</i>. Dependence, uneven spread and duplicates <i>only break the standard errors</i>. Non-normal errors matter least.']),
+        work: [[10, 0, 'Is a straight line the right shape? Ramsey RESET'], [10, 1, 'Is the spread even? Breusch–Pagan'], [10, 2, 'Are neighbouring errors unrelated? Durbin–Watson'], [10, 3, 'Are the errors bell-shaped? Jarque–Bera'], [10, 4, 'Do the inputs overlap? VIF'], [10, 5, "Does one row dominate? Cook's distance"]] },
+      { id: 11, title: 'Say how sure we are (inference)', sum: isFinite(P.seOrig[j]) ? `slope ${n(P.wOrig[j], 3)} ± ${n(P.seOrig[j], 3)}, p ${pv(f.pv[j])}.` : 'standard errors undefined.',
+        why: 'Another sample would give a slightly different slope. We need to know how much it would wobble, and whether it is really different from 0.',
+        fp: ul(['<b>The key fact.</b> The slope is a weighted sum of the y values, w = Σaᵢyᵢ, with weights aᵢ that depend only on x. So all its uncertainty comes from the noise in y, and two variance rules finish the job: Var(c·Y) = c²·Var(Y), and the variance of a sum of independent pieces is the sum of their variances.',
+          '<b>Estimate the noise.</b> s² = SSE/(N − p). Divide by N − p because the residuals are forced to satisfy p equations (Σe = 0, Σx̃·e = 0, …), so only N − p of them are free.',
+          '<b>Test and interval.</b> t = estimate/SE counts how many standard errors the estimate is from 0. The t distribution (not the normal curve) is used because s is itself estimated. The CI is estimate ± t_crit × SE.',
+          '<b>Robust versions.</b> Classical assumes equal, independent noise. HC1 lets each row have its own noise size, Newey–West also lets nearby rows be related, and clustered lets a group share shocks. Each changes only the assumption about the noise.',
+          `<b>Which one to trust here:</b> ${need ? `<b>${need}</b>, because of the selected variant.` : v.id === 'dupes' ? 'none of them fixes duplicated rows: remove the copies first.' : c.a.id === 'exogeneity' && !isBase ? 'none: the slope itself is biased.' : 'classical is fine when the step-10 checks pass.'}`]),
+        work: [[11, 0, 'The noise level s²'], [11, 1, 'Standard errors: classical, HC1, Newey–West, clustered'], [11, 2, 't-test and confidence interval for the slope'], [11, 3, 't-test for the intercept'], [11, 4, 'Overall F-test']],
+        ip: ['A p-value is not the probability that H₀ is true.', 'A 95% CI means 95% of intervals built this way contain the truth, and only if the step-10 checks passed.'] },
+      { id: 12, title: 'Take the final exam (test data)', sum: `test RMSE ${n(P.rmseTe)} vs train ${n(P.rmseTr)}, test R² ${n(P.r2Te, 3)}.`,
+        why: 'This is the honest score, on rows the model never saw.',
+        what: 'Scale the test rows with the training μ and s, predict with the trained weights, and summarise the errors.',
+        fp: ul(['<b>RMSE</b> = √(mean e²): a typical error, in the units of y.', '<b>R²</b> = 1 − SSE/SST: the share of variation explained, against the simplest rival (always guessing the mean).', 'Test error well above training error means the model learned noise (overfitting), or the split leaked.']),
+        work: [[12, 0, 'Test RMSE'], [12, 1, 'Test R²']],
+        ip: ['Test R² can be negative: the model is then worse than guessing the mean.'] },
+      { id: 13, title: 'Explain the result', sum: `one more unit of ${nm} → ${n(P.wOrig[j], 3)} more y.`,
+        why: 'Turn the numbers back into a statement about the world.',
+        fp: ul(['Undo the scaling: a weight per standard deviation divided by s is a weight per original unit; the intercept absorbs the shifts by μ.',
+          `Say it as: "each extra unit of ${nm} goes with ${n(P.wOrig[j], 3)} more y on average${isFinite(P.seOrig[j]) ? `, 95% interval ${n(P.wOrig[j] - f.tc * P.seOrig[j], 2)} to ${n(P.wOrig[j] + f.tc * P.seOrig[j], 2)}` : ''}, holding the other inputs fixed".`,
+          'That is an <b>association</b>. Calling it a cause needs exogeneity: nothing left out may move together with x.']),
+        work: [[13, 0, 'Back to the original units']] }
+    ];
+  }
+
+  const openSet = new Set(); let bound = false, lastCtx = null;
+  function body(c, st){
+    const call = c.inf[st.id] && c.inf[st.id][0] !== 'none' && !c.isBase ? `<p class="nt-call ${LEVELS[c.inf[st.id][0]].cls}"><b>${LEVELS[c.inf[st.id][0]].glyph} With ${esc(c.v.name)}:</b> ${esc(c.inf[st.id][1])}</p>` : '';
+    return call + sec('Why this step exists', `<p>${st.why}</p>`) + sec('What we do', st.what ? `<p>${st.what}</p>` : '') + sec('From first principles', st.fp) +
+      sec('Worked on this data', (st.work || []).map(([id, i, t]) => W(c, id, i, t)).join('')) + sec('Interview points', st.ip ? ul(st.ip) : '') +
+      (st.id !== '0' ? `<p class="nt-link"><a href="#step-${st.id}">See step ${st.id} in the process ↑</a></p>` : '');
+  }
+  function steps(c){
+    return stepDefs(c).map(st => { const hit = c.inf[st.id] && c.inf[st.id][0] !== 'none' && !c.isBase, L = hit ? LEVELS[c.inf[st.id][0]] : null, open = openSet.has(String(st.id));
+      return `<li class="${hit ? 'nt-hit' : ''}"><details class="nt-d" data-id="${st.id}"${open ? ' open' : ''}><summary><span class="nt-n">${st.id}</span><span class="nt-t">${st.title}</span>${hit ? `<span class="lv ${L.cls}"><b>${L.glyph}</b></span>` : ''}<span class="nt-s">${st.sum}</span></summary><div class="nt-body">${open ? body(c, st) : ''}</div></details></li>`; }).join('');
+  }
+
   function render(el, c){
-    el.innerHTML = `<div class="nt-head"><h2 id="notes-h">Interview notes</h2><button type="button" class="btn ghost" id="ntCopy">Copy notes</button></div>
-      <p class="hint-s">The whole process in plain words, rewritten for <b>${esc(c.a.name)} › ${esc(c.v.name)}</b>${c.isBase ? ' (baseline)' : ''} with the numbers from the current sample. Steps this variant affects are marked.</p>
+    c.ex = { P: c.P, d: c.d, S: c.S, attr: c.a, variant: c.v, isBase: c.isBase, focus: c.d.focus[0] }; lastCtx = c;
+    el.innerHTML = `<div class="nt-head"><h2 id="notes-h">Interview notes</h2><span><button type="button" class="btn ghost" id="ntAll">Open all steps</button> <button type="button" class="btn ghost" id="ntCopy">Copy notes</button></span></div>
+      <p class="hint-s">The whole process from first principles, rewritten for <b>${esc(c.a.name)} › ${esc(c.v.name)}</b>${c.isBase ? ' (baseline)' : ''} with the numbers from the current sample. Every step opens to: why it exists, what we do, the reasoning from scratch, the calculation on this data, and interview points. Steps this variant affects are marked.</p>
       <div class="nt-grid"><section class="nt-box"><h3>The 60-second answer</h3><p>${elevator(c)}</p></section>
       <section class="nt-box"><h3>${c.isBase ? 'The assumption behind this view' : 'This variant, in plain words'}</h3>${card(c)}</section></div>
       <h3 class="nt-h3">Walk through the process</h3><ol class="nt-steps">${steps(c)}</ol>
       <h3 class="nt-h3">Likely follow-up questions</h3><div class="qa">${FOLLOW.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>`;
-    el.querySelector('#ntCopy').onclick = e => { navigator.clipboard?.writeText(el.innerText.replace(/^Copy notes\n?/m, '')).then(() => { e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy notes', 1500); }).catch(() => {}); };
+    const defs = stepDefs(c);
+    if (!bound) { bound = true;
+      el.addEventListener('toggle', e => { const dd = e.target; if (!dd.matches || !dd.matches('details.nt-d')) return; const id = dd.dataset.id;
+        if (dd.open) { openSet.add(id); const b = dd.querySelector('.nt-body'); if (!b.innerHTML) { const st = stepDefs(lastCtx).find(s => String(s.id) === id); b.innerHTML = body(lastCtx, st); } } else openSet.delete(id); }, true); }
+    el.querySelector('#ntAll').onclick = () => { const all = [...el.querySelectorAll('details.nt-d')], openAll = all.some(dd => !dd.open); all.forEach(dd => { dd.open = openAll; }); };
+    el.querySelector('#ntCopy').onclick = e => { const tmp = document.createElement('div'); tmp.innerHTML = el.innerHTML; tmp.querySelectorAll('details.nt-d').forEach((dd, k) => { dd.open = true; dd.querySelector('.nt-body').innerHTML = body(c, defs[k]); });
+      tmp.style.cssText = 'position:fixed;left:-99999px;top:0;width:900px'; document.body.appendChild(tmp); const txt = tmp.innerText.replace(/Open all steps\s*Copy notes\s*/, ''); tmp.remove();
+      navigator.clipboard?.writeText(txt).then(() => { e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy notes', 1500); }).catch(() => {}); };
   }
   return { render };
 })();

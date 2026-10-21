@@ -232,6 +232,9 @@ const STEPS = [
         const lo = f.ci[j][0] / c.P.sd[j], hi = f.ci[j][1] / c.P.sd[j], tr = c.d.truth.coef[j];
         return `${sy('t')} = ${num(f.t[j], 2)}, ${sy('pv')} ${pEq(f.pv[j]).slice(2)}, ${sy('ci')} = [${num(lo, 3)}, ${num(hi, 3)}]` +
           (tr != null ? ` ${lo <= tr && tr <= hi ? mark(true) + ' covers' : mark(false) + ' misses'} the true ${tr}` : ''); }],
+      [sy('b'), 'Classical test of the intercept', c => { const P = c.P, f = P.f; if (!f.inv) return `${mark(false)} undefined: X̃ᵀX̃ has no inverse`;
+        const cv = P.mu.map((m, k) => k === 0 ? 1 : -m / P.sd[k]), q = cv.reduce((s2, ci, a) => s2 + ci * cv.reduce((s3, cj, b) => s3 + f.inv[a][b] * cj, 0), 0), se = Math.sqrt(f.s2 * q), b = P.wOrig[0], t = b / se;
+        return `${sy('b')} = ${num(b, 3)}, ${sy('se')} = ${num(se, 3)}, ${sy('t')} = ${num(t, 2)}, ${pEq(ST.tP2(t, f.df))}, ${sy('ci')} = [${num(b - f.tc * se, 3)}, ${num(b + f.tc * se, 3)}]`; }],
       [sy('F'), 'Overall F-test: do the features explain anything?', c => { const f = c.P.f, q = f.rank - 1, d2 = c.P.nTr - f.rank; if (q < 1 || !(d2 > 0)) return '—';
         const F = ((f.SST - f.SSE) / q) / (f.SSE / d2), p = ST.fSF(F, q, d2); return `${p < 0.05 ? mark(true) : mark(false, true)} ${sy('F')} = ${num(F, 2)} on (${q}, ${d2}) df, ${pEq(p)}; training ${sy('r2')} = ${num(1 - f.SSE / f.SST, 3)}`; }],
       ['', 'Which standard error fixes it?', c => c.isBase ? 'classical SEs are valid for the baseline' :
