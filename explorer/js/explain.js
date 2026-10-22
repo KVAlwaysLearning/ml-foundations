@@ -66,6 +66,7 @@ const EXPLAIN = (() => {
   const ex = (plain, formula, calc, read, more = {}) => ({ plain, formula, calc, read, ...more });
   const lgam = x => { const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7]; x -= 1; let a = c[0]; const t = x + 7.5; for (let i = 1; i < 9; i++) a += c[i] / (x + i); return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a); };
   const tDens = (t, v) => Math.exp(lgam((v + 1) / 2) - lgam(v / 2) - 0.5 * Math.log(v * Math.PI) - (v + 1) / 2 * Math.log(1 + t * t / v));
+  const labX = (P, nm) => nm === '1' ? '1' : P.P === 2 ? 'x̃' : `x̃(${nm})`;
   const ol = items => `<ol class="wsteps">${items.filter(Boolean).map(s => `<li>${s}</li>`).join('')}</ol>`;
   const bis = (sf, a) => { let lo = 0, hi = 1e4; for (let i = 0; i < 90; i++) { const m = (lo + hi) / 2; if (sf(m) > a) lo = m; else hi = m; } return (lo + hi) / 2; };
   const fCrit = (d1, d2, a = 0.05) => bis(F => ST.fSF(F, d1, d2), a), chiCrit = (k, a = 0.05) => bis(x => ST.chi2SF(x, k), a);
@@ -78,7 +79,7 @@ const EXPLAIN = (() => {
   const E = {};
   E[1] = [
     c => ex(`${g('matrix', 'A dataset')} is a table: each row is one observation (one student, one house…) and each column one measured quantity. N counts the rows. The design matrix will get one column per feature plus a column of 1s for the intercept, so p = features + 1.`,
-      'N = number of rows,  p = number of features + 1',
+      TX(String.raw`N = \text{number of rows},\qquad p = \text{number of features} + 1`),
       `This dataset has ${c.P.N} rows and the feature${c.P.P > 2 ? 's' : ''} ${c.P.names.slice(1).join(', ')}, so p = ${c.P.P - 1} + 1 = ${c.P.P}.`,
       'More rows than columns is required to estimate anything; many more rows means more precise estimates.'),
     c => ex('In a simulation we choose the true rule that generates y, so we can later check whether the method recovers it. In real data these numbers are unknown: estimating them is the whole point.',
@@ -87,13 +88,13 @@ const EXPLAIN = (() => {
         return `Row 1: x = ${n(x)}, so the true mean is ${c.d.truth.coef[0]} + ${c.d.truth.coef[1]} × ${n(x)} = ${n(m)}. The recorded y is ${n(y)}, so its error is ε₁ = ${n(y)} − ${n(m)} = ${n(y - m)}.`; })() : 'See the dashed "true mean" line in the step-1 chart.',
       'Every later estimate can be compared against these true values: that is how this explorer shows bias.'),
     c => ex(`ε (epsilon) is the part of y the features cannot explain: noise, measurement error, everything not recorded. σ_ε is its ${g('sd')}: the typical size of that noise.`,
-      'ε ~ the chosen error process, with standard deviation σ_ε',
+      TX(String.raw`\varepsilon \sim \text{the chosen error process, with standard deviation } \sigma_\varepsilon`),
       `Selected: ${esc(c.variant.name)}. ${esc(c.variant.desc || '')} The slider sets σ_ε = ${n(c.S.sigma, 2)}.`,
       'Linear regression assumes ε averages to zero, is unrelated to x, has constant spread, is independent across rows and (for exact small-sample tests) is normal. Each Assumptions variant breaks exactly one of these.')
   ];
   E[2] = [
     c => ex('Two rows are duplicates when every value in them is identical. Each row is turned into a text key (all its numbers joined), and a row whose key has already been seen is counted.',
-      'duplicate if (x₁, …, y) of row i = (x₁, …, y) of an earlier row',
+      TX(String.raw`\text{row } i \text{ is a duplicate if } (x_1,\dots,y)_i = (x_1,\dots,y)_k \text{ for an earlier row } k`),
       (() => { const first = new Map(), pairs = []; c.d.X.forEach((r, i) => { const k = [...r.slice(1), c.d.y[i]].map(v => v.toFixed(9)).join('|'); if (first.has(k)) pairs.push([i, first.get(k)]); else first.set(k, i); });
         return `Each row becomes a key such as "${[...c.d.X[0].slice(1), c.d.y[0]].map(v => n(v, 3)).join(' | ')}" (row 1). Keys are compared row by row against all earlier keys. Found ${c.P.dupes} duplicate row(s) among ${c.P.N}.` +
           (pairs.length ? T(['repeats row', ...c.P.names.slice(1), 'y'], pairs.map(([i, j]) => { const r = [j + 1, ...c.d.X[i].slice(1), c.d.y[i]]; return r; }), { k: 6, label: 'row' }).replace(/<tr><td>(\d+)<\/td>/g, (m0, k) => `<tr><td>${pairs[+k - 1] ? pairs[+k - 1][0] + 1 : k}</td>`) + `Keeping the first copy of each leaves ${c.P.N - c.P.dupes} distinct rows: the effective sample size is ${c.P.N - c.P.dupes}, not ${c.P.N}.` : ''); })(),
@@ -101,7 +102,7 @@ const EXPLAIN = (() => {
     () => ex('A missing value is an empty cell. Rows with gaps either get dropped or have the gap filled (imputed), for example with the column mean.', 'count of empty cells per column', 'This generator never leaves cells empty, so there is nothing to handle: 0 missing.', 'Whether dropping is safe depends on why values are missing; that is covered in the Data properties branch.'),
     c => { const y = c.d.y, m = mean(y), s = Math.sqrt(sum(y.map(v => (v - m) ** 2)) / (y.length - 1)), zs = y.map(v => (v - m) / s), k = zs.reduce((b, v, i) => Math.abs(v) > Math.abs(zs[b]) ? i : b, 0);
       return ex(`Each value gets a ${g('zscore')}. Values more than 3 standard deviations from the mean are flagged as possible ${g('outlier', 'outliers')}. The same check is run on y and on every feature.`,
-        'z = (value − mean) / sd;  flag if |z| > 3',
+        TX(String.raw`z = \dfrac{\text{value} - \text{mean}}{\text{sd}},\qquad \text{flag if } |z| > 3`),
         `For y: mean = ${n(m)}, sd = ${n(s)}. The most extreme value is row ${k + 1}, y = ${n(y[k])}: z = (${n(y[k])} − ${n(m)}) / ${n(s)} = <b>${n(zs[k], 2)}</b>${Math.abs(zs[k]) > 3 ? ' → flagged' : ' → not flagged'}. Total flagged: ${c.P.outY} in y, ${c.P.outX} in the features.`,
         'A flag means "look at this row", not "delete it": an outlier can be a typo, or the most informative point you have.'); },
     () => ex(`${g('leakage', 'Leakage')} means a feature secretly contains the answer, e.g. a column computed from y, or a date that reveals the outcome.`, '—', 'Every feature here is generated independently of y\'s noise, so there is no leakage.', 'Leaked features give models that look excellent in testing and fail in use.')
@@ -109,7 +110,7 @@ const EXPLAIN = (() => {
   E[3] = [
     c => { const y = c.d.y, m = mean(y), dd = y.map(v => v - m), m2 = mean(dd.map(v => v * v)), m3 = mean(dd.map(v => v ** 3));
       return ex(`${g('skew', 'Skewness')} measures how lopsided a ${g('distribution')} is. Take each value's ${g('deviation')} from the ${g('mean')}. Cubing keeps the sign, so big deviations to the right push the sum up and big ones to the left push it down. Divide by the spread cubed so the answer has no units.`,
-        'γ₁ = m₃ / m₂<sup>1.5</sup>,  where m₂ = mean of d², m₃ = mean of d³, d = value − mean',
+        TX(String.raw`\gamma_1 = \dfrac{m_3}{m_2^{1.5}},\qquad m_2 = \dfrac1N\sum_i d_i^2,\quad m_3 = \dfrac1N\sum_i d_i^3,\quad d_i = y_i - \bar y`),
         `For y (all ${y.length} rows), mean = ${n(m)}:` + T(['y', 'd = y − mean', 'd²', 'd³'], y.map((v, i) => [v, dd[i], dd[i] ** 2, dd[i] ** 3]), { total: ['mean', n(m), '0', m2, m3] }) +
         `m₂<sup>1.5</sup> = m₂ × √m₂ = ${n(m2, 4)} × ${n(Math.sqrt(m2), 4)} = ${n(m2 ** 1.5, 4)} (the standard deviation cubed, so the units cancel). γ₁ = ${n(m3, 4)} / ${n(m2 ** 1.5, 4)} = <b>${n(m3 / m2 ** 1.5, 2)}</b>.` +
         (y.length > 2 ? `<p>Some software prints the sample-adjusted version, which corrects small samples for understating skewness: G₁ = γ₁ × √(N(N − 1)) / (N − 2) = ${n(m3 / m2 ** 1.5, 4)} × √(${y.length} × ${y.length - 1}) / ${y.length - 2} = <b>${n(m3 / m2 ** 1.5 * Math.sqrt(y.length * (y.length - 1)) / (y.length - 2), 3)}</b>.</p>` : '') +
@@ -118,19 +119,19 @@ const EXPLAIN = (() => {
         'Roughly: |γ₁| < 0.5 fairly symmetric, 0.5–1 moderately skewed, > 1 strongly skewed. Skewed y can hint at skewed errors or a needed log transform.'); },
     c => { const cc = corrCalc(c.d.X.map(r => r[1]), c.d.y, c.P.names[1], 'y');
       return ex(`The ${g('corr', 'correlation')} r asks: when x is above its average, is y usually above its average too? Multiply the two ${g('deviation', 'deviations')} for each row: positive when they agree, negative when they disagree. Add them up, then divide by the two spreads so r lands between −1 and 1.`,
-        'r = Σ (x − x̄)(y − ȳ) / √( Σ (x − x̄)² · Σ (y − ȳ)² )',
+        TX(String.raw`r = \dfrac{\sum_i (x_i-\bar x)(y_i-\bar y)}{\sqrt{\sum_i (x_i-\bar x)^2\;\sum_i (y_i-\bar y)^2}}`),
         cc.html + (c.P.P > 2 ? `<p>The other features: ${c.P.names.slice(2).map((nm, k) => `r(${nm}, y) = ${n(c.P.eda.corrXY[k + 1], 3)}`).join(', ')}, with the same table.</p>` : ''),
         'r measures only straight-line association: a perfect curve can have r near 0. That is why the scatter plot matters as much as the number. r² is the R² of a regression on that one feature.'); },
-    c => { if (c.P.P <= 2) return ex('The same correlation formula, applied to each pair of features instead of a feature and y.', 'r(xⱼ, xₖ) for every pair of features', 'With only one feature there is no pair to compare.', 'Above about 0.7 the features share a lot of information; above 0.9 the separate coefficients become unstable (multicollinearity).');
+    c => { if (c.P.P <= 2) return ex('The same correlation formula, applied to each pair of features instead of a feature and y.', TX(String.raw`r(x_j, x_k)\ \text{for every pair of features}`), 'With only one feature there is no pair to compare.', 'Above about 0.7 the features share a lot of information; above 0.9 the separate coefficients become unstable (multicollinearity).');
       let best = null; for (let a = 1; a < c.P.P; a++) for (let b = a + 1; b < c.P.P; b++) { const cc = corrCalc(c.d.X.map(r => r[a]), c.d.X.map(r => r[b]), c.P.names[a], c.P.names[b]); if (isFinite(cc.r) && (!best || Math.abs(cc.r) > Math.abs(best.cc.r))) best = { a, b, cc }; }
-      return ex('The same correlation formula, applied to each pair of features instead of a feature and y. Every pair is computed and the largest |r| is reported.', 'r(xⱼ, xₖ) = Σ (xⱼ − x̄ⱼ)(xₖ − x̄ₖ) / √( Σ (xⱼ − x̄ⱼ)² · Σ (xₖ − x̄ₖ)² )',
+      return ex('The same correlation formula, applied to each pair of features instead of a feature and y. Every pair is computed and the largest |r| is reported.', TX(String.raw`r(x_j,x_k) = \dfrac{\sum_i (x_{ij}-\bar x_j)(x_{ik}-\bar x_k)}{\sqrt{\sum_i (x_{ij}-\bar x_j)^2\;\sum_i (x_{ik}-\bar x_k)^2}}`),
         best ? `Strongest pair: ${c.P.names[best.a]} and ${c.P.names[best.b]}. ` + best.cc.html : 'The pairs could not be computed (a constant column).',
         'Above about 0.7 the features share a lot of information; above 0.9 the separate coefficients become unstable (multicollinearity). Pairs can miss a feature that is a combination of several others; the VIF in step 10 catches that.'); },
     null
   ];
   E[4] = [
     c => ex('Before learning anything, part of the data is locked away to act as "new" data later. The rows are shuffled in a random order (fixed by the sample number, so it is repeatable) and the first 80% become the training set.',
-      'N_train = round(0.8 × N),  N_test = N − N_train',
+      TX(String.raw`N_{\text{train}} = \operatorname{round}(0.8\,N),\qquad N_{\text{test}} = N - N_{\text{train}}`),
       `round(0.8 × ${c.P.N}) = round(${n(0.8 * c.P.N, 1)}) = ${c.P.nTr} training rows; ${c.P.N} − ${c.P.nTr} = ${c.P.nTe} test rows. Test rows: ${c.P.te.map(i => i + 1).join(', ')}.`,
       'Every step that learns numbers from data (scaling, fitting) must use only the training rows; otherwise the test score is contaminated.'),
     c => ex('A random shuffle assumes rows are independent. If neighbouring rows are related (time series, groups, duplicates), a test row is "almost seen" through its neighbours in training.', '—',
@@ -141,53 +142,53 @@ const EXPLAIN = (() => {
   E[5] = [
     c => { const j = 1, x = c.P.tr.map(i => c.d.X[i][j]), m = mean(x), d2 = x.map(v => (v - m) ** 2), s = Math.sqrt(mean(d2));
       return ex(`To ${g('standardise')} a feature we need its ${g('mean')} μ and ${g('sd', 'standard deviation')} s, computed on the training rows only.`,
-        'μ = (1/N_train) Σ xᵢ,   s = √( (1/N_train) Σ (xᵢ − μ)² )',
+        TX(String.raw`\mu = \dfrac{1}{N_{\text{train}}}\sum_i x_i,\qquad s = \sqrt{\dfrac{1}{N_{\text{train}}}\sum_i (x_i-\mu)^2}`),
         `For ${c.P.names[j]} on the ${x.length} training rows:` + T([c.P.names[j], 'x − μ', '(x − μ)²'], x.map((v, i) => [v, v - m, d2[i]]), { total: ['Σ / mean', `Σ = ${n(sum(x), 3)}`, '0', `mean = ${n(mean(d2), 4)}`] }) +
         `μ = ${n(sum(x), 3)} / ${x.length} = <b>${n(m)}</b>;  s = √${n(mean(d2), 4)} = <b>${n(s)}</b>`,
         'This uses the population formula (divide by N). Some libraries divide by N − 1; with many rows the difference is tiny.'); },
     c => { const i = c.P.tr[0], r = c.d.X[i];
       return ex('Each feature value is replaced by "how many standard deviations above or below the training mean". The intercept column stays 1.',
-        'x̃ = (x − μ) / s',
+        TX(String.raw`\tilde x = \dfrac{x-\mu}{s}`),
         `First training row (row ${i + 1}): ` + c.P.names.slice(1).map((nm, k) => `${nm}: (${n(r[k + 1])} − ${n(c.P.mu[k + 1])}) / ${n(c.P.sd[k + 1])} = <b>${n((r[k + 1] - c.P.mu[k + 1]) / c.P.sd[k + 1])}</b>`).join('; ') + `. So the row becomes ${vec(c.P.Xtr[0], 3)}.`,
         'After this, every feature has mean 0 and sd 1 on the training rows. Predictions do not change, but the numbers in the algebra become well balanced and gradient descent becomes fast.'); },
-    c => ex('Categories (A, B, C) are turned into 0/1 columns, one per level. With an intercept column you must drop one level, otherwise the dummy columns add up to the intercept column exactly.', 'dummy_A + dummy_B + dummy_C = 1 for every row',
+    c => ex('Categories (A, B, C) are turned into 0/1 columns, one per level. With an intercept column you must drop one level, otherwise the dummy columns add up to the intercept column exactly.', TX(String.raw`A + B + C = 1 \ \text{ on every row}`),
       c.P.names.includes('A') ? 'All three dummies are kept here, so they add up to the column of 1s: that is the dummy-variable trap.' : 'There are no categorical features in this variant.', 'Keep k − 1 dummies for a k-level category.'),
     null
   ];
   E[6] = [
-    c => ex(`The training rows are stacked into a ${g('matrix')} X̃ (one row per observation, one column per coefficient) and the targets into a ${g('vector')} y.`, 'X̃ is N_train × p,  y is N_train × 1', `X̃ is ${c.P.nTr} × ${c.P.P} with columns [${c.P.names.join(', ')}]; y has ${c.P.nTr} entries.`, 'The first column is all 1s so the model can have an intercept.'),
+    c => ex(`The training rows are stacked into a ${g('matrix')} X̃ (one row per observation, one column per coefficient) and the targets into a ${g('vector')} y.`, TX(String.raw`\tilde X:\ N_{\text{train}}\times p,\qquad y:\ N_{\text{train}}\times 1`), `X̃ is ${c.P.nTr} × ${c.P.P} with columns [${c.P.names.join(', ')}]; y has ${c.P.nTr} entries.`, 'The first column is all 1s so the model can have an intercept.'),
     c => { const e = LA.eigSym(c.P.f.XtX), lo = e.values[e.values.length - 1], v = e.vectors[e.vectors.length - 1];
       return ex(`The ${g('rank')} counts columns that carry new information. If some combination of columns is zero on every row, one column is redundant and the rank drops below p. Such a combination is found from the smallest ${g('eigen', 'eigenvalue')} of X̃ᵀX̃: if that eigenvalue is 0, its direction gives the redundant combination.`,
-        'rank(X̃) = p  ⇔  no non-zero c with X̃c = 0  ⇔  smallest eigenvalue of X̃ᵀX̃ > 0',
+        TX(String.raw`\operatorname{rank}(\tilde X) = p \iff \text{no } c \ne 0 \text{ with } \tilde X c = 0 \iff \lambda_{\min}(\tilde X^\top \tilde X) > 0`),
         `Smallest eigenvalue of X̃ᵀX̃ = ${n(lo, 6)}. ` + (c.P.f.rank < c.P.P ? `It is 0, so the columns are dependent: ${v.map((x, k) => `${n(x, 3)}·${c.P.names[k]}`).join(' + ')} = 0 on every row. Rank = <b>${c.P.f.rank}</b> of ${c.P.P}.` : `It is above 0, so rank = <b>${c.P.P}</b> (full).`),
         'Full rank means a single best set of weights exists. Below full rank, infinitely many weight vectors give identical predictions.'); },
     c => { const e = c.P.f.eig;
       return ex(`The condition number κ compares the largest and smallest ${g('eigen', 'eigenvalues')} of X̃ᵀX̃. It says how unevenly the data constrains different directions of the weights: a huge κ means some combination of weights is barely pinned down.`,
-        'κ = λ_max / λ_min of X̃ᵀX̃',
+        TX(String.raw`\kappa = \dfrac{\lambda_{\max}}{\lambda_{\min}}\ \text{ of } \tilde X^\top\tilde X`),
         `Eigenvalues of X̃ᵀX̃: ${e.map(v => n(v, 3)).join(', ')}. κ = ${n(e[0], 3)} / ${n(e[e.length - 1], 6)} = <b>${isFinite(c.P.f.kappa) ? n(c.P.f.kappa, 1) : '∞'}</b>`,
         'κ near 1 is ideal (standardised, uncorrelated features give exactly 1). Above about 30 is a warning, above 1000 serious.'); }
   ];
   E[7] = [
     c => { const x = c.P.Xtr[0], w = c.P.f.w;
       return ex(`A prediction is a ${g('dot', 'weighted sum')}: start from the intercept and add each feature times its weight. Doing this for every row at once is a matrix times a vector.`,
-        'ŷᵢ = w̃₀·1 + w̃₁·x̃ᵢ₁ + … ,  all rows: ŷ = X̃w̃',
-        `With the fitted weights w̃ = ${vec(w)}, first training row ${vec(x)}: ŷ₁ = ${x.map((v, k) => `${n(w[k])} × ${n(v)}`).join(' + ')} = <b>${n(LA.dot(x, w))}</b>`,
+        TX(String.raw`\hat y_i = \tilde w_0\cdot 1 + \tilde w_1\,\tilde x_{i1} + \dots,\qquad \text{all rows: } \hat y = \tilde X\tilde w`),
+        `The weights w̃ = ${vec(w)} are the ones <a href="#step-9a" data-goto="step-9a">step 9a</a> finds by solving the normal equations (step 7 only writes the rule; the numbers are plugged in once they are known). First training row ${vec(x)}: ŷ₁ = ${x.map((v, k) => `${n(w[k])} × ${n(v)}`).join(' + ')} = <b>${n(LA.dot(x, w))}</b>`,
         '"Linear" means linear in the weights: each weight multiplies something and the results are added.'); },
     null
   ];
   E[8] = [
-    c => ex(`The ${g('residual')} is how far off each prediction is.`, 'eᵢ = yᵢ − ŷᵢ', T(['y (true)', 'ŷ', 'e = y − ŷ'], c.P.ytr.map((v, i) => [v, c.P.f.yhat[i], c.P.f.e[i]]), { total: ['Σ', n(sum(c.P.ytr)), n(sum(c.P.f.yhat)), n(sum(c.P.f.e), 6)] }) + 'With an intercept the residuals of the best fit always add up to 0 (bottom row).', 'Residuals are the raw material for the loss, the diagnostics and the standard errors.'),
+    c => ex(`The ${g('residual')} is how far off each prediction is.`, TX(String.raw`e_i = y_i - \hat y_i`), T(['y (true)', 'ŷ', 'e = y − ŷ'], c.P.ytr.map((v, i) => [v, c.P.f.yhat[i], c.P.f.e[i]]), { total: ['Σ', n(sum(c.P.ytr)), n(sum(c.P.f.yhat)), n(sum(c.P.f.e), 6)] }) + 'With an intercept the residuals of the best fit always add up to 0 (bottom row).', 'Residuals are the raw material for the loss, the diagnostics and the standard errors.'),
     c => { const e = c.P.f.e, e2 = e.map(v => v * v);
       return ex(`The ${g('loss')} turns all the residuals into one number: square each (so positive and negative errors both count, and big ones count more), then average.`,
-        'L(w̃) = (1/N) Σ eᵢ²  =  (1/N) eᵀe',
+        TX(String.raw`L(\tilde w) = \dfrac1N\sum_i e_i^2 = \dfrac1N\,e^\top e`),
         T(['y (true)', 'ŷ', 'e = y − ŷ', 'e²'], e.map((v, i) => [c.P.ytr[i], c.P.f.yhat[i], v, e2[i]]), { total: ['Σ', '', '', n(sum(e), 4), sum(e2)] }) + `L = ${n(sum(e2), 4)} / ${e.length} = <b>${n(sum(e2) / e.length, 4)}</b>. With all weights 0 every prediction is 0, every residual equals y, and L = mean of y² = ${n(c.P.iters[0].L, 3)}.`,
         'Training means choosing w̃ to make L as small as possible.'); },
-    () => ex('A penalty adds λ × (size of the weights) to the loss to keep weights small. With λ = 0 there is no penalty: plain least squares.', 'L_penalised = L + λ Σ wⱼ²  (ridge)', 'λ = 0 here.', 'Penalties are explored in the Model formulation branch.')
+    () => ex('A penalty adds λ × (size of the weights) to the loss to keep weights small. With λ = 0 there is no penalty: plain least squares.', TX(String.raw`L_{\text{penalised}} = L + \lambda\sum_j w_j^2 \quad(\text{ridge})`), 'λ = 0 here.', 'Penalties are explored in the Model formulation branch.')
   ];
   E['9a'] = [
     c => { const X = c.P.Xtr, j = Math.min(1, c.P.P - 1), col0 = X.map(r => r[0]), colj = X.map(r => r[j]);
       return ex(`X̃ᵀX̃ is a small square ${g('matrix')}: entry (j, k) is the ${g('dot', 'dot product')} of column j with column k of X̃. It summarises everything about the inputs that the solution needs.`,
-        '(X̃ᵀX̃)ⱼₖ = Σᵢ x̃ᵢⱼ · x̃ᵢₖ',
+        TX(String.raw`(\tilde X^\top\tilde X)_{jk} = \sum_i \tilde x_{ij}\,\tilde x_{ik},\qquad (\tilde X^\top y)_j = \sum_i \tilde x_{ij}\,y_i`),
         T([`x̃ (${c.P.names[0]})`, `x̃ (${c.P.names[j]})`, `1 · x̃`, 'x̃ · x̃'], X.map((r, i) => [col0[i], colj[i], col0[i] * colj[i], colj[i] ** 2]), { total: ['Σ', n(sum(col0), 2), '', sum(col0.map((v, i) => v * colj[i])), sum(colj.map(v => v * v))] }) +
         `So entry (1, ${c.P.names[j]}) = ${n(sum(col0.map((v, i) => v * colj[i])), 4)} and entry (${c.P.names[j]}, ${c.P.names[j]}) = ${n(sum(colj.map(v => v * v)), 4)}. Standardising makes Σ x̃ = 0 and Σ x̃² = N_train = ${c.P.nTr}. Its ${g('det', 'determinant')} is <b>${n(c.P.f.det, 4)}</b>.`,
         'det = 0 means no inverse, so no unique solution.'); },
@@ -195,20 +196,20 @@ const EXPLAIN = (() => {
       const general = f.full ? `(X̃ᵀX̃)⁻¹ = ${'[' + f.inv.map(r => vec(r, 5)).join(', ') + ']'}. Each weight is a row of the inverse dotted with X̃ᵀy: ` + f.w.map((wj, j) => `w̃${j} = ${f.inv[j].map((v, k) => `${n(v, 5)} × ${n(f.Xty[k], 3)}`).join(' + ')} = <b>${n(wj)}</b>`).join('; ') + '.' : '';
       const special = P.P === 2 && f.full ? `Because X̃ᵀX̃ = [[${n(f.XtX[0][0], 2)}, ${n(f.XtX[0][1], 2)}], [${n(f.XtX[1][0], 2)}, ${n(f.XtX[1][1], 2)}]] is diagonal here, each equation has one unknown: w̃₀ = ${n(f.Xty[0], 3)} / ${n(f.XtX[0][0], 2)} = <b>${n(f.w[0])}</b> and w̃₁ = ${n(f.Xty[1], 3)} / ${n(f.XtX[1][1], 2)} = <b>${n(f.w[1])}</b>.` : f.full ? general : 'X̃ᵀX̃ has no inverse, so infinitely many w̃ solve the equations; the one with the smallest length is reported.';
       return ex(`At the lowest point of the loss the ${g('derivative', 'gradient')} is zero. Writing that down gives one equation per weight, the "normal equations". Solving them gives the best weights directly, with no iterations.`,
-        'X̃ᵀX̃ w̃ = X̃ᵀy   ⇒   w̃ = (X̃ᵀX̃)⁻¹ X̃ᵀy',
-        `X̃ᵀy has one entry per column: Σ x̃ᵢⱼ yᵢ = ${vec(f.Xty, 3)}. ${special}`,
+        TX(String.raw`\tilde X^\top\tilde X\,\tilde w = \tilde X^\top y \;\Rightarrow\; \tilde w = (\tilde X^\top\tilde X)^{-1}\tilde X^\top y`),
+        `X̃ᵀy has one entry per column: Σ x̃ᵢⱼ yᵢ = ${vec(f.Xty, 3)}. ${special}` + REG.block(P.Xtr, P.ytr, { cols: P.names.map(nm => labX(P, nm)), target: 'y', from: 'the training targets (step 4)', colsFrom: 'the design matrix X̃ from step 6', title: 'Every number of this solve, step by step' }),
         'The closed form is exact. Its cost grows with p³, so for very many features iterative methods are used instead.'); },
-    c => ex('Plug the solution back in and compute the loss.', 'L(w̃*) = SSE / N_train', `SSE = ${n(c.P.f.SSE, 4)}, so L = ${n(c.P.f.SSE, 4)} / ${c.P.nTr} = <b>${n(c.P.f.SSE / c.P.nTr, 4)}</b>.`, 'This is the smallest loss any straight-line model can reach on these training rows. It is above 0 unless the data lie exactly on a plane.')
+    c => ex('Plug the solution back in and compute the loss.', TX(String.raw`L(\tilde w^*) = \dfrac{\text{SSE}}{N_{\text{train}}}`), `SSE = ${n(c.P.f.SSE, 4)}, so L = ${n(c.P.f.SSE, 4)} / ${c.P.nTr} = <b>${n(c.P.f.SSE / c.P.nTr, 4)}</b>.`, 'This is the smallest loss any straight-line model can reach on these training rows. It is above 0 unless the data lie exactly on a plane.')
   ];
   E['9b'] = [
     c => ex(`The loss is a bowl over the weights. Its curvature matrix H = (2/N)X̃ᵀX̃ says how steep the walls are. The steepest direction has curvature λ_max (the largest ${g('eigen', 'eigenvalue')} of H). A step bigger than 2/λ_max overshoots that wall by more than it corrects, so the iterations blow up.`,
-      'H = (2/N) X̃ᵀX̃,   stable if η < 2 / λ_max(H)',
+      TX(String.raw`H = \dfrac2N\,\tilde X^\top\tilde X,\qquad \text{stable if } \eta < \dfrac{2}{\lambda_{\max}(H)}`),
       `Eigenvalues of H: ${c.P.eigH.map(v => n(v, 4)).join(', ')}. λ_max = ${n(c.P.eigH[0], 4)}, so 2/λ_max = <b>${n(c.P.lim, 4)}</b>.`,
       'Standardised, uncorrelated features give equal eigenvalues, so one step size suits every direction.'),
-    c => ex(`The ${g('lr', 'learning rate')} η is chosen as a safe fraction of the limit.`, 'η = 0.2 × 2 / λ_max', `η = 0.2 × ${n(c.P.lim, 4)} = <b>${n(c.P.eta, 4)}</b>`, 'Bigger η: fewer steps but risk of divergence. The Optimisation branch will let you vary it.'),
+    c => ex(`The ${g('lr', 'learning rate')} η is chosen as a safe fraction of the limit.`, TX(String.raw`\eta = f \times \dfrac{2}{\lambda_{\max}}`), `The Step-size slider in the control box sets the fraction f = ${n(c.P.frac, 2)}. So η = ${n(c.P.frac, 2)} × ${n(c.P.lim, 4)} = <b>${n(c.P.eta, 4)}</b>.${c.P.diverged ? ' This is above the limit, so the run diverges: watch the loss curve shoot up.' : ''}`, 'Bigger η: fewer steps but risk of divergence. The Optimisation branch will let you vary it.'),
     c => { const X = c.P.Xtr, y = c.P.ytr, N = X.length, it = c.P.iters[0], g0 = it.g;
       return ex(`Each iteration repeats four moves: predict with the current weights, measure the residuals, compute the ${g('derivative', 'gradient')} (which way the loss goes up), and step the other way. Here is iteration 1 in full, starting from all weights 0.`,
-        '∇L = −(2/N) X̃ᵀe,   w̃ ← w̃ − η ∇L',
+        TX(String.raw`\nabla L = -\dfrac2N\,\tilde X^\top e,\qquad \tilde w \leftarrow \tilde w - \eta\,\nabla L`),
         `With w̃ = 0, every ŷᵢ = 0, so eᵢ = yᵢ − 0 = yᵢ.` + T(['e = y (true) − 0', ...c.P.names.slice(1).map(nm => `x̃ (${nm}) · e`)], X.map((r, i) => [y[i], ...r.slice(1).map(v => v * y[i])]), { total: ['Σ', sum(y), ...c.P.names.slice(1).map((_, k) => sum(X.map((r, i) => r[k + 1] * y[i])))] }) +
         `∇L = −(2/${N}) × ${vec([sum(y), ...c.P.names.slice(1).map((_, k) => sum(X.map((r, i) => r[k + 1] * y[i])))], 3)} = ${vec(g0, 4)}<br>w̃₁ = 0 − ${n(c.P.eta, 4)} × ${vec(g0, 4)} = <b>${vec(it.next, 4)}</b> (row t = 1 of the table)`,
         'The loss falls fastest early, then the steps shrink because the gradient shrinks near the bottom.'); },
@@ -217,7 +218,7 @@ const EXPLAIN = (() => {
       const alt = [0.05, 0.2, 0.5, 0.9, 1.05].map(fr => { const e2 = fr * P.lim, fsg = lam.map(l => 1 - e2 * l).reduce((m, v) => Math.abs(v) > Math.abs(m) ? v : m, 0), fs = Math.abs(fsg);
         return [`${fr} × limit = ${n(e2, 4)}`, n(fsg, 3), fs >= 1 ? 'diverges: each overshoot is bigger than the last' : fsg < -0.05 ? 'overshoots and flips side every step, but still shrinks' : fs < 0.05 ? 'lands almost at once' : fs > 0.85 ? 'safe but slow' : 'fast and smooth']; });
       return ex(`Why does the distance to the answer shrink steadily, and why does η decide everything? Along each special direction of the bowl (an ${g('eigen', 'eigenvector')} of H with curvature λ), one step multiplies the remaining distance by exactly (1 − η·λ). The slowest direction sets the pace, and if any |1 − η·λ| ≥ 1 the steps overshoot by more than they correct, so the iterations blow up. That is the 2/λ_max rule.`,
-        'distance after a step = (1 − η·λₖ) × distance before, for each direction k.   Stable iff |1 − η·λₖ| < 1 for every k  ⇔  η < 2/λ_max',
+        TX(String.raw`\begin{gathered}\text{distance}_{t+1} = (1-\eta\lambda_k)\cdot\text{distance}_t \ \text{ along each direction } k\\ \text{stable} \iff |1-\eta\lambda_k| < 1 \text{ for every } k \iff \eta < \dfrac{2}{\lambda_{\max}}\end{gathered}`),
         ol([`Curvatures (eigenvalues of H): ${lam.map(l => n(l, 4)).join(', ')}. With η = ${n(eta, 4)}, the factors 1 − η·λ are ${fac.map(f2 => n(f2, 4)).join(', ')}. The slowest is |${n(slow, 4)}|.`,
           `So each step keeps ${n(100 * slow, 1)}% of the remaining distance in the slowest direction. Reaching 0.1% of the starting distance takes ln(0.001) / ln(${n(slow, 4)}) ≈ <b>${isFinite(steps) ? n(Math.ceil(steps), 0) : '—'}</b> steps.`,
           `Measured on this run, the distance from w̃ to the closed-form answer: ` + [0, 1, 2, 3, 10, 50].filter(t => t < dist.length).map(t => `t = ${t}: ${n(dist[t], 4)}`).join(', ') + (dist[1] && dist[0] ? `. Ratio of step 2 to step 1: ${n(dist[2] / dist[1], 4)}.` : '.'),
@@ -232,7 +233,7 @@ const EXPLAIN = (() => {
   E[11] = [
     c => { const f = c.P.f, sig = c.S.sigma;
       return ex(`To judge uncertainty we need the size of the noise. Its estimate s² is built from the residuals. It divides by the ${g('df', 'degrees of freedom')} N − p rather than N, because fitting p coefficients used up p pieces of information: the residuals are forced to satisfy p equations (X̃ᵀe = 0), so only N − p of them are free.`,
-        's² = SSE / (N − p),   s = √s²  (the "residual standard error")',
+        TX(String.raw`s^2 = \dfrac{\text{SSE}}{N-p},\qquad s = \sqrt{s^2}\ \ (\text{the residual standard error})`),
         ol([`SSE = Σ eᵢ² = ${n(f.SSE, 4)} (the e² column total in step 8).`,
           `s² = ${n(f.SSE, 4)} / (${c.P.nTr} − ${f.rank}) = ${n(f.SSE, 4)} / ${f.df} = <b>${n(f.s2, 4)}</b>, so s = ${n(Math.sqrt(f.s2), 4)}.`,
           `Compare with the noise you chose in step 1: σ_ε = ${n(sig, 2)}, σ_ε² = ${n(sig * sig, 3)}.${c.attr.id === 'homoscedasticity' && !c.isBase ? ' With non-constant variance, s² is only an average noise level.' : ''}`]),
@@ -256,7 +257,7 @@ const EXPLAIN = (() => {
           T(['group', 'rows', 'Σ aᵢeᵢ in group', 'squared'], gs.map(([gid, o]) => [c.d.groupNames?.[gid] ?? String(gid), o.n, o.u, o.u * o.u]), { label: '#', total: ['Σ', '', '', '', su] }) +
           `Small-sample factor G/(G − 1) × (N − 1)/(N − p) = ${Gn}/${Gn - 1} × ${N - 1}/${N - p} = ${n(kc, 4)}. Var = ${n(kc, 4)} × ${n(su, 6)} = ${n(clv2, 6)}; SE(w̃ⱼ) = ${n(Math.sqrt(clv2), 4)}; original units = <b>${n(Math.sqrt(clv2) / sdj, 4)}</b>.`; }
       return ex(`The ${g('se', 'standard error')} says how much the coefficient would wobble if the data were collected again. The key fact: the estimate is a <i>weighted sum of the y values</i>, w̃ⱼ = Σᵢ aᵢyᵢ, with weights aᵢ = [(X̃ᵀX̃)⁻¹x̃ᵢ]ⱼ that depend only on x. So its variance is Σ aᵢ² Var(εᵢ) plus covariance terms. The four standard errors differ only in what they assume about Var(εᵢ) and the covariances. Each is a ${g('sandwich', 'sandwich')} with a different "meat". <b>Classical</b>: every row has the same variance σ² and no covariances. <b>HC1</b>: each row has its own variance, estimated by its own eᵢ². <b>Newey–West</b>: also covariances between nearby rows. <b>Clustered</b>: also covariances within a group.`,
-        'w̃ⱼ = Σᵢ aᵢyᵢ,  aᵢ = [(X̃ᵀX̃)⁻¹x̃ᵢ]ⱼ.   Classical: Var = s² Σaᵢ² = s²[(X̃ᵀX̃)⁻¹]ⱼⱼ.   HC1: Var = N/(N − p) · Σ aᵢ²eᵢ².   Original units: SE(wⱼ) = SE(w̃ⱼ) / sⱼ',
+        TX(String.raw`\begin{gathered}\tilde w_j = \sum_i a_i y_i,\qquad a_i = \big[(\tilde X^\top\tilde X)^{-1}\tilde x_i\big]_j\\ \text{classical: } \operatorname{Var}(\tilde w_j) = s^2\sum_i a_i^2 = s^2\big[(\tilde X^\top\tilde X)^{-1}\big]_{jj}\qquad \text{HC1: } \operatorname{Var}(\tilde w_j) = \dfrac{N}{N-p}\sum_i a_i^2 e_i^2\\ \text{original units: } \operatorname{SE}(w_j) = \operatorname{SE}(\tilde w_j)/s_j\end{gathered}`),
         ol([
           `Compute each training row's weight aᵢ (how much its y moves the ${P.names[j]} coefficient), then the pieces both formulas need.` +
             T(['y (true)', 'ŷ', 'eᵢ = y − ŷ', 'aᵢ', 'eᵢ²', 'aᵢ²', 'aᵢ² · eᵢ²'], a.map((v, i) => [P.ytr[i], f.yhat[i], e[i], v, e[i] ** 2, v * v, v * v * e[i] ** 2]), { label: 'train row', total: ['Σ', '', '', '', '', '', sa2, hc0] }) + `Check: Σaᵢ² = ${n(sa2, 6)} equals [(X̃ᵀX̃)⁻¹]ⱼⱼ = ${n(f.inv[j][j], 6)}.`,
@@ -274,7 +275,7 @@ const EXPLAIN = (() => {
       const w = c.P.wOrig[j], se = c.P.seOrig[j], tr = c.d.truth.coef[j], lo = w - f.tc * se, hi = w + f.tc * se;
       const zApprox = erfc(Math.abs(f.t[j]) / Math.SQRT2);
       return ex(`The t-statistic asks: <i>how many standard errors is the estimate away from 0?</i> If the true slope were 0, estimates would scatter around 0 with spread SE, so |t| above about 2 would be rare. The ${g('pvalue')} is the exact probability of |t| at least this large under that null, using the ${g('tdist', 't distribution')} with N − p ${g('df', 'degrees of freedom')}. The t distribution is used instead of the normal because the SE itself was estimated. The ${g('ci', '95% confidence interval')} turns the same idea around: it lists every slope value that would <i>not</i> be rejected.`,
-        't = ŵⱼ / SE(ŵⱼ),   p = 2 · P(T_{N−p} ≥ |t|),   CI = ŵⱼ ± t_crit · SE,   t_crit: P(|T_{N−p}| ≥ t_crit) = 0.05',
+        TX(String.raw`\begin{gathered} t = \dfrac{\hat w_j}{\operatorname{SE}(\hat w_j)},\qquad p = 2\,P\big(T_{N-p} \ge |t|\big)\\ \text{CI} = \hat w_j \pm t_{\text{crit}}\cdot\operatorname{SE},\qquad P\big(|T_{N-p}| \ge t_{\text{crit}}\big) = 0.05\end{gathered}`),
         ol([`t = ${n(w, 4)} / ${n(se, 4)} = <b>${n(f.t[j], 3)}</b> (the same ratio on the standardised scale).`,
           `Degrees of freedom: N − p = ${c.P.nTr} − ${f.rank} = ${f.df}.`,
           (() => { const at = Math.abs(f.t[j]), v = f.df, M = 400, hi = at + 60, wdt = (hi - at) / M; let area = 0; for (let k = 0; k < M; k++) area += tDens(at + (k + 0.5) * wdt, v) * wdt;
@@ -294,7 +295,7 @@ const EXPLAIN = (() => {
     c => { const P = c.P, f = P.f; if (!f.inv) return ex('Not defined without an inverse.', '—', '—', '—');
       const cv = P.mu.map((m, k) => k === 0 ? 1 : -m / P.sd[k]), q = cv.reduce((s2, ci, a) => s2 + ci * cv.reduce((s3, cj, b) => s3 + f.inv[a][b] * cj, 0), 0), se = Math.sqrt(f.s2 * q), b = P.wOrig[0], t = b / se, p = ST.tP2(t, f.df);
       return ex(`The intercept b is the predicted y when every feature equals 0 <i>in its original units</i>. We fitted on standardised features, so b is a combination of the fitted weights: b = w̃₀ − Σ w̃ⱼ μⱼ / sⱼ = cᵀw̃ with c = [1, −μ₁/s₁, …]. The same variance rule as for the slope gives Var(b) = s² · cᵀ(X̃ᵀX̃)⁻¹c. Then it gets the same t-test.`,
-        'SE(b) = √( s² · cᵀ (X̃ᵀX̃)⁻¹ c ),   t = b / SE(b),   CI = b ± t_crit · SE(b).   With one feature this equals √( s² (1/N + x̄² / Σ(x − x̄)²) )',
+        TX(String.raw`\begin{gathered}\operatorname{SE}(b) = \sqrt{s^2\,c^\top(\tilde X^\top\tilde X)^{-1}c},\qquad t = \dfrac{b}{\operatorname{SE}(b)},\qquad \text{CI} = b \pm t_{\text{crit}}\operatorname{SE}(b)\\ \text{one feature: } \operatorname{SE}(b) = \sqrt{s^2\Big(\dfrac1N + \dfrac{\bar x^2}{\sum_i (x_i-\bar x)^2}\Big)}\end{gathered}`),
         ol([`c = ${vec(cv, 4)}.`,
           `cᵀ(X̃ᵀX̃)⁻¹c = ${n(q, 6)}${P.P === 2 ? ` (with one standardised feature: 1/N + μ²/(s²N) = 1/${P.nTr} + ${n(P.mu[1], 3)}²/(${n(P.sd[1], 3)}² × ${P.nTr}) = ${n(1 / P.nTr + P.mu[1] ** 2 / (P.sd[1] ** 2 * P.nTr), 6)})` : ''}. The second part grows the further x = 0 is from the data, which is why intercepts are often imprecise.`,
           `SE(b) = √(${n(f.s2, 4)} × ${n(q, 6)}) = <b>${n(se, 4)}</b>.`,
@@ -309,8 +310,8 @@ const EXPLAIN = (() => {
       if (q < 1) return ex('No slopes to test.', '—', '—', '—');
       const y = c.P.ytr, ym = mean(y), SSEw = f.SSE, SSEo = f.SST, F = ((SSEo - SSEw) / q) / (SSEw / d2), p = ST.fSF(F, q, d2), Fc = fCrit(q, d2), R2 = 1 - SSEw / SSEo, adj = 1 - (1 - R2) * (N - 1) / d2;
       return ex(`The overall F test asks: <i>do the features, taken together, explain anything at all?</i> It is the same ${g('nested', 'restricted vs unrestricted')} comparison as RESET. The "without" model has no features at all, only an intercept, so it predicts ȳ for every row and its SSE is SST = Σ(y − ȳ)². The "with" model is the fitted regression. If the features are useless, the drop in SSE per feature is about the size of the noise, and F ≈ 1.`,
-        'SSE_without = Σ (yᵢ − ȳ)² = SST (every prediction is the mean ȳ).   SSE_with = Σ (yᵢ − ŷᵢ)²,  ŷ = X̃w̃.   F = [ (SSE_without − SSE_with) / q ] / [ SSE_with / (N − p) ],  q = p − 1.   Equivalently F = (R² / q) / ((1 − R²) / (N − p))',
-        ol([`Without features the prediction is ȳ = ${n(ym, 4)} for every row.` + T(['y (true)', 'ȳ (without)', 'y − ȳ', '(y − ȳ)²', 'ŷ (with)', 'e = y − ŷ', 'e²'], y.map((v, i) => [v, ym, v - ym, (v - ym) ** 2, f.yhat[i], f.e[i], f.e[i] ** 2]), { label: 'train row', total: ['Σ', '', '', '0', SSEo, '', '', SSEw] }) +
+        TX(String.raw`\begin{gathered}\text{SSE}_{\text{without}} = \sum_i (y_i-\bar y)^2 = \text{SST}\quad(\text{predict } \bar y \text{ for every row})\\ \text{SSE}_{\text{with}} = \sum_i (y_i-\hat y_i)^2,\qquad \hat y = \tilde X\tilde w\\ F = \dfrac{(\text{SSE}_{\text{without}}-\text{SSE}_{\text{with}})/q}{\text{SSE}_{\text{with}}/(N-p)},\quad q = p-1,\qquad \text{equivalently } F = \dfrac{R^2/q}{(1-R^2)/(N-p)}\end{gathered}`),
+        ol([`Without features the prediction is ȳ = ${n(ym, 4)} for every row.` + REG.block(y.map(() => [1]), y, { cols: ['1'], target: 'y', from: 'the training targets (step 4)', title: 'Why the "without" model predicts ȳ: the intercept-only regression, fitted like steps 6 → 9a' }) + T(['y (true)', 'ȳ (without)', 'y − ȳ', '(y − ȳ)²', 'ŷ (with)', 'e = y − ŷ', 'e²'], y.map((v, i) => [v, ym, v - ym, (v - ym) ** 2, f.yhat[i], f.e[i], f.e[i] ** 2]), { label: 'train row', total: ['Σ', '', '', '0', SSEo, '', '', SSEw] }) +
             `<b>SSE_without</b> = SST = <b>${n(SSEo, 4)}</b>; <b>SSE_with</b> = <b>${n(SSEw, 4)}</b>.`,
           `Drop: SSE_without − SSE_with = ${n(SSEo, 4)} − ${n(SSEw, 4)} = ${n(SSEo - SSEw, 4)}. Per feature (q = ${q}): ${n((SSEo - SSEw) / q, 4)}.`,
           `Noise per degree of freedom: ${n(SSEw, 4)} / ${d2} = ${n(SSEw / d2, 4)} (= s²).`,
@@ -328,12 +329,12 @@ const EXPLAIN = (() => {
   E[12] = [
     c => { const e = c.P.ete, e2 = e.map(v => v * v);
       return ex(`The test rows are standardised with the training μ and s, predicted with the trained weights, and their errors summarised as ${g('rmse', 'RMSE')}.`,
-        'RMSE = √( (1/N_test) Σ (yᵢ − ŷᵢ)² )',
+        TX(String.raw`\text{RMSE} = \sqrt{\dfrac{1}{N_{\text{test}}}\sum_i (y_i-\hat y_i)^2}`),
         T(['y (true)', 'ŷ', 'e = y − ŷ', 'e²'], c.P.yte.map((v, i) => [v, c.P.yhte[i], e[i], e2[i]]), { k: 12, label: 'test row', total: ['Σ', '', '', '', sum(e2)] }) +
         `RMSE = √(${n(sum(e2), 3)} / ${e.length}) = <b>${n(c.P.rmseTe, 3)}</b> (training: ${n(c.P.rmseTr, 3)})`,
         'Test error clearly above training error means the model learned noise (overfitting) or the test data differ.'); },
     c => { const y = c.P.yte, m = mean(y), sst = sum(y.map(v => (v - m) ** 2)), sse = sum(c.P.ete.map(v => v * v));
-      return ex(`${g('r2', 'R²')} compares the model with the simplest possible predictor: always guessing the mean.`, 'R² = 1 − SSE / SST,  SST = Σ (yᵢ − ȳ)²',
+      return ex(`${g('r2', 'R²')} compares the model with the simplest possible predictor: always guessing the mean.`, TX(String.raw`R^2 = 1 - \dfrac{\text{SSE}}{\text{SST}},\qquad \text{SST} = \sum_i (y_i-\bar y)^2`),
         `Test mean ȳ = ${n(m)}.` + T(['y (true)', 'y − ȳ', '(y − ȳ)²', 'ŷ', 'e = y − ŷ', 'e²'], y.map((v, i) => [v, v - m, (v - m) ** 2, c.P.yhte[i], c.P.ete[i], c.P.ete[i] ** 2]), { k: 12, label: 'test row', total: ['Σ', '', '0', sst, '', '', sse] }) +
         `SST = ${n(sst, 3)} (error of always guessing ȳ), SSE = ${n(sse, 3)} (error of the model). R² = 1 − ${n(sse, 3)} / ${n(sst, 3)} = <b>${n(1 - sse / sst, 3)}</b>`,
         'Can be negative on test data if the model is worse than guessing the mean.'); }
@@ -341,7 +342,7 @@ const EXPLAIN = (() => {
   E[13] = [
     c => { const w = c.P.f.w, mu = c.P.mu, sd = c.P.sd;
       return ex('The weights were learned on standardised features, so they answer "per standard deviation". Dividing by s converts them back to "per original unit". The intercept absorbs the shifts by μ.',
-        'wⱼ = w̃ⱼ / sⱼ,   b = w̃₀ − Σⱼ w̃ⱼ μⱼ / sⱼ',
+        TX(String.raw`w_j = \dfrac{\tilde w_j}{s_j},\qquad b = \tilde w_0 - \sum_j \dfrac{\tilde w_j\,\mu_j}{s_j}`),
         c.P.names.slice(1).map((nm, k) => `${nm}: ${n(w[k + 1], 4)} / ${n(sd[k + 1], 4)} = <b>${n(w[k + 1] / sd[k + 1], 4)}</b>`).join('; ') +
         `; b = ${n(w[0], 4)} − ${c.P.names.slice(1).map((_, k) => `${n(w[k + 1], 4)} × ${n(mu[k + 1], 4)} / ${n(sd[k + 1], 4)}`).join(' − ')} = <b>${n(c.P.wOrig[0], 4)}</b>`,
         'These are the numbers you would report, and they can be compared with the true β from step 1.'); },
@@ -358,13 +359,14 @@ const EXPLAIN = (() => {
       const ua = ST.ols(X.map((r, i) => [...r, z[i] ** 2, z[i] ** 3]), y, true);
       const q = ua.rank - f.rank, d2 = N - ua.rank, SSEr = f.SSE, SSEu = ua.SSE, drop = SSEr - SSEu, F = (drop / q) / (SSEu / d2), p = ST.fSF(F, q, d2), Fc = fCrit(q, d2);
       return ex(`Ramsey RESET asks: <i>is a straight line the right shape?</i> If the true relationship bends, the model's errors will follow a pattern that the squares and cubes of the predictions can pick up. So fit the model twice. Once as it is (the ${g('nested', 'restricted model')}, "without" the extra terms), and once with ŷ² and ŷ³ added (the unrestricted model, "with"). The bigger model always has a smaller SSE, even on pure noise, so the question is whether the drop is <i>bigger than noise would give</i>. The F statistic answers that. It divides the drop per added column by the noise variance per remaining ${g('df', 'degree of freedom')}. If the line is right, both estimate the same noise variance, so F is about 1.`,
-        'SSE_without = Σ (yᵢ − ŷᵢ)²  with ŷ = X̃w̃ (the model as it is).   SSE_with = Σ (yᵢ − ŷᵢ,with)²  with ŷ_with = c₀ + c₁x̃ + … + c_z²·zᵢ² + c_z³·zᵢ³ (refitted with the two extra columns).   F = [ (SSE_without − SSE_with) / q ] / [ SSE_with / (N − p − q) ],  q = 2,  compared with F(q, N − p − q)',
+        TX(String.raw`\begin{gathered}\text{SSE}_{\text{without}} = \sum_i (y_i-\hat y_i)^2,\qquad \hat y = \tilde X\tilde w \ \ (\text{the model as it is})\\ \text{SSE}_{\text{with}} = \sum_i (y_i-\hat y_{i,\text{with}})^2,\qquad \hat y_{i,\text{with}} = c_0 + c_1\tilde x_{i1} + \dots + c_{z^2}\,z_i^2 + c_{z^3}\,z_i^3\\ F = \dfrac{(\text{SSE}_{\text{without}}-\text{SSE}_{\text{with}})/q}{\text{SSE}_{\text{with}}/(N-p-q)},\qquad q = 2,\quad \text{compared with } F(q,\,N-p-q)\end{gathered}`),
         ol([
           `Fit the current model (the "without" model). For each row, e = y − ŷ; row 1: ${n(y[0], 4)} − ${n(yh[0], 4)} = ${n(f.e[0], 4)}. Square and add: <b>SSE_without</b> = Σ (y − ŷ)² = <b>${n(SSEr, 4)}</b>.`,
           `Make the two new columns from the predictions. ŷ is first standardised, z = (ŷ − ${n(m)}) / ${n(s)}, so its powers stay a sensible size. Rescaling a column does not change the fit, so the test is unaffected. Plain ŷ cannot be added: it is already an exact combination of the columns of X̃, which would make X̃ rank-deficient.` +
             T(['y (true)', 'ŷ without', 'z', 'z²', 'z³', 'ŷ with', 'e without = y − ŷ', 'e with = y − ŷ with', 'e² without', 'e² with'], X.map((_, i) => [y[i], yh[i], z[i], z[i] ** 2, z[i] ** 3, ua.yhat[i], f.e[i], ua.e[i], f.e[i] ** 2, ua.e[i] ** 2]), { label: 'train row', total: ['Σ', '', '', '', '', '', '', n(sum(f.e), 4), n(sum(ua.e), 4), SSEr, SSEu] }),
           (() => { const lab = [...P.names.map(nm => nm === '1' ? '' : `x̃_${nm}`), 'z²', 'z³'], r0 = [...X[0], z[0] ** 2, z[0] ** 3];
             return `Refit by least squares with the two extra columns, y on [${P.names.join(', ')}, z², z³]: the "with" model. Its coefficients are c = ${vec(ua.w, 4)}, so ŷ_with = ${ua.w.map((w, k) => `${n(w, 4)}${lab[k] ? '·' + lab[k] : ''}`).join(' + ')}. Row 1: ŷ_with = ${ua.w.map((w, k) => `${n(w, 4)} × ${n(r0[k], 4)}`).join(' + ')} = ${n(ua.yhat[0], 4)}, so e_with = y − ŷ_with = ${n(y[0], 4)} − ${n(ua.yhat[0], 4)} = ${n(ua.e[0], 4)}. Doing this for every row, squaring and adding: <b>SSE_with</b> = Σ (y − ŷ_with)² = <b>${n(SSEu, 4)}</b> (last column).`; })(),
+          REG.block(X.map((r, i) => [...r, z[i] ** 2, z[i] ** 3]), y, { cols: [...P.names.map(nm => labX(P, nm)), 'z²', 'z³'], target: 'y', from: 'the training targets (step 4)', colsFrom: 'X̃ from step 6 plus z² and z³, where z is the standardised ŷ from step 7', title: 'How ŷ_with is calculated: the "with" model, fitted exactly like steps 6 → 9a' }),
           `Drop in error from the extra columns: SSE_without − SSE_with = ${n(SSEr, 4)} − ${n(SSEu, 4)} = <b>${n(drop, 4)}</b>. Per added column: ${n(drop, 4)} / ${q} = <b>${n(drop / q, 4)}</b>.`,
           `Noise level from the bigger model: SSE_with / (N − p − q) = ${n(SSEu, 4)} / (${N} − ${f.rank} − ${q}) = ${n(SSEu, 4)} / ${d2} = <b>${n(SSEu / d2, 4)}</b>.`,
           `F = ${n(drop / q, 4)} / ${n(SSEu / d2, 4)} = <b>${n(F, 3)}</b>${Math.abs(F - P.dg.reset.F) < 1e-6 ? ' (matches the value shown above)' : ''}.`,
@@ -386,11 +388,12 @@ const EXPLAIN = (() => {
       if (!P.dg?.bp) return unavailable('Breusch–Pagan needs at least one feature and more rows than coefficients.');
       const e2 = f.e.map(v => v * v), aux = ST.ols(X, e2, true), me2 = mean(e2), k = aux.rank - 1, LM = N * aux.R2, p = ST.chi2SF(LM, k), cc = chiCrit(k);
       return ex(`Breusch–Pagan asks: <i>does the spread of the errors change with x?</i> A squared residual e² is a rough, one-row estimate of the error variance at that row. If the variance is constant, x cannot predict e² any better than the average of e² does. If it grows (or shrinks) with x, a regression of e² on x will find that. So run that ${g('aux', 'auxiliary regression')} and measure how much of e² it explains with its R². N × R² follows a ${g('chi2', 'chi-square')} distribution when the null is true, which gives a p-value.`,
-        'Regress e² on X̃:  e²ᵢ = γ₀ + γ₁x̃ᵢ₁ + … + uᵢ.   R²_aux = 1 − SSE_aux / SST_aux.   LM = N · R²_aux,  compared with χ²(p − 1)',
+        TX(String.raw`\begin{gathered} e_i^2 = \gamma_0 + \gamma_1\tilde x_{i1} + \dots + u_i \quad(\text{regress } e^2 \text{ on } \tilde X)\\ R^2_{\text{aux}} = 1 - \dfrac{\text{SSE}_{\text{aux}}}{\text{SST}_{\text{aux}}},\qquad \text{LM} = N\cdot R^2_{\text{aux}},\ \text{compared with } \chi^2(p-1)\end{gathered}`),
         ol([
           `Square every training residual. The average squared residual is mean(e²) = ${n(me2, 4)}: this is the "constant variance" guess.`,
           `Regress e² on the same columns [${P.names.join(', ')}]. The fitted line is ê² = ${aux.w.map((w, j) => j ? `${n(w, 4)}·x̃_${P.names[j]}` : n(w, 4)).join(' + ')}.` +
             T(['y (true)', 'ŷ', 'e = y − ŷ', 'e²', 'fitted ê²', '(e² − mean)²', '(e² − ê²)²'], X.map((_, i) => [P.ytr[i], f.yhat[i], f.e[i], e2[i], aux.yhat[i], (e2[i] - me2) ** 2, (e2[i] - aux.yhat[i]) ** 2]), { label: 'train row', total: ['Σ', '', '', '', n(sum(e2), 3), n(sum(aux.yhat), 3), aux.SST, aux.SSE] }),
+          REG.block(X, e2, { cols: P.names.map(nm => labX(P, nm)), target: 'e²', from: 'the squared residuals from step 8', colsFrom: 'the same X̃ from step 6', title: 'How "regress e² on X̃" is done: the auxiliary regression, fitted exactly like steps 6 → 9a' }),
           `SST_aux = Σ (e² − mean)² = ${n(aux.SST, 4)}: the total variation of e². SSE_aux = Σ (e² − ê²)² = ${n(aux.SSE, 4)}: what x leaves unexplained.`,
           `R²_aux = 1 − ${n(aux.SSE, 4)} / ${n(aux.SST, 4)} = <b>${n(aux.R2, 5)}</b>: x explains ${n(100 * aux.R2, 2)}% of the variation in e².`,
           `LM = N × R²_aux = ${N} × ${n(aux.R2, 5)} = <b>${n(LM, 3)}</b>.`,
@@ -411,7 +414,7 @@ const EXPLAIN = (() => {
     c => { const P = c.P, e = P.f.e, N = e.length, dif = e.slice(1).map((v, i) => v - e[i]), num_ = sum(dif.map(v => v * v)), den = sum(e.map(v => v * v));
       const lagp = sum(e.slice(1).map((v, i) => v * e[i])), r1 = lagp / den, a1 = sum(e.slice(1).map(v => v * v)), a2 = sum(e.slice(0, -1).map(v => v * v)), DW = num_ / den;
       return ex(`Durbin–Watson asks: <i>is each error related to the one just before it?</i> If errors drift slowly (positive ${g('autocorr', 'autocorrelation')}), neighbours are similar, so their differences are small. If they alternate sign, the differences are large. DW compares the squared neighbour differences with the squared residuals. For independent errors the differences are about √2 times as spread out as the residuals, so DW ≈ 2. It only makes sense when the row order means something, such as time. Here the training rows are kept in their original order.`,
-        'DW = Σₜ₌₂ (eₜ − eₜ₋₁)² / Σₜ eₜ²  ≈  2 (1 − r₁),   r₁ = Σ eₜeₜ₋₁ / Σ eₜ²',
+        TX(String.raw`\text{DW} = \dfrac{\sum_{t=2}^{N}(e_t-e_{t-1})^2}{\sum_{t=1}^{N}e_t^2} \approx 2(1-r_1),\qquad r_1 = \dfrac{\sum_t e_t\,e_{t-1}}{\sum_t e_t^2}`),
         ol([
           `Take the ${N} training residuals in row order and subtract each from the next.` +
             T(['y (true)', 'ŷ', 'eₜ = y − ŷ', 'eₜ₋₁', 'eₜ − eₜ₋₁', '(eₜ − eₜ₋₁)²', 'eₜ · eₜ₋₁', 'eₜ²'], e.map((v, i) => [P.ytr[i], P.f.yhat[i], v, i ? e[i - 1] : '—', i ? v - e[i - 1] : '—', i ? (v - e[i - 1]) ** 2 : '—', i ? v * e[i - 1] : '—', v * v]), { label: 't', total: ['Σ', '', '', '', '', '', num_, lagp, den] }),
@@ -435,7 +438,7 @@ const EXPLAIN = (() => {
     c => { const P = c.P, e = P.f.e, N = e.length, m = mean(e), d = e.map(v => v - m), m2 = mean(d.map(v => v ** 2)), m3 = mean(d.map(v => v ** 3)), m4 = mean(d.map(v => v ** 4));
       const S = m3 / m2 ** 1.5, K = m4 / m2 ** 2, tS = N / 6 * S * S, tK = N / 24 * (K - 3) ** 2, JB = tS + tK, p = Math.exp(-JB / 2), cc = chiCrit(2);
       return ex(`Jarque–Bera asks: <i>do the residuals look like a bell curve?</i> Two numbers summarise a ${g('distribution')}'s shape. ${g('skew', 'Skewness')} S measures lopsidedness (0 for a bell). ${g('kurt', 'Kurtosis')} K measures tail heaviness (3 for a bell). Under normality, S has variance about 6/N and K about 24/N. So S²·N/6 and (K − 3)²·N/24 are each a squared z-score, and their sum follows ${g('chi2', 'χ²')} with 2 degrees of freedom. The test is run on the <i>residuals</i>, not on y.`,
-        'S = m₃ / m₂^1.5,   K = m₄ / m₂²,   mₖ = mean of (e − ē)ᵏ.   JB = (N/6)·S² + (N/24)·(K − 3)²,   compared with χ²(2)',
+        TX(String.raw`\begin{gathered} S = \dfrac{m_3}{m_2^{1.5}},\qquad K = \dfrac{m_4}{m_2^2},\qquad m_k = \dfrac1N\sum_i (e_i-\bar e)^k\\ \text{JB} = \dfrac N6\,S^2 + \dfrac N{24}\,(K-3)^2,\ \text{compared with } \chi^2(2)\end{gathered}`),
         ol([
           `Centre the residuals (their mean is ${n(m, 6)}, essentially 0 because of the intercept), then raise them to the powers 2, 3 and 4.` +
             T(['y (true)', 'ŷ', 'e = y − ŷ', 'd = e − ē', 'd²', 'd³', 'd⁴'], d.map((v, i) => [P.ytr[i], P.f.yhat[i], e[i], v, v * v, v ** 3, v ** 4]), { label: 'train row', total: ['mean', '', '', '', n(mean(d), 4), m2, m3, m4] }),
@@ -463,10 +466,11 @@ const EXPLAIN = (() => {
         const onames = P.names.filter((_, q) => q !== j);
         return `<b>${nm}</b>: regress x̃_${nm} on [${onames.join(', ')}] → x̃_${nm} ≈ ${aux.w.map((w, q) => `${n(w, 4)}·${onames[q] === '1' ? '1' : 'x̃_' + onames[q]}`).join(' + ')}. SST = Σ(x̃ − mean)² = ${n(aux.SST, 3)}, SSE = ${n(aux.SSE, 4)}, so R²ⱼ = 1 − ${n(aux.SSE, 4)} / ${n(aux.SST, 3)} = ${n(aux.R2, 5)}, and VIF = 1 / (1 − ${n(aux.R2, 5)}) = <b>${isFinite(vif) ? n(vif, 3) : '∞'}</b>.` +
           (isFinite(vif) && f.inv ? ` Check: N × [(X̃ᵀX̃)⁻¹]ⱼⱼ = ${N} × ${n(f.inv[j][j], 6)} = ${n(N * f.inv[j][j], 3)} (standardised features make the two equal). The SE of this coefficient is √VIF = ${n(Math.sqrt(vif), 3)} times what it would be with unrelated features.` : !isFinite(vif) ? ' The other columns reproduce it exactly, so its coefficient is not identifiable.' : '') +
-          (P.P === 2 ? ` With one feature the "others" are just the intercept: the best prediction is the mean (0 after standardising), so SSE = SST, R² = 0 and VIF = 1.` : ''); });
+          (P.P === 2 ? ` With one feature the "others" are just the intercept: the best prediction is the mean (0 after standardising), so SSE = SST, R² = 0 and VIF = 1.` : '') +
+          REG.block(others, col, { cols: onames.map(o2 => labX(P, o2)), target: labX(P, nm), from: `the standardised ${nm} column of X̃ (step 6)`, colsFrom: 'the other columns of X̃', title: `How "regress ${nm} on the other features" is done (steps 6 → 9a again)` }); });
       const vmax = Math.max(...P.dg.vif);
       return ex(`The variance inflation factor asks: <i>how much of this feature can the other features already predict?</i> Run an ${g('aux', 'auxiliary regression')} of feature j on all the other features. If they predict it well (R²ⱼ near 1), the feature brings little new information. The data then cannot tell its effect apart from theirs, and its coefficient's variance is multiplied by 1/(1 − R²ⱼ). y plays no part in this.`,
-        'VIFⱼ = 1 / (1 − R²ⱼ),   R²ⱼ from regressing xⱼ on the other features.   Var(ŵⱼ) = σ² / [ Σ(xᵢⱼ − x̄ⱼ)² ] × VIFⱼ',
+        TX(String.raw`\begin{gathered}\text{VIF}_j = \dfrac{1}{1-R_j^2}\quad(R_j^2 \text{ from regressing } x_j \text{ on the other features})\\ \operatorname{Var}(\hat w_j) = \dfrac{\sigma^2}{\sum_i (x_{ij}-\bar x_j)^2}\cdot\text{VIF}_j\end{gathered}`),
         ol(parts) + `<p class="wdec ${vmax <= 5 ? 'acc' : 'rej'}"><b>Decision (rule of thumb):</b> largest VIF = ${isFinite(vmax) ? n(vmax, 2) : '∞'}: ${vmax <= 5 ? 'below 5, no worrying overlap' : vmax <= 10 ? 'between 5 and 10, noticeable overlap; individual coefficients are imprecise' : 'above 10 (or infinite), serious multicollinearity; individual coefficients cannot be trusted'}.</p>`,
         'VIF = 1: the feature is unrelated to the others. 4: its SE is doubled (√4). 10: its SE is about 3.2 times larger. Predictions inside the data range are unaffected; only the split of credit between features is.',
         { hyp: 'Not a hypothesis test: a descriptive measure with rules of thumb (5 and 10). Tolerance = 1/VIF is the same idea reported the other way up.',
@@ -486,7 +490,7 @@ const EXPLAIN = (() => {
       const order = [...f.cook.keys()].sort((a, b) => f.cook[b] - f.cook[a]), cut = 4 / N, nAbove = f.cook.filter(v => v > cut).length;
       const top = T(['orig. row', 'y (true)', 'ŷ', 'e = y − ŷ', 'h', 'r = e / (s√(1 − h))', 'D'], order.slice(0, 6).map(i => [P.tr[i] + 1, P.ytr[i], f.yhat[i], f.e[i], f.lev[i], f.e[i] / (s * Math.sqrt(1 - f.lev[i])), f.cook[i]]), { k: 6, label: 'rank' });
       return ex(`Cook's distance asks: <i>if this single row were deleted, how far would all the predictions move?</i> A row is influential when two things happen together. It is badly fitted (a big residual e), and it has high ${g('leverage')} h: its x values are far from the centre, so the line is pulled toward it. A badly fitted row near the centre of x, or an unusual-x row that sits right on the line, moves little.`,
-        'hᵢ = x̃ᵢᵀ (X̃ᵀX̃)⁻¹ x̃ᵢ,   rᵢ = eᵢ / (s√(1 − hᵢ)),   Dᵢ = (rᵢ² / p) · hᵢ / (1 − hᵢ) = eᵢ² / (p s²) · hᵢ / (1 − hᵢ)²',
+        TX(String.raw`\begin{gathered} h_i = \tilde x_i^\top(\tilde X^\top\tilde X)^{-1}\tilde x_i,\qquad r_i = \dfrac{e_i}{s\sqrt{1-h_i}}\\ D_i = \dfrac{r_i^2}{p}\cdot\dfrac{h_i}{1-h_i} = \dfrac{e_i^2}{p\,s^2}\cdot\dfrac{h_i}{(1-h_i)^2}\end{gathered}`),
         ol([
           `Take the most influential training row (original row ${P.tr[k] + 1}). Its standardised features are x̃ = ${vec(xk, 4)}. Its residual is e = y − ŷ = ${n(P.ytr[k], 4)} − ${n(f.yhat[k], 4)} = ${n(f.e[k], 4)}.`,
           `Leverage: first (X̃ᵀX̃)⁻¹x̃ = ${vec(vk, 6)}, then h = x̃ · that = ${xk.map((v, j) => `${n(v, 3)} × ${n(vk[j], 5)}`).join(' + ')} = <b>${n(hk, 4)}</b>.${P.P === 2 ? ` With one standardised feature this reduces to h = 1/N + x̃²/N = 1/${N} + ${n(xk[1], 3)}²/${N} = ${n(1 / N + xk[1] ** 2 / N, 4)}.` : ''} The average leverage is p/N = ${p}/${N} = ${n(p / N, 4)}, and all leverages add to p: Σh = ${n(sum(f.lev), 3)}.`,

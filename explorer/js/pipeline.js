@@ -12,7 +12,7 @@ const PIPE = (() => {
   const addM = (A, B, k = 1) => A.map((r, i) => r.map((v, j) => v + k * B[i][j]));
   const sandwich = (inv, meat, k) => LA.mul(LA.mul(inv, meat), inv).map(r => r.map(v => v * k));
 
-  function run(d, { seed, ar = false }){
+  function run(d, { seed, ar = false, lr = 0.2, iters: T = 400 }){
     const N = d.N, P = d.X[0].length, names = d.names;
     const rows = d.X.map((r, i) => [...r.slice(1), d.y[i]]);
     // ---- 2. cleaning checks ----
@@ -42,12 +42,14 @@ const PIPE = (() => {
     // ---- 6–9. fit ----
     const f = ST.ols(Xtr, ytr), dg = nTr > f.rank + 1 ? ST.diagnostics(Xtr, ytr, f) : null;
     const H = LA.mul(LA.T(Xtr), Xtr).map(r => r.map(v => 2 * v / nTr)), eigH = LA.eigSym(H).values;
-    const lim = 2 / eigH[0], eta = 0.2 * lim, XT = LA.T(Xtr);
+    const lim = 2 / eigH[0], eta = lr * lim, XT = LA.T(Xtr);
     let w = new Array(P).fill(0); const iters = [], lossHist = [], wHist = [];
-    for (let t = 0; t <= 400; t++) {
+    for (let t = 0; t <= T; t++) {
       const yh = LA.mv(Xtr, w), e = LA.sub(ytr, yh), L = LA.dot(e, e) / nTr, g = LA.scale(LA.mv(XT, e), -2 / nTr);
       lossHist.push(L); wHist.push([...w]);
-      if (t < 4 || t === 400) iters.push({ t, w: [...w], yh0: yh[0], e0: e[0], L, g, gn: LA.norm(g), next: LA.sub(w, LA.scale(g, eta)) });
+      const stop = !isFinite(L) || L > 1e12;
+      if (t < 4 || t === T || stop) iters.push({ t, w: [...w], yh0: yh[0], e0: e[0], L, g, gn: LA.norm(g), next: LA.sub(w, LA.scale(g, eta)) });
+      if (stop) break;
       w = LA.sub(w, LA.scale(g, eta));
     }
     // ---- 11. standard errors ----
@@ -76,7 +78,7 @@ const PIPE = (() => {
     const wOrig = f.w.map((v, j) => j === 0 ? f.w[0] - f.w.slice(1).reduce((s, wj, k) => s + wj * mu[k + 1] / sd[k + 1], 0) : v / sd[j]);
     const seOrig = f.se.map((v, j) => j === 0 ? NaN : v / sd[j]), unscale = a => a ? a.map((v, j) => j === 0 ? NaN : v / sd[j]) : null;
     const isTrain = new Array(N).fill(false); tr.forEach(i => isTrain[i] = true);
-    return { N, P, names, dupes, outY, outX, eda, nTr, nTe: te.length, mu, sd, Xtr, ytr, Xte, yte, yhte, ete, tr, te, isTrain, dupFlag, outFlag, lossHist, wHist, f, dg, eigH, lim, eta, iters,
+    return { N, P, names, dupes, outY, outX, eda, nTr, nTe: te.length, mu, sd, Xtr, ytr, Xte, yte, yhte, ete, tr, te, isTrain, dupFlag, outFlag, lossHist, wHist, f, dg, eigH, lim, eta, frac: lr, T, iters, diverged: !isFinite(lossHist[lossHist.length - 1]) || lossHist[lossHist.length - 1] > 1e12,
       hc: unscale(hc), nw: nw && { se: unscale(nw.se), lag: nw.lag }, cl: cl && { se: unscale(cl.se), groups: cl.groups },
       rmseTr: Math.sqrt(f.SSE / nTr), rmseTe, r2Te, wOrig, seOrig, ar };
   }

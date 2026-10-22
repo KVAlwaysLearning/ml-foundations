@@ -85,23 +85,25 @@ const CHG = (() => {
     const steps = STEPS.filter(st => inf[st.id] && inf[st.id][0] !== 'none').map(st => { const L = LEVELS[inf[st.id][0]];
       return `<li><a href="#step-${st.id}" data-goto="step-${st.id}"><span class="lv ${L.cls}"><b>${L.glyph}</b></span> Process step ${st.id}, ${esc(st.title)}</a>: ${esc(inf[st.id][1])}</li>`; }).join('');
     const quiet = STEPS.filter(st => !inf[st.id] || inf[st.id][0] === 'none').map(st => st.id).join(', ');
+    const sub10 = { linearity: 0, homoscedasticity: 1, independence: 2, normality: 3, multicollinearity: 4, exogeneity: 0 }[a.id], tests = ['RESET', 'Breusch–Pagan', 'Durbin–Watson', 'Jarque–Bera', 'VIF', "Cook's distance"];
     return `<div class="chg-cols"><div><h3>Where to look, in order</h3><ol class="chg-trail">
         <li><a href="#chg-data" data-goto="chg-data">The dataset table in section 2</a>: the changed column is tinted, so compare baseline and variant cell by cell.</li>
-        <li><a href="#charts" data-goto="charts">Charts › Data and fitted model</a>: the dots against the dashed baseline line${a.id === 'independence' && v.id !== 'dupes' ? '. The points stay on one side of the line for long runs' : ''}.</li>
-        <li><a href="#charts" data-goto="charts" data-diag="${a.diag || 'fitted'}">Charts › Diagnostic view › ${diagName}</a> (opens that tab): the view where this property is easiest to see.</li>
-        <li><a href="#charts" data-goto="charts">Charts › Sampling distribution</a>: across 200 fresh datasets, compare the actual spread of the slope with the reported SE, and check the interval coverage.</li>
-        <li><a href="#lookfor" data-goto="lookfor">Look for</a>: the fingerprint, measured against the baseline.</li>
+        <li><a href="#sig-part" data-goto="sig-part">Section 3, what it looks like</a>: the fingerprint, measured against the baseline.</li>
+        <li><a href="#step-9a" data-goto="step-9a">Step 9a, the data and the fitted line</a>: the dots against the dashed baseline line${a.id === 'independence' && v.id !== 'dupes' ? ' (the points stay on one side of the line for long runs)' : ''}.</li>
+        <li><a href="#sub-10-${v.id === 'dupes' ? 2 : sub10}" data-goto="sub-10-${v.id === 'dupes' ? 2 : sub10}">Step 10, ${tests[v.id === 'dupes' ? 2 : sub10]}</a>: the chart and test where this property is easiest to see${a.id === 'exogeneity' ? ' (and, the trap, where it does <i>not</i> show)' : ''}.</li>
+        <li><a href="#step-11" data-goto="step-11">Step 11, the sampling distribution</a>: across 200 fresh datasets, compare the actual spread of the slope with the reported SE, and check the interval coverage.</li>
         ${steps}
         <li><a href="#notes" data-goto="notes">Interview notes</a>: the same story in plain words.</li></ol>
         <p class="chg-q">Steps this variant leaves untouched: ${quiet || 'none'}. That is often the interview point too.</p></div>
       <div><h3>Numbers, baseline → this variant</h3><div class="sig-tbl"><table><tr><th>quantity</th><th>baseline</th><th>this variant</th><th></th></tr>${rows}</table></div>
-      <p class="chg-q">All on the full data, as in the charts. "Changed" means it moved by a meaningful amount, or a test crossed p = 0.05.</p></div></div>`;
+      <p class="chg-q">All on the training rows: the same numbers the process steps show. "Changed" means it moved by a meaningful amount, or a test crossed p = 0.05.</p></div></div>`;
   }
 
   function render(el, ctx){
     const { cur, base, a, v, isBase, S } = ctx;
-    if (isBase) { el.innerHTML = `<h2 id="chg-h">What changed</h2><p class="hint-s">The baseline is selected, so nothing has been changed yet. Pick a variant on the web: this section will then show, cell by cell, what it altered in the data and where to see the effect.</p>`; return []; }
-    const rc = recipeOf(a, v), D = diff(cur, base), N = cur.d.y.length;
+    if (isBase) { el.innerHTML = `<h2 id="chg-h">What changed and how to see it</h2><p class="hint-s">The baseline is selected, so nothing has been changed yet. Pick a variant on the web: this section will then show, cell by cell, what it altered in the data, what that looks like, and where in the process it shows up. Below is what healthy data look like.</p><div id="sig-part"></div>`; return []; }
+    const FD = ctx.full ? ctx.full.cur : cur.d, FB = ctx.full ? ctx.full.base : base.d;
+    const rc = recipeOf(a, v), D = diff({ d: FD }, { d: FB }), N = FD.y.length;
     const st = { same: 'unchanged', changed: 'changed', new: 'new column', removed: 'removed' };
     const recipe = ['x', 'e', 'y'].map(k => { const same = rc.base[k] === rc.cur[k];
       return `<tr class="${same ? '' : 'hl'}"><td>${{ x: 'inputs x', e: 'error ε', y: 'target y' }[k]}</td><td>${rc.base[k]}</td><td>${same ? '<span class="muted">same</span>' : rc.cur[k]}</td></tr>`; }).join('');
@@ -117,18 +119,19 @@ const CHG = (() => {
         (yCh?.status === 'changed' ? `<td>${yCh.base[i] != null ? n(yCh.vals[i] - yCh.base[i]) : '—'}</td>` : '') + '</tr>';
     }
     if (N > show) body += `<tr class="gap"><td>⋮</td>${'<td>⋮</td>'.repeat((head.match(/<th/g) || []).length - 1)}</tr>`;
-    el.innerHTML = `<h2 id="chg-h">What changed: ${esc(a.name)} › ${esc(v.name)}</h2>
+    el.innerHTML = `<h2 id="chg-h">What changed and how to see it: ${esc(a.name)} › ${esc(v.name)}</h2>
       <p class="hint-s">The variant and the baseline are built from the <b>same random numbers</b>. Whatever differs below is caused by this variant alone. Strength s = ${n(S.strength, 2)}${S.strength === 0 ? ': at 0 the variant equals the baseline, so move the Strength slider to see the change appear' : ''}.</p>
       <h3>1. In the recipe</h3><div class="sig-tbl"><table class="chg-rec"><tr><th></th><th>baseline</th><th>this variant</th></tr>${recipe}</table></div>
-      <h3 id="chg-data">2. In the dataset</h3><p class="chg-chips">${chips}</p><p class="chg-q">${why}${cur.d.note ? ' ' + esc(cur.d.note) : ''}</p>
+      <h3 id="chg-data">2. In the dataset (all ${N} generated rows)</h3><p class="chg-chips">${chips}</p><p class="chg-q">${why}${cur.d.note ? ' ' + esc(cur.d.note) : ''}</p>
       <div class="sig-tbl"><table>${head}</tr>${body}</table></div>
       <div class="chg-pics"></div>
-      <h3>3. Where it shows up</h3>${trail(ctx)}`;
+      <div id="sig-part"></div>
+      <h3>4. Where it shows up in the process</h3>${trail(ctx)}`;
     const pics = el.querySelector('.chg-pics'), rowEl = document.createElement('div'); rowEl.className = 'pv-row'; pics.appendChild(rowEl);
-    const out = [], x = cur.d.px, xb = base.d.px;
-    out.push(chart(rowEl, 'y: baseline (hollow) → this variant (filled)', 240, c => { c.begin(rng([x, xb]), rng([cur.d.y, base.d.y]), cur.d.xName, 'y');
-      if (x.length === xb.length) x.forEach((t, i) => c.line([[xb[i], base.d.y[i]], [t, cur.d.y[i]]], C('--residual'), 1, null, 0.5));
-      xb.forEach((t, i) => c.dot([t, base.d.y[i]], C('--muted'), 3.2, true, 0.8)); x.forEach((t, i) => c.dot([t, cur.d.y[i]], C('--surface'), 3, false, 0.85)); c.end();
+    const out = [], x = FD.px, xb = FB.px;
+    out.push(chart(rowEl, 'y: baseline (hollow) → this variant (filled)', 240, c => { c.begin(rng([x, xb]), rng([FD.y, FB.y]), FD.xName, 'y');
+      if (x.length === xb.length) x.forEach((t, i) => c.line([[xb[i], FB.y[i]], [t, FD.y[i]]], C('--residual'), 1, null, 0.5));
+      xb.forEach((t, i) => c.dot([t, FB.y[i]], C('--muted'), 3.2, true, 0.8)); x.forEach((t, i) => c.dot([t, FD.y[i]], C('--surface'), 3, false, 0.85)); c.end();
       c.legend([[C('--muted'), 'baseline'], [C('--surface'), 'this variant'], [C('--residual'), 'how each row moved']]); }));
     const ing = D.find(c => c.status === 'changed' && c.key !== 'y') || yCh;
     if (ing && ing.status === 'changed') out.push(chart(rowEl, `The changed ingredient, ${ing.label}, row by row`, 240, c => { const m = Math.min(ing.vals.length, ing.base.length);

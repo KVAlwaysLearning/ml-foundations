@@ -204,11 +204,19 @@ const SIG = (() => {
         foot: 'Sorted by x. Read down the last column: the true error drifts with x. The residual column does not, because the slope has already absorbed that drift.' }) };
   };
 
+  function howFit(v){
+    const d = v.d, f = v.f;
+    if (d.X[0].length !== 2) return `the weights solve the normal equations X̃ᵀX̃ w̃ = X̃ᵀy, exactly as in <a href="#step-9a" data-goto="step-9a">step 9a</a>`;
+    const x = d.X.map(r => r[1]), mx_ = mean(x), my = mean(d.y), sxy = x.reduce((s2, t, i) => s2 + (t - mx_) * (d.y[i] - my), 0), sxx = x.reduce((s2, t) => s2 + (t - mx_) ** 2, 0);
+    return `slope w = Σ(x − x̄)(y − ȳ) / Σ(x − x̄)² = ${n(sxy, 3)} / ${n(sxx, 3)} = <b>${n(sxy / sxx, 3)}</b>, intercept b = ȳ − w·x̄ = ${n(my, 3)} − ${n(sxy / sxx, 3)} × ${n(mx_, 3)} = <b>${n(my - sxy / sxx * mx_, 3)}</b> (the formulas derived in <a href="#step-9a" data-goto="step-9a">step 9a</a>)`;
+  }
   function render(el, ctx){
     const fn = A[ctx.a.id]; if (!fn) { el.innerHTML = ''; return []; }
     ONE = !!ctx.isBase; const r = fn(ctx);
-    el.innerHTML = `<h2 id="sig-h">What to look for in the data</h2>
-      <p class="hint-s">${ctx.isBase ? `Baseline selected: this is what <b>healthy</b> data look like for ${esc(ctx.a.name.toLowerCase())}. Pick a variant to see its fingerprint next to this one.` : `<b>${esc(ctx.a.name)} › ${esc(ctx.v.name)}</b>, compared with the baseline drawn from the same random sample, so the only difference is this property. Residuals are from the fit on all rows, as in the charts above.`}</p>
+    const head = ctx.embedded ? `<h3 class="sig-h3" id="sig-h">${ctx.isBase ? 'What healthy data look like' : '3. What it looks like in the data'}</h3>` : `<h2 id="sig-h">What to look for in the data</h2>`;
+    el.innerHTML = `${head}
+      <p class="hint-s">${ctx.isBase ? `Baseline selected: this is what <b>healthy</b> data look like for ${esc(ctx.a.name.toLowerCase())}. Pick a variant to see its fingerprint next to this one.` : `Compared with the baseline built from the same random numbers, so the only difference is this property.`} Everything here uses the training rows, the same as the process steps.</p>
+      <p class="sig-fit"><b>Where the fitted numbers come from.</b> The residuals are e = y − ŷ, with ŷ from the least-squares fit on these rows: ${howFit(ctx.cur)}.${ctx.isBase ? '' : ` Baseline: ${howFit(ctx.base)}.`}</p>
       <div class="sig-grid"><div class="sig-card"><h3>How these data were made</h3><p>${r.gen}</p></div><div class="sig-card"><h3>What you should see</h3>${r.see}</div></div>
       <div class="sig-pics"></div><h3 class="sig-th">In the rows</h3>${r.table}`;
     let charts = [];

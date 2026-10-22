@@ -321,3 +321,68 @@ a.term:hover{color:var(--surface)}
 .chg-rec th{text-align:left !important}
 #changed .sig-tbl td:first-child,#changed .sig-tbl th:first-child{text-align:left}
 .chg-trail{padding-left:28px}
+
+/* ---------- legibility: larger text, proper math ---------- */
+.ex-main{zoom:var(--ex-zoom,1)}
+.hw p,.nt-sec p,.nt-sec li,.wsteps,.sig-see,.sig-card p,.nt-box p,.nt-card dd,.chg-trail,.ldg-b{font-size:16px !important;line-height:1.65 !important}
+.hw-h,.nt-sec h5{font-size:12.5px !important}
+.wk table,.sig-tbl table,.rmx table{font-size:14px !important}
+.katex{font-size:1.06em}
+.mth .katex{font-size:1.08em}
+.hw-f{font:inherit !important;font-style:normal !important;overflow-x:auto;overflow-y:hidden;padding:2px 0;max-width:100%}
+.hw-f .katex-display{margin:4px 0;text-align:left}
+.hw-f .katex-display > .katex{text-align:left;font-size:1.18em}
+.tx-src{font:15px/1.6 var(--sans)}
+.katex-display{overflow-x:auto;overflow-y:hidden}
+
+/* ---------- floating control box ---------- */
+.ctlbox{position:fixed;right:16px;bottom:16px;z-index:60;width:320px;max-height:calc(100vh - 32px);overflow:auto;background:var(--paper);border:1px solid var(--rule);border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.18);opacity:.42;transition:opacity .2s}
+.ctlbox:hover,.ctlbox:focus-within{opacity:1}
+.ctlbox-h{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--paper)}
+.ctlbox-h b{font:700 14px var(--sans)}
+.ctlbox-v{flex:1;font:12.5px var(--sans);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctlbox-x{border:1px solid var(--rule);background:var(--panel);border-radius:8px;width:28px;height:26px;cursor:pointer;font:700 15px var(--sans);color:var(--ink)}
+.ctlbox-b{padding:8px 12px 12px;display:grid;gap:8px}
+.ctlbox-r{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font:13.5px var(--sans)}
+.ctlbox-fs .btn{padding:3px 10px}
+.ctlbox.collapsed{width:auto;opacity:.85}
+.ctlbox.collapsed .ctlbox-b{display:none}
+.ctlbox.collapsed .ctlbox-v{max-width:180px}
+@media (max-width: 760px){ .ctlbox{left:12px;right:12px;bottom:12px;width:auto;opacity:.9} }
+
+/* ---------- charts inside steps ---------- */
+.pv-row.one{grid-template-columns:minmax(0,1fr)}
+.sub-viz{grid-column:1 / -1;margin:6px 0 2px}
+.sub-viz:empty{display:none}
+
+/* ---------- cohesion: ledger ---------- */
+.ldg{margin:4px 0 10px;display:grid;gap:4px;min-width:0}
+.ldg-b{margin:0;font:16px/1.6 var(--sans)}
+.ldg-io{margin:0;display:flex;flex-wrap:wrap;gap:4px 16px;font:14px/1.6 var(--sans)}
+.ldg-l{display:inline-block;margin:1px 2px;padding:1px 8px;border-radius:999px;border:1px solid var(--rule);text-decoration:none;color:var(--surface);font-weight:600}
+.ldg-l small{color:var(--muted);font-weight:500}
+.ldg-l:hover{border-color:var(--surface)}
+.ldg-t summary{cursor:pointer;font:600 13.5px var(--sans);color:var(--surface);width:max-content;max-width:100%}
+.wk td.ldg-new,.wk th.ldg-new{background:color-mix(in srgb,var(--residual) 18%,transparent)}
+
+/* ---------- regression walkthrough ---------- */
+.reg{margin:8px 0;border:1px dashed var(--surface);border-radius:10px;padding:6px 10px;background:color-mix(in srgb,var(--surface) 5%,transparent)}
+.reg > summary{cursor:pointer;font:700 14px var(--sans);color:var(--surface)}
+.reg-body{margin-top:6px;min-width:0}
+.rg-why{margin:0 0 6px;font:15px/1.6 var(--sans)}
+.rg-st{margin:8px 0 2px;font:14px/1.5 var(--sans);color:var(--muted)}
+.rmx{overflow-x:auto;display:inline-block;max-width:100%;vertical-align:middle}
+.rmx table{border-collapse:collapse;margin:4px 0}
+.rmx th,.rmx td{padding:2px 8px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rmx th{color:var(--muted);font-weight:600}
+.rmx td{border-left:1px solid var(--rule)}
+.sig-fit{margin:6px 0;font:15px/1.6 var(--sans)}
+.sig-h3{font:700 20px var(--serif) !important;margin:18px 0 6px !important}
+.ctlbox .ctl{margin:0}
+.ctlbox .ctl label{display:flex;justify-content:space-between;gap:8px;font:600 12.5px/1.35 var(--sans) !important;color:var(--ink)}
+.ctlbox .ctl output{font:700 12.5px var(--sans)}
+.ctlbox .ctl input[type=range]{width:100%;margin:2px 0 0}
+.ctlbox{opacity:.38}
+.ldg{grid-template-columns:minmax(0,1fr)} .ldg > *,.reg-body,.reg{min-width:0} .reg-body .wsteps li{min-width:0}
+.reg > summary,.ldg-t summary,.how .qa summary{width:auto !important;overflow-wrap:anywhere}
+.katex{position:relative} .wk,.sig-tbl,.rmx,.hw-f,.it-tbl{position:relative}

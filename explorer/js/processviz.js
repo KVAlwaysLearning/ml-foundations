@@ -162,17 +162,17 @@ const PVIZ = (() => {
   V['9b'] = (el, ctx) => {
     const { P } = ctx, r = box(el), out = [], xs = P.Xtr.map(x => x[1]), Lmin = P.f.SSE / P.nTr;
     out.push(chart(r, 'Loss at each iteration (log scale)', 230, c => {
-      const L = P.lossHist; c.begin([0, L.length - 1], [Math.max(Math.min(...L, Lmin) * 0.9, 1e-6), L[0]], 'iteration t', 'L', { logY: true });
+      const L = P.lossHist.map(x => isFinite(x) ? Math.min(x, 1e12) : 1e12), top = Math.max(...L); c.begin([0, L.length - 1], [Math.max(Math.min(...L, Lmin) * 0.9, 1e-6), top], 'iteration t', 'L (log scale)', { logY: true });
       c.hline(Lmin, C('--normal'), [6, 4], 1.6); c.line(L.map((v, i) => [i, v]), C('--surface'), 2.4);
-      [0, 1, 2, 3].forEach(t => c.dot([t, L[t]], C('--ink'), 3.5)); c.end();
+      [0, 1, 2, 3].filter(t => t < L.length).forEach(t => c.dot([t, L[t]], C('--ink'), 3.5)); c.end();
       c.legend([[C('--surface'), 'gradient descent'], [C('--normal'), 'closed-form minimum', true]]);
     }));
-    out.push(chart(r, P.P === 2 ? 'The fitted line after t = 0, 1, 2, 3 and 400 steps' : 'Each weight across iterations', 230, c => {
+    out.push(chart(r, P.P === 2 ? `The fitted line after t = 0, 1, 2, 3 and ${P.wHist.length - 1} steps` : 'Each weight across iterations', 230, c => {
       if (P.P === 2) {
         const xr = rng(xs); c.begin(xr, rng(P.ytr), `x̃ (${fname(ctx)})`, 'y'); P.ytr.forEach((v, i) => c.dot([xs[i], v], TR(), 2.6, false, 0.5));
-        [0, 1, 2, 3, 400].forEach((t, k) => { const w = P.wHist[t]; c.line(xr.map(x => [x, w[0] + w[1] * x]), C('--surface'), t === 400 ? 2.8 : 1.4, t === 400 ? null : [4, 3], 0.35 + 0.15 * k); });
+        const last = P.wHist.length - 1; [0, 1, 2, 3, last].filter((t, k, a) => t <= last && a.indexOf(t) === k).forEach((t, k) => { const w = P.wHist[t]; if (!w.every(isFinite)) return; c.line(xr.map(x => [x, w[0] + w[1] * x]), C('--surface'), t === last ? 2.8 : 1.4, t === last ? null : [4, 3], 0.35 + 0.15 * k); });
         c.end();
-        c.legend([[C('--surface'), 'faint dashed: early steps; solid: after 400', true]]);
+        c.legend([[C('--surface'), `faint dashed: early steps; solid: after ${P.wHist.length - 1}`, true]]);
       } else {
         const T = 60, W = P.wHist.slice(0, T + 1), all = W.flat(); c.begin([0, T], rng(all), 'iteration t', 'w̃_j');
         P.names.forEach((n, j) => c.line(W.map((w, t) => [t, w[j]]), `hsl(${(j * 360 / P.P + 160) % 360} 55% 45%)`, 2));
@@ -184,15 +184,8 @@ const PVIZ = (() => {
   };
   /* 10. diagnostics */
   V[10] = (el, ctx) => {
-    const { P } = ctx, r = box(el, 'pv-row three'), e = P.f.e, yh = P.f.yhat, n = e.length, out = [];
-    out.push(chart(r, 'Residuals vs fitted', 190, c => { c.begin(rng(yh), rng(e), 'ŷ', 'e'); c.hline(0, C('--ink'), [4, 4]); yh.forEach((v, i) => c.dot([v, e[i]], TR(), 2.8, false, 0.8)); c.end(); c.legend([[C('--muted'), 'pattern → linearity or variance problem']]); }));
-    out.push(chart(r, 'Residuals in row (time) order', 190, c => { c.begin([1, n], rng(e), 'training row, in time order', 'e'); c.hline(0, C('--ink'), [4, 4]); c.line(e.map((v, i) => [i + 1, v]), C('--muted'), 1); e.forEach((v, i) => c.dot([i + 1, v], TR(), 2.6)); c.end(); c.legend([[C('--muted'), 'long runs → autocorrelation']]); }));
-    out.push(chart(r, 'Normal Q–Q', 190, c => {
-      const s = Math.sqrt(P.f.s2) || 1, z = e.map(v => v / s).sort((a, b) => a - b), q = z.map((_, i) => invNorm((i + 0.5) / n)), m = Math.max(...z.map(Math.abs), ...q.map(Math.abs));
-      c.begin([-m, m], [-m, m], 'normal quantile', 'standardised e'); c.line([[-m, -m], [m, m]], C('--ink'), 1.2, [4, 4]); z.forEach((v, i) => c.dot([q[i], v], TR(), 2.6)); c.end(); c.legend([[C('--muted'), 'bends away → non-normal errors']]);
-    }));
-    note(el, 'Analysis only: these are the training residuals from step 9. The data does not change; the tests in this step summarise these pictures in numbers.');
-    return out;
+    note(el, 'Analysis only: these are the training residuals e from step 8, left by the weights of step 9a. The data do not change here. Each test below comes with the picture it summarises.');
+    return [];
   };
   /* 11. inference: confidence intervals under each SE */
   V[11] = (el, ctx) => {

@@ -83,7 +83,8 @@ const NOTES = (() => {
   function W(c, id, i, title){
     const fn = EXPLAIN[id]?.[i]; if (!fn) return ''; let x; try { x = fn(c.ex); } catch (err) { console.error(err); return ''; }
     return `<div class="nt-w"><h6>${title}</h6>${x.hyp ? `<p><b>Hypotheses.</b> ${x.hyp}</p>` : ''}<p><b>The idea.</b> ${x.plain}</p><p class="hw-f">${x.formula}</p><div class="nt-calc">${x.calc}</div><p><b>How to read it.</b> ${x.read}</p>` +
-      (x.pit ? `<p><b>What it assumes and can miss.</b> ${x.pit}</p>` : '') + (x.qa ? `<div class="qa">${x.qa.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>` : '') + `</div>`;
+      (x.pit ? `<p><b>What it assumes and can miss.</b> ${x.pit}</p>` : '') + (x.qa ? `<div class="qa">${x.qa.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>` : '') +
+      `<p class="nt-link"><a href="#sub-${id}-${i}" data-goto="sub-${id}-${i}">${String(id) === '10' ? 'See its chart in the process ↑' : 'See it in the process ↑'}</a></p></div>`;
   }
 
   function stepDefs(c){
@@ -208,7 +209,8 @@ const NOTES = (() => {
   const openSet = new Set(); let bound = false, lastCtx = null;
   function body(c, st){
     const call = c.inf[st.id] && c.inf[st.id][0] !== 'none' && !c.isBase ? `<p class="nt-call ${LEVELS[c.inf[st.id][0]].cls}"><b>${LEVELS[c.inf[st.id][0]].glyph} With ${esc(c.v.name)}:</b> ${esc(c.inf[st.id][1])}</p>` : '';
-    return call + sec('Why this step exists', `<p>${st.why}</p>`) + sec('What we do', st.what ? `<p>${st.what}</p>` : '') + sec('From first principles', st.fp) +
+    const F = LEDGER.flow(st.id), io = F ? `<p class="ldg-b">${F.bridge}</p><p class="ldg-io">${F.in.length ? `<span><b>Comes in:</b> ${F.in.map(([l, s]) => `<a href="#step-${s}" data-goto="step-${s}" class="ldg-l">${l} <small>(step ${s})</small></a>`).join(' ')}</span>` : ''}${F.out.length ? `<span><b>Goes out:</b> ${F.out.map(([l, s]) => `<a href="#step-${s}" data-goto="step-${s}" class="ldg-l">${l} <small>(step ${s})</small></a>`).join(' ')}</span>` : ''}</p>` : '';
+    return call + io + sec('Why this step exists', `<p>${st.why}</p>`) + sec('What we do', st.what ? `<p>${st.what}</p>` : '') + sec('From first principles', st.fp) +
       sec('Worked on this data', (st.work || []).map(([id, i, t]) => W(c, id, i, t)).join('')) + sec('Interview points', st.ip ? ul(st.ip) : '') +
       (st.id !== '0' ? `<p class="nt-link"><a href="#step-${st.id}">See step ${st.id} in the process ↑</a></p>` : '');
   }

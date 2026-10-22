@@ -156,7 +156,7 @@ const STEPS = [
       [sy('g1'), 'Skewness of y and of each feature', c => `y: ${num(c.P.eda.skewY, 2)}; ${c.P.names.slice(1).map((n, k) => `${n}: ${num(c.P.eda.skewX[k], 2)}`).join(', ')}`],
       [sy('rho'), 'Correlation of each feature with y', c => c.P.names.slice(1).map((n, k) => `r(${n}, y) = ${num(c.P.eda.corrXY[k], 3)}`).join(', ')],
       [sy('rho'), 'Largest correlation between two features', c => isFinite(c.P.eda.maxFeatCorr) ? `${c.P.eda.maxFeatCorr > 0.9 ? mark(false) : c.P.eda.maxFeatCorr > 0.7 ? mark(false, true) : mark(true)} |r| = ${num(c.P.eda.maxFeatCorr, 3)}` : 'only one feature'],
-      ['', 'Pictures', () => `The <a href="#charts">Data and Diagnostic charts</a> show the scatter and residual views.`]
+      ['', 'Pictures', () => 'The charts at the top of this step: the distributions and the y-vs-x scatter. Residual pictures come later, in step 10, once there is a fit.']
     ]},
   { id: 4, title: 'Train / test split', goal: 'Hold data back before any step that learns from the data, so the test score is honest.',
     attrs: ['split', 'cv', 'seed', 'shift'],
@@ -204,7 +204,7 @@ const STEPS = [
     attrs: ['gdtype', 'lr', 'schedule', 'optimiser', 'init', 'stopping', 'scalegd'],
     subs: [
       [`${sy('H')}, ${sy('lmax')}`, 'Curvature sets the largest safe step', c => `${sy('lmax')} = ${num(c.P.eigH[0], 4)}, so steps diverge above 2/${sy('lmax')} = ${num(c.P.lim, 4)}`],
-      [sy('eta'), 'Step size used', c => `${sy('eta')} = 0.2 × 2/${sy('lmax')} = ${num(c.P.eta, 4)}`],
+      [sy('eta'), 'Step size used', c => `${sy('eta')} = ${num(c.P.frac, 2)} × 2/${sy('lmax')} = ${num(c.P.eta, 4)}${c.P.diverged ? ' (too big: the run diverges)' : ''}`],
       [`${sy('t')}, ${sy('grad')}`, 'Loop: predict → residual → loss → gradient → update', c => `<div class="it-tbl"><table><tr><th>${sy('t')}</th><th>${sy('wt')}_t</th><th>${sy('L')}</th><th>‖${sy('grad')}‖</th><th>${sy('wt')}_t − ${sy('eta')}${sy('grad')}</th></tr>` +
         c.P.iters.map(i => `<tr><td>${i.t}</td><td>${vec(i.w, 3)}</td><td>${num(i.L, 4)}</td><td>${num(i.gn, 4)}</td><td>${vec(i.next, 3)}</td></tr>`).join('') + `</table></div>`],
       ['', 'Compared with the closed form', c => { const last = c.P.iters[c.P.iters.length - 1], gap = Math.abs(last.L - c.P.f.SSE / c.P.nTr); return `${gap < 1e-6 ? mark(true) : mark(false, true)} after ${last.t} iterations ${sy('L')} = ${num(last.L, 4)} vs ${num(c.P.f.SSE / c.P.nTr, 4)}`; }]
