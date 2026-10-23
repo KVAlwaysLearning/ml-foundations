@@ -22,7 +22,7 @@
   panel.innerHTML = `<div class="crumb" id="crumb"></div><h2 id="vtitle"></h2><p class="vdesc" id="vdesc"></p>
     <div class="chips" id="chips" role="group" aria-label="Variants"></div><div id="planned"></div>
     <p class="hint-s">Sliders are in the floating <b>Controls</b> box at the bottom right of the screen.</p>
-    <a class="to-proc" href="#changed">What changed and how to see it ↓</a> <a class="to-proc" href="#process">The process ↓</a> <a class="to-proc" href="#notes">Interview notes ↓</a>`;
+    <a class="to-proc" href="#changed">What changed and how to see it ↓</a> <a class="to-proc" href="#process">The process ↓</a> <a class="to-proc" href="#notes">Interview notes ↓</a> <a class="to-proc" href="#code">Python code ↓</a>`;
   $('#chips').onclick = e => { const b = e.target.closest('button'); if (b) select({ attr: S.view, variant: b.dataset.id }); };
 
   // ---- floating controls ----
@@ -72,7 +72,11 @@
     const dd = Object.assign({}, d, { X, y, px: tr.map(i => d.px[i]), x2: d.x2 ? tr.map(i => d.x2[i]) : undefined, group: d.group ? tr.map(i => d.group[i]) : undefined, N: tr.length,
       truth: Object.assign({}, d.truth, { fn: d.truth.fn ? (v, k) => d.truth.fn(v, tr[k]) : null }) });
     const f = ST.ols(X, y); let dg = null; try { dg = ST.diagnostics(X, y, f); } catch (err) {}
-    return { d: dd, f, dg: dg || { vif: [], jb: {}, dw: NaN } };
+    // the standardised design and its Gram matrix, exactly as in steps 5 and 6
+    const mu = X[0].map((_, j) => j ? ST.mean(X.map(r => r[j])) : 0), sd = X[0].map((_, j) => { if (!j) return 1; const s = Math.sqrt(ST.mean(X.map(r => (r[j] - mu[j]) ** 2))); return s > 1e-12 ? s : 1; });
+    const Z = X.map(r => r.map((v, j) => j ? (v - mu[j]) / sd[j] : 1)), A = LA.mul(LA.T(Z), Z), ev = LA.eigSym(A).values;
+    const gram = { A, eig: ev, kappa: ev[ev.length - 1] > 1e-12 * ev[0] ? ev[0] / ev[ev.length - 1] : Infinity };
+    return { d: dd, f, dg: dg || { vif: [], jb: {}, dw: NaN }, gram };
   }
   function mcFor(variant, strength, focus, truth){
     const key = [variant, strength, S.N, S.sigma].join('|');
@@ -286,6 +290,7 @@
     const ctx = { P, d, S, attr: a, variant: v, isBase, focus: d.focus[0] };
     const lvOf = id => inf[id] ? inf[id][0] : 'none';
     try { NOTES.render(notesEl, { P, d, a, v, isBase, inf, S, cur }); MATH.typeset(notesEl); } catch (err) { console.error(err); }
+    try { CODE.render($('#code'), { P, d, a, v, isBase, inf, S }); } catch (err) { console.error(err); $('#code').innerHTML = `<p class="pv-note">The code could not be generated: ${esc(err.message)}</p>`; }
     const groupsBy = { origin: [], major: [], minor: [], none: [] }; STEPS.forEach(st => groupsBy[lvOf(st.id)].push(st.id));
     const legend = Object.entries(LEVELS).map(([k, L]) => `<span class="lv ${L.cls}"><b>${L.glyph}</b> ${L.label}</span>`).join('') +
       Object.entries(MARKS).map(([k, m]) => `<span class="lv"><span class="mk mk-${k}">${m[0]}</span> ${m[1]}</span>`).join('');

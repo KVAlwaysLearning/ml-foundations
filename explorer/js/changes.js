@@ -79,7 +79,7 @@ const CHG = (() => {
       ['Durbin–Watson (≈ 2 is healthy)', base.dg.dw, cur.dg.dw, t => n(t, 2), (x, y) => Math.abs(x - y) > 0.4],
       ['Jarque–Bera p (bell shape)', base.dg.jb.p, cur.dg.jb.p, pf, (x, y) => (x < 0.05) !== (y < 0.05)],
       ['Largest VIF', vif(base.dg), vif(cur.dg), fmtI, (x, y) => !isFinite(y) || y > 2 * x],
-      ['Condition number κ', fb.kappa, f.kappa, t => isFinite(t) ? n(t, 0) : '∞', (x, y) => !isFinite(y) || y > 3 * x]
+      ['Condition number κ (eigenvalues of X̃ᵀX̃, step 6)', base.gram?.kappa, cur.gram?.kappa, t => isFinite(t) ? n(t, 0) : '∞', (x, y) => !isFinite(y) || y > 3 * x]
     ];
     const rows = M.map(([lab, b, c, fm, ch]) => { const moved = isFinite(b) && (isFinite(c) ? ch(b, c) : true); return `<tr class="${moved ? 'hl' : ''}"><td>${lab}</td><td>${fm(b)}</td><td>${fm(c)}</td><td>${moved ? '<b>changed</b>' : 'about the same'}</td></tr>`; }).join('');
     const steps = STEPS.filter(st => inf[st.id] && inf[st.id][0] !== 'none').map(st => { const L = LEVELS[inf[st.id][0]];
@@ -96,6 +96,7 @@ const CHG = (() => {
         <li><a href="#notes" data-goto="notes">Interview notes</a>: the same story in plain words.</li></ol>
         <p class="chg-q">Steps this variant leaves untouched: ${quiet || 'none'}. That is often the interview point too.</p></div>
       <div><h3>Numbers, baseline → this variant</h3><div class="sig-tbl"><table><tr><th>quantity</th><th>baseline</th><th>this variant</th><th></th></tr>${rows}</table></div>
+      ${cur.gram ? EIG.details(cur.gram.A, cur.d.names, `How the eigenvalues behind κ are calculated (this variant: κ = ${isFinite(cur.gram.kappa) ? n(cur.gram.kappa, 1) : '∞'})`) : ''}
       <p class="chg-q">All on the training rows: the same numbers the process steps show. "Changed" means it moved by a meaningful amount, or a test crossed p = 0.05.</p></div></div>`;
   }
 
@@ -140,5 +141,5 @@ const CHG = (() => {
       ing.vals.slice(0, m).forEach((t, i) => c.dot([i + 1, t], C('--surface'), 2.4, false, 0.9)); c.end(); c.legend([[C('--muted'), 'baseline', true], [C('--surface'), 'this variant']]); }));
     return out;
   }
-  return { render };
+  return { render, recipe: recipeOf };
 })();

@@ -413,3 +413,15 @@ a.term:hover{color:var(--surface)}
 .mxm-line{font-variant-numeric:tabular-nums}
 .mxm-all summary{cursor:pointer;font:600 13.5px var(--sans);color:var(--surface);width:auto !important}
 .mxm-tbl{max-height:320px;overflow:auto}
+
+/* ---------- code section ---------- */
+.cd-cells{display:grid;gap:8px;margin-top:10px}
+.cd{border:1px solid var(--rule);border-radius:10px;background:var(--panel);min-width:0}
+.cd > summary{cursor:pointer;padding:9px 13px;font:700 15px var(--sans);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline}
+.cd-tag{font:700 11px var(--sans);text-transform:uppercase;letter-spacing:.05em;color:var(--residual);border:1px solid var(--residual);border-radius:999px;padding:1px 7px}
+.cd-link{font:600 13px var(--sans);color:var(--surface);text-decoration:none;margin-left:auto}
+.cd-pre{margin:0;padding:12px 14px;overflow-x:auto;background:var(--paper);border-top:1px solid var(--rule);border-radius:0 0 10px 10px;font:13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;tab-size:4}
+.cd-pre code{font:inherit;white-space:pre}
+.py-c{color:var(--floor)}
+.py-s{color:var(--residual)}
+.py-k{color:var(--surface);font-weight:700}

@@ -85,6 +85,7 @@ const EIG = (() => {
     const equal = lam[0] - lo < 1e-6 * Math.max(1, lam[0]);
     return intro + body + `<p><b>What they mean here.</b> Each eigenvalue says how much information the data carry along its direction v (a combination of the weights). ${equal ? `All of them are equal (${n(lo, 4)}): every direction is equally well determined, which is what standardised, uncorrelated columns give. Compare a multicollinearity variant, where one eigenvalue collapses toward 0.` : `The smallest, λ_min = ${n(lo, 6)}, is the least-pinned-down direction ${vec(vlo, 3)}${names ? ` over [${names.join(', ')}]` : ''}. If λ_min = 0, moving the weights along that direction changes no prediction at all.`}</p>`;
   }
+  const details = (A, names, title) => `<details class="reg eig-how"><summary>${title || 'How these eigenvalues are calculated'}</summary><div class="reg-body">${html(A, names)}</div></details>`;
   const ol2 = items => `<ol class="wsteps">${items.map(s => `<li>${s}</li>`).join('')}</ol>`;
-  return { html };
+  return { html, details };
 })();
