@@ -204,7 +204,7 @@ const EXPLAIN = (() => {
   ];
   E['9a'] = [
     c => { const P = c.P, f = P.f, X = P.Xtr, y = P.ytr, N = X.length, p = P.P, XT = LA.T(X), cols = P.names.map((_, j) => colLab(P, j)), A = f.XtX, b = f.Xty;
-      const wn = j => `w̃${'₀₁₂₃₄₅₆'[j]}`;
+      const wn = j => `w̃${subN(j)}`;
       const eqs = A.map((r, j) => `${r.map((v, k) => `${n(v, 3)}·${wn(k)}`).join(' + ')} = ${n(b[j], 3)}`).join('<br>');
       const one = p === 2 ? [
         `With one feature the model of step 7 is ŷᵢ = ${wn(0)}·1 + ${wn(1)}·x̃ᵢ, so the loss of step 8 is L = (1/N) Σᵢ (yᵢ − ${wn(0)}·1 − ${wn(1)}·x̃ᵢ)². The "1" is the intercept column of X̃ (step 6): every row has it, so it multiplies ${wn(0)}.`,
@@ -234,7 +234,7 @@ const EXPLAIN = (() => {
       return ex(`To solve A·w̃ = b we multiply both sides by the inverse of A, the matrix that undoes A (A⁻¹A = I). Then w̃ = (X̃ᵀX̃)⁻¹ X̃ᵀy: each weight is one row of the inverse dotted with X̃ᵀy.`,
         TX(String.raw`\tilde X^\top\tilde X\,\tilde w = \tilde X^\top y \;\Rightarrow\; \tilde w = (\tilde X^\top\tilde X)^{-1}\,\tilde X^\top y`),
         ol([`<b>The inverse.</b> ${inv}`,
-          `<b>Each weight is a row of the inverse dotted with X̃ᵀy:</b> ` + f.w.map((wj, jj) => `w̃${'₀₁₂₃₄₅₆'[jj]} = ${f.inv[jj].map((v, k) => `${n(v, 5)} × ${n(f.Xty[k], 3)}`).join(' + ')} = <b>${n(wj)}</b>`).join('; ') + '. The same products as a matrix multiplication:',
+          `<b>Each weight is a row of the inverse dotted with X̃ᵀy:</b> ` + f.w.map((wj, jj) => `w̃${subN(jj)} = ${f.inv[jj].map((v, k) => `${n(v, 5)} × ${n(f.Xty[k], 3)}`).join(' + ')} = <b>${n(wj)}</b>`).join('; ') + '. The same products as a matrix multiplication:',
           `<b>Multiply.</b>` + MXM.html(f.inv, f.Xty.map(v => [v]), { a: '(X̃ᵀX̃)⁻¹', b: 'X̃ᵀy', c: 'w̃', aRows: cols, aCols: cols, bCols: ['w̃'], pick: [Math.min(1, p - 1), 0] }) + `So w̃ = <b>${vec(f.w, 4)}</b>: these are the weights used in steps 7, 8 and everything after.`,
           `<b>Check.</b> At the solution the residuals e = y − X̃w̃ (step 8) are uncorrelated with every column: X̃ᵀe should be 0.` + MXM.html(XT, e.map(v => [v]), { a: 'X̃ᵀ', b: 'e', c: 'X̃ᵀe', aRows: cols, aCols: rowLabs(N), bCols: ['e'], pick: [0, 0], why: 'The first row (the 1s) gives Σe = 0: with an intercept the residuals always add to zero.' }),
           p <= 2 ? `<b>The whole fit once more, as one walkthrough.</b> This is the same procedure every "regress A on B" in step 10 uses: steps 6 → 9a with that test's target and columns.` + REG.block(X, y, { cols, target: 'y', from: 'the training targets (step 4)', colsFrom: 'the design matrix X̃ from step 6', title: 'Every number of this solve, step by step (steps 6 → 9a)' }) : '']),
@@ -510,6 +510,7 @@ const EXPLAIN = (() => {
           (isFinite(vif) && f.inv ? ` Check: N × [(X̃ᵀX̃)⁻¹]ⱼⱼ = ${N} × ${n(f.inv[j][j], 6)} = ${n(N * f.inv[j][j], 3)} (standardised features make the two equal). The SE of this coefficient is √VIF = ${n(Math.sqrt(vif), 3)} times what it would be with unrelated features.` : !isFinite(vif) ? ' The other columns reproduce it exactly, so its coefficient is not identifiable.' : '') +
           (P.P === 2 ? ` With one feature the "others" are just the intercept: the best prediction is the mean (0 after standardising), so SSE = SST, R² = 0 and VIF = 1.` : '') +
           REG.block(others, col, { cols: onames.map(o2 => labX(P, o2)), target: labX(P, nm), from: `the standardised ${nm} column of X̃ (step 6)`, colsFrom: 'the other columns of X̃', title: `How "regress ${nm} on the other features" is done (steps 6 → 9a again)` }); });
+      if (!P.dg?.vif?.length) return unavailable('VIF needs more training rows than coefficients.');
       const vmax = Math.max(...P.dg.vif);
       return ex(`The variance inflation factor asks: <i>how much of this feature can the other features already predict?</i> Run an ${g('aux', 'auxiliary regression')} of feature j on all the other features. If they predict it well (R²ⱼ near 1), the feature brings little new information. The data then cannot tell its effect apart from theirs, and its coefficient's variance is multiplied by 1/(1 − R²ⱼ). y plays no part in this.`,
         TX(String.raw`\begin{gathered}\text{VIF}_j = \dfrac{1}{1-R_j^2}\quad(R_j^2 \text{ from regressing } x_j \text{ on the other features})\\ \operatorname{Var}(\hat w_j) = \dfrac{\sigma^2}{\sum_i (x_{ij}-\bar x_j)^2}\cdot\text{VIF}_j\end{gathered}`),

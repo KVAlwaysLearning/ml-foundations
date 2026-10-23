@@ -26,7 +26,7 @@ const REG = (() => {
     }
     const c = new Array(p).fill(0), back = [];
     for (let i = p - 1; i >= 0; i--) { let r = M[i][p]; const terms = []; for (let j = i + 1; j < p; j++) { r -= M[i][j] * c[j]; terms.push(`${n(M[i][j], 4)} × ${n(c[j], 4)}`); }
-      c[i] = r / M[i][i]; back.push({ i, txt: `c${'₀₁₂₃₄₅₆₇₈₉'[i] || i} = (${n(M[i][p], 4)}${terms.length ? ' − ' + terms.join(' − ') : ''}) / ${n(M[i][i], 4)} = <b>${n(c[i], 4)}</b>` }); }
+      c[i] = r / M[i][i]; back.push({ i, txt: `c${subN(i)} = (${n(M[i][p], 4)}${terms.length ? ' − ' + terms.join(' − ') : ''}) / ${n(M[i][i], 4)} = <b>${n(c[i], 4)}</b>` }); }
     return { c, stages, back: back.reverse(), singular: false };
   }
 

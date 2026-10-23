@@ -56,3 +56,5 @@ const MATH = (() => {
 })();
 /* display formula; falls back to the TeX source in a readable form */
 const TX = src => MATH.tex(src, true) || `<span class="tx-src">${src.replace(/\\(dfrac|frac|text|operatorname|mathrm|begin\{gathered\}|end\{gathered\}|qquad|quad|left|right|Big|big|,|;)/g, ' ').replace(/[{}\\]/g, '')}</span>`;
+/* any number as Unicode subscript digits: 12 -> ₁₂ */
+const subN = k => String(k).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch] ?? ch).join('');

@@ -6,14 +6,14 @@
 (() => {
   const ATTRS = CATALOG.flatMap(b => b.attrs), attrById = id => ATTRS.find(a => a.id === id);
   const branchOf = a => CATALOG.find(b => b.id === a.branch);
-  const S = { attr: 'linearity', variant: 'linear', view: 'linearity', N: 60, sigma: 2, strength: 1, seed: 1, cmp: true, res: false, lr: 0.2, iters: 400, onlyAffected: false, expandAll: false };
+  const S = { attr: 'linearity', variant: 'linear', view: 'linearity', N: 60, sigma: 2, strength: 1, seed: 1, cmp: true, res: false, lr: 0.2, iters: 400, k: 1, onlyAffected: false, expandAll: false };
 
   // ---- read the URL hash ----
   const hp = new URLSearchParams(location.hash.slice(1));
   if (hp.get('a') && attrById(hp.get('a'))?.live) { S.attr = S.view = hp.get('a'); const v = hp.get('v'); S.variant = attrById(S.attr).variants.some(x => x.id === v) ? v : attrById(S.attr).variants[0].id; }
-  [['N', 'N'], ['s', 'sigma'], ['k', 'strength'], ['seed', 'seed'], ['lr', 'lr'], ['it', 'iters']].forEach(([k, f]) => { const v = parseFloat(hp.get(k)); if (isFinite(v)) S[f] = v; });
+  [['N', 'N'], ['s', 'sigma'], ['k', 'strength'], ['seed', 'seed'], ['lr', 'lr'], ['it', 'iters'], ['f', 'k']].forEach(([k, f]) => { const v = parseFloat(hp.get(k)); if (isFinite(v)) S[f] = v; });
   if (hp.get('cmp') === '0') S.cmp = false;
-  const writeHash = () => history.replaceState(null, '', '#' + new URLSearchParams({ a: S.attr, v: S.variant, N: S.N, s: S.sigma, k: S.strength, seed: S.seed, lr: S.lr, it: S.iters, cmp: S.cmp ? 1 : 0 }).toString());
+  const writeHash = () => history.replaceState(null, '', '#' + new URLSearchParams({ a: S.attr, v: S.variant, N: S.N, s: S.sigma, k: S.strength, seed: S.seed, lr: S.lr, it: S.iters, f: S.k, cmp: S.cmp ? 1 : 0 }).toString());
   const store = { get(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch (e) {} } };
 
   // ---- layout ----
@@ -34,6 +34,7 @@
     <div class="ctlbox-r ctlbox-fs"><span>Text size</span><button type="button" class="btn ghost" id="fsm" aria-label="Smaller text">A−</button><button type="button" class="btn ghost" id="fsp" aria-label="Larger text">A+</button></div></div>`;
   document.body.appendChild(box);
   const sl = $('#fboxS', box);
+  const sF = slider(sl, { label: 'Number of features k', min: 1, max: 10, step: 1, value: S.k, digits: 0, onInput: v => { S.k = v; update(); } });
   const sN = slider(sl, { label: 'Sample size N', min: 8, max: 300, step: 1, value: S.N, digits: 0, onInput: v => { S.N = v; update(); } });
   const sS = slider(sl, { label: 'Noise σ', min: 0, max: 5, step: 0.05, value: S.sigma, onInput: v => { S.sigma = v; update(); } });
   const sK = slider(sl, { label: 'Strength', min: 0, max: 1, step: 0.01, value: S.strength, onInput: v => { S.strength = v; update(); } });
@@ -64,7 +65,11 @@
 
   // ---- computation: one dataset, one split, one run ----
   const mcCache = new Map(); let mcTimer = null, R = 200;
-  const gen = (variant, strength) => GEN.generate(variant, { N: S.N, sigma: S.sigma, strength, seed: S.seed });
+  const kEff = variant => Math.max(S.k, GEN.baseCount(variant));
+  /* enough rows for the coefficients and the tests: N_train ≥ p + 6, where p = features + 1 (+ categorical columns) */
+  const nMin = variant => Math.max(8, Math.ceil((kEff(variant) + 1 + 3 + 6) / 0.8));
+  const nEff = variant => Math.max(S.N, nMin(variant));
+  const gen = (variant, strength) => GEN.generate(variant, { N: nEff(variant), sigma: S.sigma, strength, seed: S.seed, k: kEff(variant) });
   /* the training rows of a dataset, fitted in original units (same predictions and diagnostics as the standardised run) */
   function view(d, tr){
     tr = tr.filter(i => i < d.y.length);
@@ -79,9 +84,10 @@
     return { d: dd, f, dg: dg || { vif: [], jb: {}, dw: NaN }, gram };
   }
   function mcFor(variant, strength, focus, truth){
-    const key = [variant, strength, S.N, S.sigma].join('|');
+    const key = [variant, strength, nEff(variant), S.sigma, kEff(variant)].join('|');
     if (!mcCache.has(key)) {
-      mcCache.set(key, ST.monteCarlo(r => GEN.generate(variant, { N: S.N, sigma: S.sigma, strength, seed: 5000 + r }), R, focus, truth));
+      const kk = kEff(variant), NN = nEff(variant);
+      mcCache.set(key, ST.monteCarlo(r => GEN.generate(variant, { N: NN, sigma: S.sigma, strength, seed: 5000 + r, k: kk }), R, focus, truth));
       if (mcCache.size > 40) mcCache.delete(mcCache.keys().next().value);
     }
     return mcCache.get(key);
@@ -95,7 +101,7 @@
     const tv = view(d, P.tr), tb = isBase ? tv : view(db, P.tr);
     cur = { d, P, tv }; base = { d: db, tv: tb };
     const inf = influence(a.id, v, isBase, S.strength);
-    const k1 = [v.id, S.strength, S.N, S.sigma].join('|'), k0 = [baseId, 0, S.N, S.sigma].join('|');
+    const k1 = [v.id, S.strength, nEff(v.id), S.sigma, kEff(v.id)].join('|'), k0 = [baseId, 0, nEff(baseId), S.sigma, kEff(baseId)].join('|');
     mcCur = mcCache.get(k1) || null; mcBase = mcCache.get(k0) || null;
     renderPanel(a, v, isBase); renderChanged(a, v, isBase, inf); renderProcess(a, v, isBase, inf);
     clearTimeout(mcTimer);
@@ -118,7 +124,9 @@
     $('#fboxV').textContent = `${a.name} › ${v.name}`;
     sK.el.style.display = v.strength ? '' : 'none';
     sK.el.querySelector('label').firstChild.textContent = 'Strength: ' + (v.strength || '');
-    sN.set(S.N); sS.set(S.sigma); sK.set(S.strength); sLR.set(S.lr); sIt.set(S.iters);
+    sF.set(kEff(v.id)); sF.el.querySelector('label').firstChild.textContent = GEN.baseCount(v.id) > 1 ? `Number of features k (this variant has ${GEN.baseCount(v.id)} built in)` : 'Number of features k';
+    sN.set(nEff(v.id)); sN.el.querySelector('label').firstChild.textContent = nMin(v.id) > 8 ? `Sample size N (at least ${nMin(v.id)} for ${kEff(v.id)} features)` : 'Sample size N';
+    sS.set(S.sigma); sK.set(S.strength); sLR.set(S.lr); sIt.set(S.iters);
     $('#cmp').checked = S.cmp; $('#seedlbl').textContent = 'sample #' + S.seed;
     if (!viewA.live) {
       $('#vtitle').textContent = viewA.name;
@@ -154,7 +162,7 @@
     const lo = Math.min(...xs), hi = Math.max(...xs), gx = grid(lo, hi);
     const lineGroups = (d.names.includes('group') || d.names.includes('A')) ? [...Array(groups).keys()] : [null];
     const fitLines = lineGroups.map(g => gx.map(x => [x, LA.dot(rowAt(d, x, g ?? 0), f.w)]));
-    const trueLines = d.truth.byGroup ? d.truth.byGroup.map(fn => gx.map(x => [x, fn(x)])) : d.truth.fn && d.X[0].length === 2 ? [gx.map(x => [x, d.truth.fn(x, 0)])] : [];
+    const trueLines = d.truth.byGroup && !d.truth.byGroupPartial ? d.truth.byGroup.map(fn => gx.map(x => [x, fn(x)])) : d.truth.fn && d.X[0].length === 2 ? [gx.map(x => [x, d.truth.fn(x, 0)])] : [];
     let baseLine = null;
     if (S.cmp && !isBase) { const bd = base.tv.d, bx = bd.px; baseLine = grid(Math.min(...bx), Math.max(...bx)).map(x => [x, LA.dot(rowAt(bd, x, 0), base.tv.f.w)]); }
     const ys = [...d.y, ...fitLines.flat().map(p => p[1])];
@@ -257,7 +265,7 @@
       P.end(); P.legend([[css('--surface'), 'actual spread of the estimate'], [css('--ink'), 'spread the classical SE claims', true], [css('--normal'), 'true value'], ...(hb ? [[css('--muted'), 'baseline']] : [])]);
     }
     if (mcRO) { mcRO.innerHTML = c.map(m => `<span>${esc(names[m.j])}: average estimate <b>${num(m.mean, 3)}</b>${!m.identifiable ? ' (<b>not identifiable</b>)' : m.truth != null ? ` (truth ${num(m.truth, 2)}, bias <b>${num(m.mean - m.truth, 3)}</b>)` : ''}; actual SD <b>${num(m.sd, 3)}</b> vs average reported SE <b>${isFinite(m.meanSE) ? num(m.meanSE, 3) : 'n/a'}</b>; 95% CI covers the truth <b>${isFinite(m.coverage) ? num(100 * m.coverage, 0) + '%' : 'n/a'}</b> of the time</span>`).join('') +
-      `<span class="muted">Each of the 200 datasets has N = ${S.N} rows from the same recipe and is fitted on all its rows by the closed form of step 9a. A trustworthy SE matches the actual SD, and a valid 95% interval covers the truth about 95% of the time.</span>`; MATH.typeset(mcRO); }
+      `<span class="muted">Each of the 200 datasets has N = ${cur.d.y.length} rows from the same recipe and is fitted on all its rows by the closed form of step 9a. A trustworthy SE matches the actual SD, and a valid 95% interval covers the truth about 95% of the time.</span>`; MATH.typeset(mcRO); }
   }
 
   // ---- what changed and how to see it ----
@@ -279,7 +287,9 @@
   const procEl = $('#process'), symEl = $('#symbols'), basicsEl = $('#basics');
   let usedSyms = {}, procCharts = [];
   const openHow = new Set();
-  procEl.addEventListener('toggle', e => { const d = e.target; if (d.matches && d.matches('details.how')) { d.open ? openHow.add(d.dataset.key) : openHow.delete(d.dataset.key); } }, true);
+  const howBuild = new Map();
+  procEl.addEventListener('toggle', e => { const d = e.target; if (d.matches && d.matches('details.how')) { d.open ? openHow.add(d.dataset.key) : openHow.delete(d.dataset.key);
+    if (d.open) { const b = d.querySelector('.how-body'); if (b && !b.dataset.built) { const fn = howBuild.get(d.dataset.key); if (fn) { b.innerHTML = fn(); b.dataset.built = '1'; } } } } }, true);
   procEl.addEventListener('click', e => {
     const c = e.target.closest('[data-attr]'); if (c) { select({ attr: c.dataset.attr, variant: c.dataset.variant || undefined }); return; }
     const j = e.target.closest('[data-jump]'); if (j) { e.preventDefault(); document.getElementById('step-' + j.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -310,15 +320,17 @@
       const subs = st.subs.map(([sym, label, val], i) => {
         const xf = EXPLAIN[st.id]?.[i], key = st.id + '-' + i;
         let how = '';
-        if (xf) { try { const x = xf(ctx);
-          how = `<details class="how" data-key="${key}"${S.expandAll || openHow.has(key) ? ' open' : ''}><summary>How is this calculated?</summary>
-            <div class="how-body"><div class="hw"><span class="hw-h">In plain words</span><p>${x.plain}</p></div>
+        if (xf) {
+          const build = () => { try { const x = xf(ctx);
+            return `<div class="hw"><span class="hw-h">In plain words</span><p>${x.plain}</p></div>
             ${x.hyp ? `<div class="hw"><span class="hw-h">Hypotheses</span><p>${x.hyp}</p></div>` : ''}
             <div class="hw"><span class="hw-h">Formula</span><div class="hw-f">${x.formula}</div></div>
             <div class="hw"><span class="hw-h">Worked on this data</span><div>${x.calc}</div></div>
             <div class="hw"><span class="hw-h">How to read it</span><p>${x.read}</p></div>
             ${x.pit ? `<div class="hw"><span class="hw-h">Assumes and misses</span><p>${x.pit}</p></div>` : ''}
-            ${x.qa ? `<div class="hw"><span class="hw-h">Interview questions</span><div class="qa">${x.qa.map(([q, a2]) => `<details><summary>${q}</summary><p>${a2}</p></details>`).join('')}</div></div>` : ''}</div></details>`; } catch (err) { console.error(err); } }
+            ${x.qa ? `<div class="hw"><span class="hw-h">Interview questions</span><div class="qa">${x.qa.map(([q, a2]) => `<details><summary>${q}</summary><p>${a2}</p></details>`).join('')}</div></div>` : ''}`; } catch (err) { console.error(err); return '<p class="pv-note">This explanation could not be built.</p>'; } };
+          howBuild.set(key, build); const open = S.expandAll || openHow.has(key);
+          how = `<details class="how" data-key="${key}"${open ? ' open' : ''}><summary>How is this calculated?</summary><div class="how-body"${open ? ' data-built="1"' : ''}>${open ? build() : ''}</div></details>`; }
         const viz = String(st.id) === '10' && DIAG[i] ? `<div class="sub-viz pv-row" data-viz="${i}"></div>` : '';
         return `<div class="sub" id="sub-${st.id}-${i}"><div class="sub-sym">${sym}</div><div class="sub-lbl">${typeof label === 'function' ? label(ctx) : label}</div><div class="sub-val">${(() => { try { return val(ctx); } catch (err) { return '—'; } })()}</div>${viz}${how}</div>`;
       }).join('');
@@ -347,7 +359,15 @@
     procEl.querySelectorAll('.sviz').forEach(el => { const fn = PVIZ[el.dataset.step]; if (!fn) return;
       try { procCharts.push(...(fn(el, ctx) || [])); } catch (err) { console.error(err); el.innerHTML = `<p class="pv-note">This picture could not be drawn: ${esc(err.message)}</p>`; } });
     const sv = id => procEl.querySelector(`.sviz[data-step="${id}"]`);
-    try { const el = sv('9a'); if (el) { const r = document.createElement('div'); r.className = 'pv-row one'; el.prepend(r); procCharts.push(mount(r, 'The training data and the line these weights give (compare with the baseline and the truth)', 300, c => drawFit(c, isBase))); } } catch (err) { console.error(err); }
+    const feats = d.names.slice(1), numeric = feats.filter(nm => !['group', 'A', 'B', 'C'].includes(nm)), kNum = numeric.length, cat = feats.length > kNum;
+    const dimNote = kNum <= 1 ? '' : kNum === 2 && !cat ? `With 2 features the fitted model is a <b>plane</b> in 3 dimensions (x₁, x₂, y), drawn below and rotatable. The flat chart is a slice: y against ${d.names[1]} with ${d.names[2]} held at its mean.`
+      : `With ${kNum} features${cat ? ' plus categorical columns' : ''} the fitted model is a hyperplane in ${feats.length + 1} dimensions, so it <b>cannot be drawn</b> (a picture is possible only up to 3 dimensions: two features and y). The flat chart is a slice: y against ${d.names[1]}, with every other feature held at its mean. The residual charts of step 10 work in any number of dimensions, because residuals are one number per row.`;
+    try { const el = sv('9a'); if (el) { const r = document.createElement('div'); r.className = 'pv-row one'; el.prepend(r);
+      procCharts.push(mount(r, kNum > 1 ? `A slice: y against ${d.names[1]}, other features at their means` : 'The training data and the line these weights give (compare with the baseline and the truth)', 300, c => drawFit(c, isBase)));
+      if (dimNote) { const p = document.createElement('p'); p.className = 'pv-note'; p.innerHTML = dimNote; r.after(p); }
+      if (kNum === 2 && !cat) { const r3 = document.createElement('div'); r3.className = 'pv-row one'; (el.querySelector('.pv-note') || r).after(r3); const tv = cur.tv, tc = d.truth.coef;
+        procCharts.push(P3D.mount(r3, { title: 'The training data and the fitted plane in 3D (drag to rotate)', height: 340, x1: tv.d.X.map(rw => rw[1]), x2: tv.d.X.map(rw => rw[2]), y: tv.d.y, fit: tv.f.w.slice(0, 3), truth: [0, 1, 2].every(q => tc[q] != null) ? [tc[0], tc[1], tc[2]] : null, names: [d.names[1], d.names[2]] })); } } } catch (err) { console.error(err); }
+    try { const el = sv(1); if (el && kNum > 1) { const p = document.createElement('p'); p.className = 'pv-note'; p.innerHTML = `This dataset has ${kNum} features${cat ? ' and categorical columns' : ''}: ${feats.join(', ')}. The scatter shows y against ${d.names[1]} only; the other features also move y, which is part of the vertical spread you see.${kNum > 2 ? ' A single picture of all of them is not possible beyond 3 dimensions.' : ''}`; el.appendChild(p); } } catch (err) { console.error(err); }
     procEl.querySelectorAll('.sub-viz').forEach(el => { (DIAG[el.dataset.viz] || []).forEach(([mode, title]) => { try { procCharts.push(mount(el, title, 230, c => drawDiag(c, mode))); } catch (err) { console.error(err); } }); });
     try { const el = sv(11); if (el) { const r = document.createElement('div'); r.className = 'pv-row one'; el.appendChild(r);
       mcChart = mount(r, 'Is the standard error honest? The slope across 200 fresh datasets', 260, () => drawMC()); procCharts.push(mcChart);

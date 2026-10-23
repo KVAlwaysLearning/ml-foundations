@@ -425,3 +425,4 @@ a.term:hover{color:var(--surface)}
 .py-c{color:var(--floor)}
 .py-s{color:var(--residual)}
 .py-k{color:var(--surface);font-weight:700}
+.sviz .mx-grid,.reg .mx-grid{max-width:100%;overflow-x:auto;position:relative} .sviz{min-width:0}

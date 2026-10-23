@@ -130,7 +130,7 @@ const SIG = (() => {
       draw: el => { const yr = sym(range([e, eb])), r1 = row(el), r2 = row(el), xr = range([x]), gx = Array.from({ length: 61 }, (_, i) => xr[0] + (xr[1] - xr[0]) * i / 60);
         const cOf = grp ? (i => gColor(grp[i], nG)) : null;
         return [chart(r1, 'This variant: data, straight-line fit, true curve (dashed)', 240, c => { c.begin(xr, range([d.y]), 'x', 'y'); x.forEach((v2, i) => c.dot([v2, d.y[i]], cOf ? cOf(i) : C('--floor'), 3, false, 0.75));
-            if (d.truth.byGroup) d.truth.byGroup.forEach((fn, k) => c.line(gx.map(t => [t, fn(t)]), gColor(k, nG), 1.6, [5, 4])); else if (d.truth.fn) c.line(gx.map(t => [t, d.truth.fn(t, 0)]), C('--ink'), 1.6, [5, 4]);
+            if (d.truth.byGroup && !d.truth.byGroupPartial) d.truth.byGroup.forEach((fn, k) => c.line(gx.map(t => [t, fn(t)]), gColor(k, nG), 1.6, [5, 4])); else if (d.truth.fn && !d.truth.partial) c.line(gx.map(t => [t, d.truth.fn(t, 0)]), C('--ink'), 1.6, [5, 4]);
             if (!grp) c.line(xr.map(t => [t, cur.f.w[0] + cur.f.w[1] * t]), C('--surface'), 2.4); c.end(); }),
           chart(r2, 'Baseline: residuals vs x (pink = average per fifth)', 230, c => residVsX(c, base.d.px, eb, yr, { k: 5 })),
           chart(r2, 'This variant: residuals vs x', 230, c => residVsX(c, x, e, yr, { k: 5, colorOf: cOf }))]; },

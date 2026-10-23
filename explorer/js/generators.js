@@ -62,8 +62,9 @@ const GEN = (() => {
   };
   G.dupes = (P, N, sg, s) => {
     const k = 1 + Math.round(2 * s), m = Math.ceil(N / k), xu = sortedX(P, m), x = [], e = [];
-    for (let i = 0; i < m && x.length < N; i++) for (let r = 0; r < k && x.length < N; r++) { x.push(xu[i]); e.push(sg * P.z1[i]); }
-    return oneFeature(x, lin, e, { note: `${m} unique observations, each repeated ${k}×` });
+    const src = [];
+    for (let i = 0; i < m && x.length < N; i++) for (let r = 0; r < k && x.length < N; r++) { x.push(xu[i]); e.push(sg * P.z1[i]); src.push(i); }
+    return oneFeature(x, lin, e, { note: `${m} unique observations, each repeated ${k}×`, src });
   };
   /* ---------- homoscedasticity ---------- */
   const het = mult => (P, N, sg, s) => { const x = sortedX(P, N); return oneFeature(x, lin, x.map((v, i) => sg * ((1 - s) + s * mult(v, P, i)) * P.z1[i])); };
@@ -118,11 +119,36 @@ const GEN = (() => {
     return oneFeature(x, lin, e);
   };
 
-  function generate(variant, { N, sigma, strength, seed }){
+  /* extra independent features, from their own random numbers (shared by a variant and its baseline) */
+  const EXTRA_BETA = [0.8, -0.6, 0.5, -0.4, 0.3, 0.7, -0.5, 0.4, -0.3];
+  const SUBS = ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉', '₁₀'];
+  const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3 };
+  const baseCount = variant => BASE_COUNT[variant] || 1;
+  function addFeatures(r, k, seed){
+    const numeric = r.names.slice(1).filter(nm => !['group', 'A', 'B', 'C'].includes(nm)).length;
+    const add = Math.max(0, Math.min(10, k) - numeric);
+    r.m = numeric; r.extra = add; if (!add) return r;
+    // rename a lone 'x' to 'x₁' so the extras can be x₂, x₃, …
+    if (r.names.includes('x')) { r.names = r.names.map(nm => nm === 'x' ? 'x₁' : nm); if (r.xName === 'x') r.xName = 'x₁'; }
+    const rng = mulberry32(seed * 104729 + 77), K = Math.max(r.y.length, 16), U = Array.from({ length: add }, () => Array.from({ length: K }, () => 10 * rng()));
+    const idx = i => r.src ? r.src[i] : i, start = numeric;
+    for (let q = 0; q < add; q++) {
+      const nm = 'x' + SUBS[start + q], beta = EXTRA_BETA[q], col = r.X.length;
+      r.names.push(nm);
+      r.X.forEach((row, i) => { const v = U[q][idx(i)]; row.push(v); r.y[i] += beta * v; });
+      r.truth.coef[r.X[0].length - 1] = beta;
+    }
+    if (r.truth.fn) { const f0 = r.truth.fn, cols = r.X[0].length, from = cols - add, X = r.X, B = EXTRA_BETA;
+      r.truth.fn = (v, i) => f0(v, i) + (X[i] ? X[i].slice(from).reduce((s, x, q) => s + B[q] * x, 0) : 0); r.truth.partial = true; }
+    if (r.truth.byGroup) { r.truth.byGroupPartial = true; }
+    if (!r.x2 && !r.names.includes('group') && !r.names.includes('A')) r.x2 = r.X.map(row => row[2]);
+    return r;
+  }
+  function generate(variant, { N, sigma, strength, seed, k = 1 }){
     const P = pools(N, seed), fn = G[variant];
     if (!fn) throw new Error('No generator for ' + variant);
-    const r = fn(P, N, sigma, strength);
+    const r = addFeatures(fn(P, N, sigma, strength), k, seed);
     r.N = r.y.length; return r;
   }
-  return { generate, has: id => !!G[id] };
+  return { generate, has: id => !!G[id], baseCount, EXTRA_BETA };
 })();

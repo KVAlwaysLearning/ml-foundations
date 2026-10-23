@@ -30,6 +30,8 @@ const CODE = (() => {
     const dummy = names.includes('A'), mark = s => `   # ← ${s}`;
     const lag = P.nw?.lag ?? Math.max(1, Math.floor(4 * (P.nTr / 100) ** (2 / 9)));
     const fe = feats.filter(x => !['A', 'B', 'C'].includes(x));
+    const X0 = feats[0], others = fe.filter(x => x !== X0 && x !== 'group'), plus = others.length ? ' + ' + others.join(' + ') : '';
+    const extraTxt = d.extra ? `\n#   plus ${d.extra} extra feature${d.extra > 1 ? 's' : ''} (${feats.slice(-d.extra).join(', ')}): each 10*u, independent, true coefficients ${'[' + GEN.EXTRA_BETA.slice(0, d.extra).join(', ') + ']'}` : '';
     const out = [];
     out.push({ id: 'setup', t: 'Setup: the libraries', code:
 `# Linear regression, end to end, with standard libraries.
@@ -58,7 +60,7 @@ print(df.shape)                                  # app: (${P.N}, ${2 + feats.len
 # How the app generated these rows (the recipe, for reference):
 #   inputs x : ${py(rc.x)}
 #   error ε  : ${py(rc.e)}
-#   target y : ${py(rc.y)}` });
+#   target y : ${py(rc.y)}${extraTxt}` });
 
     out.push({ id: 2, t: 'Step 2: clean', code:
 `print("duplicate rows:", df.duplicated(subset=features + ["y"]).sum())   # app: ${P.dupes}
@@ -158,11 +160,11 @@ lr = model.named_steps["linearregression"]; sc = model.named_steps["standardscal
 print(lr.coef_ / sc.scale_, lr.intercept_ - np.sum(lr.coef_ * sc.mean_ / sc.scale_))` });
 
     const FIX = {
-      linearity: vid === 'interaction' ? `smf.ols("y ~ x * group", data=train).fit()   # let the slope differ by group` : vid === 'linear' ? null : vid === 'log' ? `smf.ols("y ~ np.log1p(x)", data=train).fit()   # model the diminishing effect` : vid === 'step' ? `smf.ols("y ~ x + I(x > 5)", data=train).fit()   # add the threshold indicator` : vid === 'periodic' ? `smf.ols("y ~ x + np.sin(1.6 * x) + np.cos(1.6 * x)", data=train).fit()   # seasonal terms` : `smf.ols("y ~ x + I(x ** 2)", data=train).fit()   # or splines: from patsy, bs(x, df=4)`,
-      independence: vid === 'cluster' ? `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="cluster", cov_kwds={"groups": train["${grp}"]})   # or a mixed model: smf.mixedlm("y ~ x", train, groups=train["${grp}"])` : vid === 'dupes' ? `df = df.drop_duplicates(subset=features + ["y"])   # then refit; classical SEs are fine again` : vid === 'indep' ? null : `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HAC", cov_kwds={"maxlags": ${lag}})   # or model the dynamics: sm.tsa.SARIMAX(y, exog=X, order=(1, 0, 0))`,
+      linearity: vid === 'interaction' ? `smf.ols("y ~ ${X0} * group${plus}", data=train).fit()   # let the slope differ by group` : vid === 'linear' ? null : vid === 'log' ? `smf.ols("y ~ np.log1p(${X0})${plus}", data=train).fit()   # model the diminishing effect` : vid === 'step' ? `smf.ols("y ~ ${X0} + I(${X0} > 5)${plus}", data=train).fit()   # add the threshold indicator` : vid === 'periodic' ? `smf.ols("y ~ ${X0} + np.sin(1.6 * ${X0}) + np.cos(1.6 * ${X0})${plus}", data=train).fit()   # seasonal terms` : `smf.ols("y ~ ${X0} + I(${X0} ** 2)${plus}", data=train).fit()   # or splines: bs(${X0}, df=4)`,
+      independence: vid === 'cluster' ? `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="cluster", cov_kwds={"groups": train["${grp}"]})   # or a mixed model: smf.mixedlm("y ~ ${fe.join(' + ')}", train, groups=train["${grp}"])` : vid === 'dupes' ? `df = df.drop_duplicates(subset=features + ["y"])   # then refit; classical SEs are fine again` : vid === 'indep' ? null : `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HAC", cov_kwds={"maxlags": ${lag}})   # or model the dynamics: sm.tsa.SARIMAX(y, exog=X, order=(1, 0, 0))`,
       homoscedasticity: vid === 'constant' ? null : vid === 'groupvar' ? `w = 1 / train.groupby("${grp}")["y"].transform(lambda s: ols.resid[s.index].var())\nsm.WLS(y_tr, sm.add_constant(X_tr), weights=w).fit()   # weight each group by 1 / its variance` : `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HC3")   # robust SEs; or WLS, or model np.log(y)`,
       normality: vid === 'normal' ? null : vid === 'heavy' ? `from sklearn.linear_model import HuberRegressor\nHuberRegressor().fit(Xs_tr, y_tr)   # down-weights the extreme rows` : `# bootstrap the slope instead of trusting the t interval:\nboot = [sm.OLS(s["y"], sm.add_constant(s[features])).fit().params.iloc[1] for s in (train.sample(frac=1, replace=True, random_state=k) for k in range(2000))]\nprint(np.percentile(boot, [2.5, 97.5]))`,
-      multicollinearity: vid === 'uncorr' ? null : dummy ? `pd.get_dummies(df["category"], drop_first=True)   # keep k - 1 dummies` : vid === 'perfect' || vid === 'combo' ? `features = ${F.replace(/, "x\d"\]$/, ']')}   # drop the redundant column, then refit` : `from sklearn.linear_model import RidgeCV\nmake_pipeline(StandardScaler(), RidgeCV(alphas=np.logspace(-3, 3, 50))).fit(X_tr, y_tr)   # shrink the unstable directions`,
+      multicollinearity: vid === 'uncorr' ? null : dummy ? `pd.get_dummies(df["category"], drop_first=True)   # keep k - 1 dummies` : vid === 'perfect' || vid === 'combo' ? `features = [${feats.filter(x => x !== (vid === 'perfect' ? 'x2' : 'x3')).map(x => `"${x}"`).join(', ')}]   # drop the redundant ${vid === 'perfect' ? 'x2' : 'x3'}, then refit` : `from sklearn.linear_model import RidgeCV\nmake_pipeline(StandardScaler(), RidgeCV(alphas=np.logspace(-3, 3, 50))).fit(X_tr, y_tr)   # shrink the unstable directions`,
       exogeneity: vid === 'exo' ? null : `# No residual test can detect this. Add the missing variable if you have it, or use an instrument:\n# from linearmodels.iv import IV2SLS\n# IV2SLS.from_formula("y ~ 1 + [x ~ instrument]", data=df).fit()`
     }[aid];
     out.push({ id: 'fix', t: `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${(influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });

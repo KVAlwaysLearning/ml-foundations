@@ -106,6 +106,7 @@ const CHG = (() => {
     const FD = ctx.full ? ctx.full.cur : cur.d, FB = ctx.full ? ctx.full.base : base.d;
     const rc = recipeOf(a, v), D = diff({ d: FD }, { d: FB }), N = FD.y.length;
     const st = { same: 'unchanged', changed: 'changed', new: 'new column', removed: 'removed' };
+    const ex_ = FD.extra ? `<tr><td>extra features</td><td colspan="2">${FD.extra} independent feature${FD.extra > 1 ? 's' : ''} (${FD.names.slice(-FD.extra).join(', ')}), each 10·u, with true coefficients ${'[' + GEN.EXTRA_BETA.slice(0, FD.extra).join(', ') + ']'} added to y. Identical in the baseline and the variant (the Features slider adds them).</td></tr>` : '';
     const recipe = ['x', 'e', 'y'].map(k => { const same = rc.base[k] === rc.cur[k];
       return `<tr class="${same ? '' : 'hl'}"><td>${{ x: 'inputs x', e: 'error ε', y: 'target y' }[k]}</td><td>${rc.base[k]}</td><td>${same ? '<span class="muted">same</span>' : rc.cur[k]}</td></tr>`; }).join('');
     const yCh = D.find(c => c.key === 'y'), eCh = D.find(c => c.key === 'ε'), xCh = D.filter(c => !['y', 'ε'].includes(c.key));
@@ -122,7 +123,7 @@ const CHG = (() => {
     if (N > show) body += `<tr class="gap"><td>⋮</td>${'<td>⋮</td>'.repeat((head.match(/<th/g) || []).length - 1)}</tr>`;
     el.innerHTML = `<h2 id="chg-h">What changed and how to see it: ${esc(a.name)} › ${esc(v.name)}</h2>
       <p class="hint-s">The variant and the baseline are built from the <b>same random numbers</b>. Whatever differs below is caused by this variant alone. Strength s = ${n(S.strength, 2)}${S.strength === 0 ? ': at 0 the variant equals the baseline, so move the Strength slider to see the change appear' : ''}.</p>
-      <h3>1. In the recipe</h3><div class="sig-tbl"><table class="chg-rec"><tr><th></th><th>baseline</th><th>this variant</th></tr>${recipe}</table></div>
+      <h3>1. In the recipe</h3><div class="sig-tbl"><table class="chg-rec"><tr><th></th><th>baseline</th><th>this variant</th></tr>${recipe}${ex_}</table></div>
       <h3 id="chg-data">2. In the dataset (all ${N} generated rows)</h3><p class="chg-chips">${chips}</p><p class="chg-q">${why}${cur.d.note ? ' ' + esc(cur.d.note) : ''}</p>
       <div class="sig-tbl"><table>${head}</tr>${body}</table></div>
       <div class="chg-pics"></div>
