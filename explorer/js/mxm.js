@@ -26,13 +26,23 @@ const MXM = (() => {
       `<tr><th>${aC[r]}</th>${showJ.map(j => j < 0 ? gap : cell(B[r][j], j === pj ? 'on' : '')).join('')}</tr>`).join('') + '</table>';
     const tC = `<table class="mxt mxc"><tr><th></th>${showJ.map(j => j < 0 ? '<th>⋯</th>' : `<th>${bC[j]}</th>`).join('')}</tr>` + showR.map(i => i < 0 ? `<tr><th>⋮</th>${showJ.map(() => '<td class="mx-gap">⋮</td>').join('')}</tr>` :
       `<tr><th>${aR[i]}</th>${showJ.map(j => j < 0 ? gap : `<td class="pick${i === pi && j === pj ? ' sel' : ''}" data-mxm="${id}" data-i="${i}" data-j="${j}" title="click: how is this entry made?">${n(C[i][j])}</td>`).join('')}</tr>`).join('') + '</table>';
-    const terms = [...Array(k).keys()], shown = k <= 6 ? terms : [0, 1, 2, -1, k - 1];
-    const line = shown.map(t => t < 0 ? '⋯' : `${n(A[pi][t])}×${n(B[t][pj])}`).join(' + ');
+    const terms = [...Array(k).keys()], prods = terms.map(t => A[pi][t] * B[t][pj]);
+    const line = terms.map(t => `(${n(A[pi][t])} × ${n(B[t][pj])})`).join(' + ');
+    let run = 0;
+    const tbl = `<div class="wk mxm-tbl"><table><tr><th>pair</th><th>row ${aR[pi]} of ${o.a || 'A'}</th><th>column ${bC[pj]} of ${o.b || 'B'}</th><th>product</th><th>running total</th></tr>` +
+      terms.map(t => { run += prods[t]; return `<tr><td>${aC[t]}</td><td>${n(A[pi][t])}</td><td>${n(B[t][pj])}</td><td>${n(prods[t])}</td><td>${n(run)}</td></tr>`; }).join('') +
+      `<tr class="tot"><td>Σ</td><td></td><td></td><td>${n(C[pi][pj])}</td><td>→ entry (${aR[pi]}, ${bC[pj]})</td></tr></table></div>`;
+    const A_ = o.a || 'A', B_ = o.b || 'B', C_ = o.c || 'C';
     return `<div class="mxm" id="mxm-${id}">${o.why ? `<p class="mxm-why">${o.why}</p>` : ''}
-      <div class="mxm-row"><div class="mxm-m"><div class="mxm-n">${o.a || 'A'} <small>${m}×${k}</small></div>${tA}</div><div class="mxm-op">×</div>
-      <div class="mxm-m"><div class="mxm-n">${o.b || 'B'} <small>${k}×${nc}</small></div>${tB}</div><div class="mxm-op">=</div>
-      <div class="mxm-m"><div class="mxm-n">${o.c || 'C'} <small>${m}×${nc}</small></div>${tC}</div></div>
-      <p class="mxm-sum"><b>Entry (${aR[pi]}, ${bC[pj]})</b> = row <b>${aR[pi]}</b> of ${o.a || 'A'} · column <b>${bC[pj]}</b> of ${o.b || 'B'}: multiply the pairs and add${k > 6 ? ` all ${k} of them` : ''}: ${line} = <b>${n(C[pi][pj])}</b>.${o.note ? ' ' + o.note(pi, pj) : ''} <span class="muted">Click any entry of ${o.c || 'C'} to see how it is made.</span></p></div>`;
+      <div class="mxm-row"><div class="mxm-m"><div class="mxm-n">${A_} <small>${m}×${k}</small></div>${tA}</div><div class="mxm-op">×</div>
+      <div class="mxm-m"><div class="mxm-n">${B_} <small>${k}×${nc}</small></div>${tB}</div><div class="mxm-op">=</div>
+      <div class="mxm-m"><div class="mxm-n">${C_} <small>${m}×${nc}</small></div>${tC}</div></div>
+      <div class="mxm-sum"><p><b>Sample entry: row ${aR[pi]} of ${A_} with column ${bC[pj]} of ${B_}</b> (both highlighted). Pair them up position by position, multiply each pair, and add all ${k} products:</p>
+        <p class="mxm-line">${line}</p>
+        <p>= ${prods.map(v => n(v)).join(' + ')}</p>
+        <p>= <b>${n(C[pi][pj])}</b> → written into <b>row ${aR[pi]}, column ${bC[pj]}</b> of ${C_} (the outlined cell).${o.note ? ' ' + o.note(pi, pj) : ''}</p>
+        <details class="mxm-all"><summary>The same sum as a table: every pair, its product and the running total</summary>${tbl}</details>
+        <p class="muted">Every other entry of ${C_} is made the same way from its own row and column. Click any entry of ${C_} to see its full sum.</p></div></div>`;
   }
   function html(A, B, o = {}){
     if (reg.size > 400) reg.clear();

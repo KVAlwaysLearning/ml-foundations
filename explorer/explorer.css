@@ -409,3 +409,7 @@ a.term:hover{color:var(--surface)}
 /* ---------- stronger "new column" highlight ---------- */
 .wk td.ldg-new,.wk th.ldg-new{background:color-mix(in srgb,var(--residual) 30%,transparent) !important;border-left:2px solid var(--residual);border-right:2px solid var(--residual);font-weight:700}
 .ldg-tag{display:block;font:700 10.5px var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--residual)}
+.mxm-sum p{margin:4px 0;font:15px/1.65 var(--sans);overflow-wrap:anywhere}
+.mxm-line{font-variant-numeric:tabular-nums}
+.mxm-all summary{cursor:pointer;font:600 13.5px var(--sans);color:var(--surface);width:auto !important}
+.mxm-tbl{max-height:320px;overflow:auto}
