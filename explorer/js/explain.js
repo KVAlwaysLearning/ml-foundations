@@ -117,10 +117,10 @@ const EXPLAIN = (() => {
         `<p>The same steps for each feature: ` + c.P.names.slice(1).map((nm, k) => { const x = c.d.X.map(r => r[k + 1]), mx_ = mean(x), d = x.map(v => v - mx_), a2 = mean(d.map(v => v * v)), a3 = mean(d.map(v => v ** 3));
           return `${nm}: mean ${n(mx_)}, m₂ = ${n(a2, 4)}, m₃ = ${n(a3, 4)}, γ₁ = ${n(a3, 4)} / ${n(a2 ** 1.5, 4)} = <b>${a2 > 0 ? n(a3 / a2 ** 1.5, 2) : '0'}</b>`; }).join('; ') + '.</p>',
         'Roughly: |γ₁| < 0.5 fairly symmetric, 0.5–1 moderately skewed, > 1 strongly skewed. Skewed y can hint at skewed errors or a needed log transform.'); },
-    c => { const cc = corrCalc(c.d.X.map(r => r[1]), c.d.y, c.P.names[1], 'y');
+    c => { const jf = c.focus || 1, cc = corrCalc(c.d.X.map(r => r[jf]), c.d.y, c.P.names[jf], 'y');
       return ex(`The ${g('corr', 'correlation')} r asks: when x is above its average, is y usually above its average too? Multiply the two ${g('deviation', 'deviations')} for each row: positive when they agree, negative when they disagree. Add them up, then divide by the two spreads so r lands between −1 and 1.`,
         TX(String.raw`r = \dfrac{\sum_i (x_i-\bar x)(y_i-\bar y)}{\sqrt{\sum_i (x_i-\bar x)^2\;\sum_i (y_i-\bar y)^2}}`),
-        cc.html + (c.P.P > 2 ? `<p>The other features: ${c.P.names.slice(2).map((nm, k) => `r(${nm}, y) = ${n(c.P.eda.corrXY[k + 1], 3)}`).join(', ')}, with the same table.</p>` : ''),
+        cc.html + (c.P.P > 2 ? `<p>The other features: ${c.P.names.map((nm, k) => [nm, k]).filter(([, k]) => k > 0 && k !== jf).map(([nm, k]) => `r(${nm}, y) = ${n(c.P.eda.corrXY[k - 1], 3)}`).join(', ')}, with the same table. (The worked feature is chosen in the Controls box.)</p>` : ''),
         'r measures only straight-line association: a perfect curve can have r near 0. That is why the scatter plot matters as much as the number. r² is the R² of a regression on that one feature.'); },
     c => { if (c.P.P <= 2) return ex('The same correlation formula, applied to each pair of features instead of a feature and y.', TX(String.raw`r(x_j, x_k)\ \text{for every pair of features}`), 'With only one feature there is no pair to compare.', 'Above about 0.7 the features share a lot of information; above 0.9 the separate coefficients become unstable (multicollinearity).');
       let best = null; for (let a = 1; a < c.P.P; a++) for (let b = a + 1; b < c.P.P; b++) { const cc = corrCalc(c.d.X.map(r => r[a]), c.d.X.map(r => r[b]), c.P.names[a], c.P.names[b]); if (isFinite(cc.r) && (!best || Math.abs(cc.r) > Math.abs(best.cc.r))) best = { a, b, cc }; }
@@ -140,7 +140,7 @@ const EXPLAIN = (() => {
     null
   ];
   E[5] = [
-    c => { const j = 1, x = c.P.tr.map(i => c.d.X[i][j]), m = mean(x), d2 = x.map(v => (v - m) ** 2), s = Math.sqrt(mean(d2));
+    c => { const j = c.focus || 1, x = c.P.tr.map(i => c.d.X[i][j]), m = mean(x), d2 = x.map(v => (v - m) ** 2), s = Math.sqrt(mean(d2));
       return ex(`To ${g('standardise')} a feature we need its ${g('mean')} μ and ${g('sd', 'standard deviation')} s, computed on the training rows only.`,
         TX(String.raw`\mu = \dfrac{1}{N_{\text{train}}}\sum_i x_i,\qquad s = \sqrt{\dfrac{1}{N_{\text{train}}}\sum_i (x_i-\mu)^2}`),
         `For ${c.P.names[j]} on the ${x.length} training rows:` + T([c.P.names[j], 'x − μ', '(x − μ)²'], x.map((v, i) => [v, v - m, d2[i]]), { total: ['Σ / mean', `Σ = ${n(sum(x), 3)}`, '0', `mean = ${n(mean(d2), 4)}`] }) +
@@ -214,7 +214,7 @@ const EXPLAIN = (() => {
       return ex(`Step 8 turned "how wrong is the line" into one number, L(w̃), that depends on the weights. Here we find the weights that make it smallest. A smooth bowl is lowest where it is flat in every direction, so we take the slope of L with respect to each weight and set it to 0. Writing those slopes out produces sums over the rows, and those sums are exactly the entries of X̃ᵀX̃ (built in step 6) and of X̃ᵀy. That is the only reason the Gram matrix appears: it is the table of these sums.`,
         TX(String.raw`\dfrac{\partial L}{\partial \tilde w_j} = -\dfrac2N\sum_i \tilde x_{ij}\,(y_i - \hat y_i) = 0 \;\Longrightarrow\; \sum_k \Big(\sum_i \tilde x_{ij}\tilde x_{ik}\Big)\tilde w_k = \sum_i \tilde x_{ij}\,y_i \;\Longleftrightarrow\; \tilde X^\top\tilde X\,\tilde w = \tilde X^\top y`),
         ol([...one,
-          (() => { const j1 = Math.min(1, p - 1), c0 = X.map(r => r[0]), c1 = X.map(r => r[j1]);
+          (() => { const j1 = p > 1 ? (c.focus > 0 && c.focus < p ? c.focus : 1) : 0, c0 = X.map(r => r[0]), c1 = X.map(r => r[j1]);
             return `<b>Every sum, row by row.</b> These are the products added up in the two equations above, for each training row (the ${cols[j1]} column is the standardised ${P.names[j1]} from step 5, the 1s are the intercept column from step 6, y is from step 4):` +
               T(['1', cols[j1], 'y (true)', '1·1', `1·${cols[j1]}`, `${cols[j1]}·${cols[j1]}`, '1·y', `${cols[j1]}·y`], X.map((r, i) => [c0[i], c1[i], y[i], c0[i] * c0[i], c0[i] * c1[i], c1[i] * c1[i], c0[i] * y[i], c1[i] * y[i]]),
                 { label: 'train row', total: ['Σ', '', '', '', sum(c0.map(v => v * v)), sum(c0.map((v, i) => v * c1[i])), sum(c1.map(v => v * v)), sum(c0.map((v, i) => v * y[i])), sum(c1.map((v, i) => v * y[i]))] }) +

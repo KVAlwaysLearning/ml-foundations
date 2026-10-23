@@ -72,7 +72,7 @@ print("outliers (|z| > 3):", (z > 3).sum().to_dict())                  # app: y 
     out.push({ id: 3, t: 'Step 3: explore', code:
 `print(stats.skew(df["y"]))        # skewness γ1 (population formula, as in the app): app ${n(P.eda.skewY, 3)}
 print(df["y"].skew())             # pandas prints the sample-adjusted G1 instead
-print(df[features + ["y"]].corr().round(3))   # app: r(${feats[0]}, y) = ${n(P.eda.corrXY[0], 3)}${isFinite(P.eda.maxFeatCorr) ? `, largest |r| between inputs = ${n(P.eda.maxFeatCorr, 3)}` : ''}
+print(df[features + ["y"]].corr().round(3))   # app: r(${feats[j - 1]}, y) = ${n(P.eda.corrXY[j - 1], 3)}${isFinite(P.eda.maxFeatCorr) ? `, largest |r| between inputs = ${n(P.eda.maxFeatCorr, 3)}` : ''}
 # df.plot.scatter("${feats[0]}", "y")   # always look at the picture too` });
 
     const split = aid === 'independence' && vid !== 'indep' && vid !== 'dupes' ? (vid === 'cluster'

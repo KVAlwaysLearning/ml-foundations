@@ -116,7 +116,7 @@ const NOTES = (() => {
           '<b>Leakage.</b> Ask of every input: is it computed from y, or known only after y? Such an input makes the model look brilliant in testing and useless in real use.']),
         work: [[2, 0, 'Duplicate rows'], [2, 2, 'Outliers by z-score']],
         ip: ['A flag means "investigate", not "delete": an outlier can be a typo or the most informative point you have.'] },
-      { id: 3, title: 'Explore the data (EDA)', sum: `r(${d.names[1]}, y) = ${n(P.eda.corrXY[0], 3)}, skewness of y = ${n(P.eda.skewY)}.`,
+      { id: 3, title: 'Explore the data (EDA)', sum: `r(${d.names[d.focus[0]]}, y) = ${n(P.eda.corrXY[d.focus[0] - 1], 3)}, skewness of y = ${n(P.eda.skewY)}.`,
         why: 'Look before you fit. A picture shows curves, funnels and clusters that a single number hides.',
         what: 'Plot y against each input, then summarise the relationship (correlation) and the shape of y (skewness).',
         fp: ul(['<b>Correlation.</b> For each row, multiply x\'s deviation from its mean by y\'s deviation. The product is positive when both are on the same side of their means (they agree) and negative when they disagree. Add them up, then divide by both spreads so the answer always lies between −1 and 1.',

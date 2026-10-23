@@ -67,12 +67,12 @@ const CHG = (() => {
   const rng = arrs => { const v = arrs.flat().filter(isFinite); let lo = Math.min(...v), hi = Math.max(...v); if (!(hi > lo)) { lo -= 1; hi += 1; } return [lo, hi]; };
 
   function trail(ctx){
-    const { cur, base, a, v, inf } = ctx, j = cur.d.focus[0], f = cur.f, fb = base.f;
+    const { cur, base, a, v, inf } = ctx, j = cur.d.focus[0], jb = base.d.names.indexOf(cur.d.names[j]), f = cur.f, fb = base.f;
     const diagName = { fitted: 'Residuals vs fitted', order: 'Residuals in order', qq: 'Q–Q', x1x2: 'x₁ vs x₂' }[a.diag] || 'Residuals vs fitted';
     const vif = x => x.vif?.length ? Math.max(...x.vif) : NaN, fmtI = t => isFinite(t) ? n(t, 1) : '∞';
     const M = [
-      ['Slope of ' + cur.d.names[j], fb.w[j], f.w[j], t => n(t, 3), (x, y) => Math.abs(x - y) > 0.1 * Math.abs(x) + 0.05],
-      ['Classical SE of that slope', fb.se[j], f.se[j], t => isFinite(t) ? n(t, 4) : 'undefined', (x, y) => !isFinite(y) || Math.abs(y / x - 1) > 0.25],
+      ['Slope of ' + cur.d.names[j], jb > 0 ? fb.w[jb] : NaN, f.w[j], t => isFinite(t) ? n(t, 3) : '—', (x, y) => Math.abs(x - y) > 0.1 * Math.abs(x) + 0.05],
+      ['Classical SE of that slope', jb > 0 ? fb.se[jb] : NaN, f.se[j], t => isFinite(t) ? n(t, 4) : 'undefined', (x, y) => !isFinite(y) || Math.abs(y / x - 1) > 0.25],
       ['R²', fb.R2, f.R2, t => n(t, 3), (x, y) => Math.abs(x - y) > 0.05],
       ['RESET p (shape)', base.dg.reset?.p, cur.dg.reset?.p, pf, (x, y) => (x < 0.05) !== (y < 0.05)],
       ['Breusch–Pagan p (spread)', base.dg.bp?.p, cur.dg.bp?.p, pf, (x, y) => (x < 0.05) !== (y < 0.05)],
