@@ -59,7 +59,8 @@ const REG = (() => {
       <ol class="wsteps">
         <li><b>What plays y:</b> ${tn}${o.from ? `, ${o.from}` : ''}. <b>What plays X:</b> the columns [${cols.join(', ')}]${o.colsFrom ? `, ${o.colsFrom}` : ''}.${tbl([...cols, tn], show.map(i => [...X[i], t[i]]))}</li>
         <li><b>Normal equations (as in step 9a):</b> XᵀX has one entry per pair of columns, each a sum over all ${N} rows of the two columns multiplied; Xᵀ${tn} has one entry per column. For example, entry (${cols[j1]}, ${cols[j1]}) = ${ent(j1, j1)} = ${n(R.A[j1][j1], 4)}, and (Xᵀ${tn}) for ${cols[j1]} = ${ent(j1, 't')} = ${n(R.b[j1], 4)}.
-          <div class="mx-grid">${mtx(R.A, cols, cols)}<span class="mx-op">c =</span>${mtx(R.b, cols, null)}</div></li>
+${MXM.html(LA.T(X), X, { a: 'Xᵀ', b: 'X', c: 'XᵀX', aRows: cols, aCols: [...Array(N).keys()].map(i => `row ${i + 1}`), bCols: cols, pick: [0, Math.min(1, p - 1)] })}${MXM.html(LA.T(X), t.map(v => [v]), { a: 'Xᵀ', b: tn, c: `Xᵀ${tn}`, aRows: cols, aCols: [...Array(N).keys()].map(i => `row ${i + 1}`), bCols: [tn], pick: [Math.min(1, p - 1), 0] })}
+          <p>So the equations are XᵀX · c = Xᵀ${tn}.</p></li>
         <li><b>Solve for c:</b> ${solveHtml}</li>
         <li><b>Predict every row:</b> prediction = ${R.c.map((cv, j) => `${n(cv, 4)}·${cols[j] === '1' ? '1' : cols[j]}`).join(' + ')}. Row 1: ${sum0} = <b>${n(R.yh[0], 4)}</b>; residual = ${n(t[0], 4)} − ${n(R.yh[0], 4)} = ${n(R.e[0], 4)}.
           ${tbl([tn, 'prediction', 'residual', 'residual²', `(${tn} − mean)²`], show.map(i => [t[i], R.yh[i], R.e[i], R.e[i] ** 2, (t[i] - R.mean) ** 2]), ['', '', n(sum(R.e), 6), R.SSE, R.SST])}</li>

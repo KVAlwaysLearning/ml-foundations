@@ -177,7 +177,8 @@ const STEPS = [
     attrs: ['intercept', 'multicollinearity'],
     subs: [
       [sy('Xt'), 'Shape and columns', c => `${c.P.nTr} × ${c.P.P}: [${c.P.names.join(', ')}]`],
-      [sy('rank'), 'Full column rank?', c => `${c.P.f.rank === c.P.P ? mark(true) : mark(false)} rank = ${c.P.f.rank} of ${c.P.P}`],
+      [sy('XtX'), 'The Gram matrix X̃ᵀX̃ (column-by-column sums)', c => `${c.P.P}×${c.P.P}: ` + c.P.f.XtX.map(r => vec(r, 1)).join(' ')],
+      [sy('rank'), 'Eigenvalues of X̃ᵀX̃ and full column rank', c => `${c.P.f.rank === c.P.P ? mark(true) : mark(false)} rank = ${c.P.f.rank} of ${c.P.P}`],
       [sy('kappa'), 'Condition number of X̃ᵀX̃', c => `${!isFinite(c.P.f.kappa) || c.P.f.kappa > 1000 ? mark(false) : c.P.f.kappa > 30 ? mark(false, true) : mark(true)} ${sy('kappa')} = ${isFinite(c.P.f.kappa) ? num(c.P.f.kappa, 1) : '∞'}`]
     ]},
   { id: 7, title: 'Model', goal: 'Write down how a prediction is made.',
@@ -196,8 +197,8 @@ const STEPS = [
   { id: '9a', title: 'Optimise: closed form', goal: 'Set the gradient to zero and solve the normal equations.',
     attrs: ['solver'],
     subs: [
-      [`${sy('XtX')}, ${sy('det')}`, 'Gram matrix and its determinant', c => `${c.P.P}×${c.P.P}, ${sy('det')} = ${num(c.P.f.det, 4)}`],
-      [sy('wt'), 'Solve X̃ᵀX̃ w̃ = X̃ᵀy', c => `${c.P.f.full ? mark(true) : mark(false)} ${sy('wt')}* = ${vec(c.P.f.w)}${c.P.f.full ? '' : ' (minimum-norm: the solution is not unique)'}`],
+      [`${sy('XtX')}, ${sy('det')}`, 'From the loss to the normal equations X̃ᵀX̃ w̃ = X̃ᵀy', c => `${c.P.P}×${c.P.P}, ${sy('det')} = ${num(c.P.f.det, 4)}`],
+      [sy('wt'), 'Solve them: w̃ = (X̃ᵀX̃)⁻¹X̃ᵀy', c => `${c.P.f.full ? mark(true) : mark(false)} ${sy('wt')}* = ${vec(c.P.f.w)}${c.P.f.full ? '' : ' (minimum-norm: the solution is not unique)'}`],
       [sy('L'), 'Loss at the solution', c => `${sy('L')}(${sy('wt')}*) = ${num(c.P.f.SSE / c.P.nTr, 4)}`]
     ]},
   { id: '9b', title: 'Optimise: gradient descent', goal: 'Reach the same minimum by repeated downhill steps.',

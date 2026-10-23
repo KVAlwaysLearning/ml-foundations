@@ -16,10 +16,10 @@ const LEDGER = (() => {
     3: { bridge: 'The rows passed the checks in step 2. Now we look at them: shapes, relationships and overlaps, to know what the later steps must handle.', in: [['checked X, y', 2]], out: [['decisions about features', 5]] },
     4: { bridge: 'We know what the data look like (step 3). Before learning any number from them, we hide some rows so the final score is honest.', in: [['checked X, y', 2]], out: [['training rows', 5], ['test rows (held back)', 12]] },
     5: { bridge: 'From now on we work only with the training rows of step 4. Their inputs are put on a common ruler, using the training mean μ and spread s.', in: [['training rows x, y', 4]], out: [['x̃', 6], ['μ, s', 12], ['μ, s', 13]] },
-    6: { bridge: 'Step 5 gave each training row its standardised inputs x̃. We stack them, with a column of 1s for the intercept, into one matrix X̃.', in: [['x̃', 5], ['y', 4]], out: [['X̃, y', 7], ['X̃, y', '9a'], ['X̃, y', '9b']] },
+    6: { bridge: 'Step 5 gave each training row its standardised inputs x̃. We stack them, with a column of 1s for the intercept, into one matrix X̃, and summarise its columns in the Gram matrix X̃ᵀX̃, whose eigenvalues tell us whether the problem can be solved.', in: [['x̃', 5], ['y', 4]], out: [['X̃', 7], ['X̃ᵀX̃, y', '9a'], ['X̃ᵀX̃ eigenvalues', '9b']] },
     7: { bridge: 'With the matrix X̃ from step 6 we can write the prediction rule. The weights w̃ in it are unknown here: step 9a finds them, and the numbers below already use those values.', in: [['X̃', 6], ['w̃', '9a']], out: [['ŷ', 8]] },
     8: { bridge: 'Step 7 gives a prediction ŷ for every training row. Comparing it with the true y from step 4 tells us how wrong each prediction is.', in: [['y', 4], ['ŷ', 7]], out: [['e, L', '9a'], ['e', 10], ['e', 11]] },
-    '9a': { bridge: 'Step 8 defined the score L to minimise. Here we find the w̃ that makes it smallest, directly, by solving equations built from X̃ and y.', in: [['X̃, y', 6], ['L', 8]], out: [['w̃', 7], ['w̃', 10], ['w̃', 11], ['w̃', 12], ['w̃', 13]] },
+    '9a': { bridge: 'Step 8 defined the score L to minimise. Setting its slopes to zero produces sums over the rows, which are exactly the Gram matrix X̃ᵀX̃ of step 6 and X̃ᵀy. Solving those equations gives the best w̃ directly.', in: [['X̃ᵀX̃', 6], ['y', 4], ['L', 8]], out: [['w̃', 7], ['w̃', 10], ['w̃', 11], ['w̃', 12], ['w̃', 13]] },
     '9b': { bridge: 'The same minimum as step 9a, reached by repeated small steps downhill instead of solving equations.', in: [['X̃, y', 6], ['L', 8]], out: [['w̃ (same as 9a)', 10]] },
     10: { bridge: 'The best weights from step 9a leave residuals e (step 8). If the assumptions hold, those leftovers look like pure noise; each test checks one way they could fail to.', in: [['e', 8], ['ŷ', 7], ['X̃', 6]], out: [['which SE to trust', 11], ['a failed check → fix features', 5]] },
     11: { bridge: 'The checks in step 10 say which assumptions hold. Now we put a ± on the weights from step 9a, using the residuals from step 8.', in: [['w̃', '9a'], ['e', 8], ['X̃', 6], ['checks', 10]], out: [['SE, CI, p', 13]] },
@@ -67,7 +67,8 @@ const LEDGER = (() => {
     }
     const M = prep(c), cols = M.cols.filter(col => at(col.s) <= here && !(col.s === 2 && here > at(2) + 1)), K = M.K;
     const isNew = col => String(col.s) === String(stepId);
-    return `<div class="wk"><table><tr><th>${here >= at(4) ? 'train row (original #)' : 'row'}</th>${cols.map(col => `<th class="${isNew(col) ? 'ldg-new' : ''}">${col.h}</th>`).join('')}</tr>` +
+    const tag = col => isNew(col) ? `${col.h}<span class="ldg-tag">new here</span>` : col.h;
+    return `<div class="wk"><table><tr><th>${here >= at(4) ? 'train row (original #)' : 'row'}</th>${cols.map(col => `<th class="${isNew(col) ? 'ldg-new' : ''}">${tag(col)}</th>`).join('')}</tr>` +
       [...Array(K).keys()].map(k => `<tr><td>${here >= at(4) ? M.tr[k] + 1 : k + 1}</td>${cols.map(col => `<td class="${isNew(col) ? 'ldg-new' : ''}">${n(col.v(here >= at(4) ? k : k))}</td>`).join('')}</tr>`).join('') +
       `<tr class="gap"><td>⋮</td><td colspan="${cols.length}">⋮</td></tr></table></div>`;
   }

@@ -386,3 +386,26 @@ a.term:hover{color:var(--surface)}
 .ldg{grid-template-columns:minmax(0,1fr)} .ldg > *,.reg-body,.reg{min-width:0} .reg-body .wsteps li{min-width:0}
 .reg > summary,.ldg-t summary,.how .qa summary{width:auto !important;overflow-wrap:anywhere}
 .katex{position:relative} .wk,.sig-tbl,.rmx,.hw-f,.it-tbl{position:relative}
+
+/* ---------- matrix multiplication visual ---------- */
+.mxm{margin:8px 0;padding:8px 10px;border:1px solid var(--rule);border-radius:10px;background:var(--paper);min-width:0;position:relative}
+.mxm-why{margin:0 0 6px;font:15px/1.55 var(--sans)}
+.mxm-row{display:flex;align-items:center;gap:10px;overflow-x:auto;padding-bottom:4px;position:relative}
+.mxm-m{flex:none}
+.mxm-n{font:700 14px var(--sans);margin-bottom:3px}
+.mxm-n small{font-weight:500;color:var(--muted);margin-left:4px}
+.mxm-op{font:700 20px var(--sans);color:var(--muted);flex:none}
+.mxt{border-collapse:collapse;font-size:13px}
+.mxt th{color:var(--muted);font-weight:600;padding:2px 6px;text-align:right;white-space:nowrap}
+.mxt td{padding:2px 7px;text-align:right;font-variant-numeric:tabular-nums;border:1px solid var(--rule);white-space:nowrap}
+.mxt td.mx-gap{border:none;color:var(--muted);text-align:center}
+.mxt tr.hl th{color:var(--surface)}
+.mxt td.on{background:color-mix(in srgb,var(--surface) 22%,transparent);border-color:var(--surface);font-weight:700}
+.mxt th.onh{color:var(--surface)}
+.mxc td.pick{cursor:pointer}
+.mxc td.pick:hover{background:color-mix(in srgb,var(--residual) 14%,transparent)}
+.mxc td.sel{background:color-mix(in srgb,var(--residual) 35%,transparent);border:2px solid var(--residual);font-weight:700}
+.mxm-sum{margin:6px 0 0;font:15px/1.6 var(--sans);overflow-wrap:anywhere}
+/* ---------- stronger "new column" highlight ---------- */
+.wk td.ldg-new,.wk th.ldg-new{background:color-mix(in srgb,var(--residual) 30%,transparent) !important;border-left:2px solid var(--residual);border-right:2px solid var(--residual);font-weight:700}
+.ldg-tag{display:block;font:700 10.5px var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--residual)}
