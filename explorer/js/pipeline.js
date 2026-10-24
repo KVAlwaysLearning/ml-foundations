@@ -19,7 +19,7 @@ const PIPE = (() => {
     if (d.testIdx && d.testIdx.length) { const T = new Set(d.testIdx); return { tr: [...Array(N).keys()].filter(i => !T.has(i)), te: [...T].sort((a, b) => a - b), fixed: true }; }
     const rng = mulberry32(seed * 131 + 7), order = [...Array(N).keys()];
     for (let i = N - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
-    const nTr = Math.max(2, Math.round(0.8 * N));
+    const nTr = Math.max(2, Math.round((d.splitFrac || 0.8) * N));
     if (d.forceTrain) d.forceTrain.forEach(i => { const at = order.indexOf(i); if (at >= nTr) { const sw = order.findIndex((v, k) => k < nTr && !d.forceTrain.includes(v)); if (sw >= 0) [order[at], order[sw]] = [order[sw], order[at]]; } });
     return { tr: order.slice(0, nTr).sort((a, b) => a - b), te: order.slice(nTr).sort((a, b) => a - b), fixed: false };
   }
@@ -105,6 +105,8 @@ const PIPE = (() => {
     try { res.alt = d.alt ? MF.fit(d.alt, res, d) : null; } catch (err) { console.error(err); res.alt = null; }
     // Optimisation: the variant's own way of finding the weights, recorded iteration by iteration
     try { res.opt = d.opt ? OP.run(d.opt, res, d) : null; } catch (err) { console.error(err); res.opt = null; }
+    // Validation protocol: re-splits, cross-validation and the true error on fresh rows
+    try { res.val = d.val ? VP.run(d.val, res, d) : null; } catch (err) { console.error(err); res.val = null; }
     return res;
   }
   return { run, splitIdx };

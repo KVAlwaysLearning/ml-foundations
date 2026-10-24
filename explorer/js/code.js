@@ -313,6 +313,70 @@ print(np.round(np.linalg.lstsq(Dr, yv, rcond=None)[0], 4))   # where it should h
     }
     return null;
   }
+  /* Validation protocol: re-splits and cross-validation with scikit-learn, reproducing the app's numbers */
+  function valCode(c, { L, n, mark }){
+    const P = c.P, V = P.val; if (!V) return null; const I = V.info;
+    const truth = `\n# The app also scores the fitted line on 2 000 fresh rows from the same process: true RMSE ${n(V.trueRmse, 4)}.`;
+    if (V.attr === 'split' || V.attr === 'seed') return `
+def mulberry32(a):                               # the app's random-number generator, bit for bit
+    st = [a & 0xFFFFFFFF]
+    imul = lambda x, y: (x * y) & 0xFFFFFFFF
+    def r():
+        a = (st[0] + 0x6D2B79F5) & 0xFFFFFFFF; st[0] = a
+        t = imul(a ^ (a >> 15), 1 | a)
+        t = ((t + imul(t ^ (t >> 7), 61 | t)) & 0xFFFFFFFF) ^ t
+        return ((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296
+    return r
+def app_split(N, seed, frac):                    # the app's shuffle-and-cut, so the splits match exactly
+    rng, order = mulberry32(seed * 131 + 7), list(range(N))
+    for i in range(N - 1, 0, -1):
+        j = int(rng() * (i + 1)); order[i], order[j] = order[j], order[i]
+    n_tr = max(2, int(np.floor(frac * N + 0.5)))
+    return sorted(order[:n_tr]), sorted(order[n_tr:])
+Xall, yall = df[features].to_numpy(), df["y"].to_numpy()
+frac = ${I.frac}${mark(V.attr === 'split' ? 'the split ratio' : '80/20, repeated with many seeds')}
+rows = []
+for seed in range(1, ${I.S + 1}):
+    tr, te = app_split(len(yall), seed, frac)
+    m = LinearRegression().fit(Xall[tr], yall[tr])
+    rows.append((seed, m.coef_[0], np.sqrt(mean_squared_error(yall[te], m.predict(Xall[te])))))
+res = pd.DataFrame(rows, columns=["seed", "slope", "test_rmse"])
+print(res.head(4).round(4))                      # app: seed 1 slope ${n(I.res[0].w[1], 4)}, test RMSE ${n(I.res[0].rmseTe, 4)}
+print(res["test_rmse"].mean().round(4), res["test_rmse"].std().round(4))   # app: mean ${n(I.mean, 4)}, sd ${n(I.sd, 4)}
+print(res["test_rmse"].quantile([0.05, 0.95]).round(4).tolist())           # app: ${L([I.q05, I.q95])}
+print(res["slope"].std().round(4))               # app: slope sd ${n(I.slSd, 4)}
+# The usual library call (its shuffle differs from the app's, so its numbers differ):
+# from sklearn.model_selection import ShuffleSplit, cross_val_score
+# cross_val_score(LinearRegression(), Xall, yall, cv=ShuffleSplit(200, test_size=${n(1 - I.frac, 4)}, random_state=0), scoring="neg_root_mean_squared_error")` + truth;
+    const head = `from sklearn.model_selection import KFold, LeaveOneOut, TimeSeriesSplit, GridSearchCV, cross_val_score
+from sklearn.preprocessing import PolynomialFeatures
+Xt, yt = X_tr.to_numpy(), y_tr.to_numpy()      # cross-validation uses the TRAINING rows only; the test rows stay untouched
+mse_cv = lambda cv, model=LinearRegression(), X=None: -cross_val_score(model, Xt if X is None else X, yt, cv=cv, scoring="neg_mean_squared_error")
+x1 = Xt[:, [0]]                                  # the degree search uses the first feature only
+`;
+    const degs = `poly = lambda: make_pipeline(StandardScaler(), PolynomialFeatures(), LinearRegression())
+for dg in range(1, 6):                           # what CV is usually for: choosing (here the degree)
+    print(dg, mse_cv(KFold(5), poly().set_params(polynomialfeatures__degree=dg), x1).mean().round(4))   # app: ${L(I.degCurve.map(t => t.cv))}`;
+    if (V.kind === 'none') return head + `print(np.sqrt(mean_squared_error(y_te, LinearRegression().fit(X_tr, y_tr).predict(X_te))).round(4))   # one split: app ${n(P.rmseTe, 4)}\n` + degs + truth;
+    if (V.kind === 'kfold') return head + `s = mse_cv(KFold(n_splits=5))${mark('5 contiguous folds, no shuffle')}
+print(s.round(4), s.mean().round(4), np.sqrt(s.mean()).round(4))   # app: folds ${L(I.C.per.map(t => t.mse))}, mean ${n(I.C.mse, 4)}, RMSE ${n(Math.sqrt(I.C.mse), 4)}
+` + degs + truth;
+    if (V.kind === 'loo') return head + `s = mse_cv(LeaveOneOut())${mark('n folds of one row')}
+print(s.mean().round(4))                         # app: ${n(I.C.mse, 4)}
+ols_tr = sm.OLS(yt, sm.add_constant(Xt)).fit()
+h = OLSInfluence(ols_tr).hat_matrix_diag        # leverages hᵢᵢ
+print(np.mean((ols_tr.resid / (1 - h)) ** 2).round(4))   # the PRESS shortcut, no refits: app ${n(I.press, 4)}` + truth;
+    if (V.kind === 'ts') return head + `s = mse_cv(TimeSeriesSplit(n_splits=5))${mark('train on the past, validate on the next block')}
+print(s.round(4), s.mean().round(4))             # app: folds ${L(I.C.per.map(t => t.mse))}, mean ${n(I.C.mse, 4)}
+print(mse_cv(KFold(5)).mean().round(4))          # ordinary k-fold, which peeks at the future: app ${n(I.kf, 4)}` + truth;
+    if (V.kind === 'nested') return head + `poly = make_pipeline(StandardScaler(), PolynomialFeatures(), LinearRegression())
+inner = GridSearchCV(poly, {"polynomialfeatures__degree": [1, 2, 3, 4, 5]}, cv=KFold(5), scoring="neg_mean_squared_error")
+nested = -cross_val_score(inner, x1, yt, cv=KFold(5), scoring="neg_mean_squared_error")${mark('the tuning runs inside each outer fold')}
+print(nested.round(4), nested.mean().round(4))   # app: outer folds ${L(I.rows.map(t => t.outerMse))}, nested ${n(I.nestedMse, 4)}
+flat = inner.fit(x1, yt)                         # tuning on all training rows (plain CV)
+print(flat.best_params_, (-flat.best_score_).round(4))   # app: degree ${I.bestFlat}, ${n(I.flatBest, 4)} (optimistic)` + truth + ` The chosen degree-${I.bestFlat} model scores ${n(V.trueSel, 4)} there.`;
+    return null;
+  }
   function cells(c){
     const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss, num, cat, nCols } = csv(c);
     const F = cat ? `num + cat` : `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra.find(e => e === 'group' || e === 'cluster');
@@ -531,7 +595,8 @@ features = [f for f in features if f != "leak"]        # drop every column not k
     const MFC = MF.has(vid) ? mfCode(c, { feats, L, n, mark }) : undefined;
     if (MF.has(vid)) FIX = MFC;
     if (OP.has(vid)) FIX = optCode(c, { L, n, mark });
-    out.push({ id: 'fix', t: OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
+    if (VP.has(vid)) FIX = valCode(c, { L, n, mark });
+    out.push({ id: 'fix', t: VP.has(vid) ? `This variant's validation in code` : OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) || VP.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
     return out;
   }
 

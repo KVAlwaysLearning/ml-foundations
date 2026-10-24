@@ -222,6 +222,9 @@
       optimiser: { _: 'Solid: least squares. Dashed orange, if visible: where this optimiser was after 200 iterations.' },
       init: { _: 'Every start reaches the same least-squares line: the loss is a convex bowl.' },
       stopping: { _: 'Solid: least squares. Dashed orange: where the run stopped under this rule.' },
+      split: { _: 'The same data for every split ratio. Hollow points would be test rows; the picture barely changes: the difference is in how steady the test score is (fingerprint below).' },
+      cv: { _: 'A gentle curve fitted with a straight line. Cross-validation does not change the line: it changes how its error on new rows is estimated (steps 4 and 12, and the fingerprint below).' },
+      seed: { _: 'One fitted line from one split. Another seed would move it a little: the fingerprint below shows 200 of them.' },
       scalegd: { sgunscaled: 'Dashed orange: after 200 steps on the raw features gradient descent is still far from the least-squares line.', _: 'On standardised features gradient descent reaches the least-squares line.' }
     }[a.id] || {};
     return C2[v.id] || C2._ || 'The variant (filled) against the baseline built from the same random numbers (small grey dots), with the fitted line and the true mean (dashed).';

@@ -290,6 +290,9 @@ const INF = {
   penalisebias: { 8: ['origin', 'Whether the intercept is part of the penalty.'], '9a': ['major', 'A penalised intercept is pulled toward 0, away from the mean of y.'], 12: ['major', 'Every prediction is shifted toward 0.'], 13: ['major', 'The intercept is wrong; the slopes are barely affected.'] },
   lossfn: { 8: ['origin', 'The loss decides how much each residual costs: squared, absolute, Huber, pinball or log-cosh.'], '9a': ['major', 'Only squared loss has the normal equations; the others are solved by iteratively reweighted least squares.'], 10: ['major', 'Residuals of a non-squared loss need not average 0.'], 11: ['major', 'Classical SEs belong to OLS; other losses need their own (sandwich or bootstrap) SEs.'], 12: ['major', 'The best loss for the test score depends on the metric: MSE is scored best by the squared loss, MAE by the absolute loss.'], 13: ['major', 'Each loss estimates a different line: mean, median, a quantile, or a robust centre.'] },
   penalty: { 5: ['major', 'Features must be standardised so the penalty treats them alike.'], 8: ['origin', 'A penalty term on the weights is added to the loss.'], '9a': ['major', 'L2 keeps a closed form (λ on the diagonal); L1 needs coordinate descent.'], 11: ['major', 'Classical SEs do not apply to penalised estimates.'], 12: ['major', 'With correlated features a penalty usually lowers the test error.'], 13: ['major', 'Coefficients are shrunk; L1 sets some exactly to 0.'] },
+  split: { 4: ['origin', 'The share of rows held out for testing.'], '9a': ['minor', 'Fewer training rows: slightly less precise weights.'], 11: ['minor', 'Standard errors grow as the training set shrinks.'], 12: ['major', 'A small test set gives a noisy test score.'] },
+  cv: { 4: ['origin', 'How the error on new rows is estimated: one split, k folds, leave-one-out, forward-in-time folds, or nested.'], 12: ['major', 'Cross-validation averages several held-out scores, so the estimate is steadier than one split.'], 13: ['minor', 'Choosing a model on the same CV that reports its score is optimistic: nested CV fixes that.'] },
+  seed: { 4: ['origin', 'Which rows land in the test set.'], 12: ['major', 'A different split gives a different test score: one number hides that spread.'], 13: ['minor', 'The coefficients move a little from split to split.'] },
   solver: { '9a': ['origin', 'A different way of solving the same normal equations.'], '9b': ['major', 'Iterative solvers (gradient or coordinate descent) approach the answer step by step.'], 6: ['major', 'The condition number decides how accurate each solver is: κ(X̃) for QR and SVD, κ(X̃)² for the normal equations and Cholesky.'] },
   gdtype: { '9b': ['origin', 'How many rows each gradient step uses.'], 12: ['minor', 'An unconverged SGD run predicts slightly worse.'], 13: ['minor', 'The weights wander around the minimum unless η decays.'] },
   lr: { '9b': ['origin', 'The step size η decides whether gradient descent crawls, converges, zig-zags or explodes.'], 12: ['major', 'A run that has not converged (or diverged) gives worse predictions.'], 13: ['major', 'The weights are wherever the run stopped, not the least-squares weights.'] },
@@ -359,6 +362,15 @@ const INF_V = {
 };
 /* Model formulation: what the variant's own model is, minimises, finds and scores (next to the OLS backbone) */
 const ALT_MODEL = { origin: 'ŷ = w·x (no intercept: the line must pass through 0)', wls: 'ŷ = X̃w̃, the same columns as OLS', gls: 'ŷ = X̃w̃, with errors εₜ = ρεₜ₋₁ + uₜ', huber: 'ŷ = X̃w̃, the same line shape as OLS', ransac: 'ŷ = X̃w̃, fitted on the inliers only', theil: 'ŷ = b + w·x', quantile: 'ŷ = X̃w̃ estimates the median of y, not its mean', ridge: 'ŷ = X̃w̃, the same columns as OLS', lasso: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', enet: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', pcr: 'ŷ = b + Σ γₖ·(component k); each component is a fixed mix of the features', pls: 'ŷ = b + Σ qₖ·(PLS component k)', bayes: 'w̃ has a prior N(0, τ²); ŷ uses its posterior mean' };
+function valText(c, part){
+  const V = c.P.val; if (!V) return part === 'cv' ? 'not used here (covered in the Validation branch)' : part === 'truth' ? 'not computed here (the Validation branch scores each protocol against 2 000 fresh rows)' : 'the single random split above';
+  const I = V.info;
+  if (part === 'cv') return V.attr !== 'cv' ? 'not used in this variant' : V.kind === 'none' ? 'none: the single test score is the estimate' : `${esc(V.label)}: estimated RMSE ${num(V.estimate, 3)}`;
+  if (part === 'run') { if (V.attr === 'cv') return esc(V.label);
+    return `${esc(V.label)}. Over ${I.S} random splits the test RMSE ranges from ${num(I.q05, 3)} to ${num(I.q95, 3)} (middle 90%), sd ${num(I.sd, 3)}${V.kind === 'fixed' ? '; a fixed seed shows only one of them' : ''}`; }
+  const est = V.attr === 'cv' ? V.estimate : c.P.rmseTe;
+  return `${Math.abs(est - V.trueRmse) < 0.1 * V.trueRmse ? mark(true) : mark(false, true)} estimate ${num(est, 3)} vs true RMSE on 2 000 fresh rows ${num(V.trueRmse, 3)}`;
+}
 function optText(c, part){
   const O = c.P.opt; if (!O) return part === 'solver' ? 'not used: the normal equations above (the Optimisation branch has the other solvers)' : 'not used: the plain gradient descent above (the Optimisation branch has the other set-ups)';
   if (part === 'solver' && O.attr !== 'solver') return 'the normal equations above';
@@ -451,9 +463,10 @@ const STEPS = [
   { id: 4, title: 'Train / test split', goal: 'Hold data back before any step that learns from the data, so the test score is honest.',
     attrs: ['split', 'cv', 'seed', 'shift'],
     subs: [
-      [`${sy('Ntr')}, ${sy('Nte')}`, c => c.P.splitFixed ? 'Split fixed by the data (not random)' : 'Random 80 / 20 split', c => c.P.splitFixed ? `${sy('Ntr')} = ${c.P.nTr}, ${sy('Nte')} = ${c.P.nTe}: ${esc(c.d.note || 'the test rows are set by the data')}` : `${sy('Ntr')} = ${c.P.nTr}, ${sy('Nte')} = ${c.P.nTe} (shuffled with sample #${c.S.seed}${c.d.forceTrain ? '; the changed rows are kept in training so their effect can be seen' : ''})`],
+      [`${sy('Ntr')}, ${sy('Nte')}`, c => c.P.splitFixed ? 'Split fixed by the data (not random)' : `Random ${Math.round(100 * c.P.nTr / (c.P.nTr + c.P.nTe))} / ${100 - Math.round(100 * c.P.nTr / (c.P.nTr + c.P.nTe))} split`, c => c.P.splitFixed ? `${sy('Ntr')} = ${c.P.nTr}, ${sy('Nte')} = ${c.P.nTe}: ${esc(c.d.note || 'the test rows are set by the data')}` : `${sy('Ntr')} = ${c.P.nTr}, ${sy('Nte')} = ${c.P.nTe} (shuffled with sample #${c.S.seed}${c.d.forceTrain ? '; the changed rows are kept in training so their effect can be seen' : ''})`],
       ['', 'Split method used', c => c.variant.id === 'dupes' ? `${mark(false, true)} random shuffle; copies of the same row land on both sides, so remove duplicates (or split by unique observation) first` : c.attr.id === 'independence' && !c.isBase ? `${mark(false, true)} random shuffle; this variant needs a ${c.variant.id === 'cluster' ? 'group' : 'time-ordered'} split instead` : `${mark(true)} random shuffle, appropriate for independent rows`],
-      ['', 'Cross-validation', () => 'not used here (covered in the Validation branch)']
+      ['', 'Cross-validation', c => valText(c, 'cv')],
+      ['', "This variant's validation", c => valText(c, 'run')]
     ]},
   { id: 5, title: 'Feature engineering', goal: 'Transform and scale inputs using statistics from the training rows only.',
     attrs: ['scaling', 'xtransform', 'ytransform', 'degree', 'interactions', 'splines', 'binning', 'encoding', 'centering', 'selection', 'irrelevant'],
@@ -547,7 +560,8 @@ const STEPS = [
       [sy('rmse'), 'Train vs test error', c => `train ${num(c.P.rmseTr, 3)}, test ${num(c.P.rmseTe, 3)}${c.P.rmseTe > 1.3 * c.P.rmseTr ? ` ${mark(false, true)} test noticeably worse` : ''}`],
       [sy('r2'), 'Test R²', c => num(c.P.r2Te, 3)],
       ['', 'This variant on the test rows', c => altText(c, 'test')],
-      ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y']
+      ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y'],
+      ['', "This variant's error estimate vs the truth", c => valText(c, 'truth')]
     ]},
   { id: 13, title: 'Interpretation', goal: 'Undo the scaling and say what the coefficients mean.',
     attrs: ['reading', 'causal', 'intervals'],

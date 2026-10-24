@@ -282,13 +282,14 @@ const GEN = (() => {
     return r;
   }
   function generate(variant, { N, sigma, strength, seed, k = 1 }){
-    const P = pools(N, seed), fn = G[variant] || (FE.has(variant) ? (P2, N2, sg2, s2) => FE.data(variant, P2, N2, sg2, s2) : MF.has(variant) ? (P2, N2, sg2, s2) => MF.data(variant, P2, N2, sg2, s2) : OP.has(variant) ? (P2, N2, sg2, s2) => OP.data(variant, P2, N2, sg2, s2) : null);
+    const P = pools(N, seed), fn = G[variant] || (FE.has(variant) ? (P2, N2, sg2, s2) => FE.data(variant, P2, N2, sg2, s2) : MF.has(variant) ? (P2, N2, sg2, s2) => MF.data(variant, P2, N2, sg2, s2) : OP.has(variant) ? (P2, N2, sg2, s2) => OP.data(variant, P2, N2, sg2, s2) : VP.has(variant) ? (P2, N2, sg2, s2) => VP.data(variant, P2, N2, sg2, s2) : null);
     if (!fn) throw new Error('No generator for ' + variant);
     const r = addFeatures(fn(P, N, sigmaOf(variant, sigma), strength), k, seed);
     if (r.post) { r.post(r); delete r.post; }
     if (FE.has(variant)) FE.apply(r, variant, seed);
     if (MF.has(variant)) MF.apply(r, variant, seed);
-    if (OP.has(variant)) OP.apply(r, variant);   // optimisation: the same model, a different way of finding its weights   // model formulation: the design (model type) and the variant's own model   // feature engineering: the design is built in step 5 from the raw columns
+    if (OP.has(variant)) OP.apply(r, variant);
+    if (VP.has(variant)) VP.apply(r, variant, { N, sigma, strength, seed, k });   // validation: the split ratio, and what to re-run   // optimisation: the same model, a different way of finding its weights   // model formulation: the design (model type) and the variant's own model   // feature engineering: the design is built in step 5 from the raw columns
     r.N = r.y.length; r.sigmaUsed = sigmaOf(variant, sigma); return r;
   }
   /* the same feature in two datasets: 'x' and 'x₁' are one feature (x is renamed x₁ only when extra features are added) */

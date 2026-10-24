@@ -292,10 +292,24 @@ const CATALOG = [
       { id: 'sgunscaled', name: 'Unscaled', desc: 'The same gradient descent on the raw features.' }
     ]}
   ]},
-  { id: 'validation', name: 'Validation protocol', attrs: [
-    { id: 'split', name: 'Train/test split', variants: ['80/20', '70/30', '50/50', 'Tiny test set'] },
-    { id: 'cv', name: 'Cross-validation', variants: ['None', 'k-fold', 'Leave-one-out', 'Time-series split', 'Nested'] },
-    { id: 'seed', name: 'Random seed', variants: ['Fixed', 'Varied'] }
+  { id: 'validation', name: 'Validation protocol', live: true, attrs: [
+    { id: 'split', name: 'Train/test split', diag: 'fitted', variants: [
+      { id: 'sp8020', name: '80/20', desc: '80% of the rows for training, 20% held out for testing.' },
+      { id: 'sp7030', name: '70/30', desc: '70% for training, 30% for testing.' },
+      { id: 'sp5050', name: '50/50', desc: 'Half and half.' },
+      { id: 'sptiny', name: 'Tiny test set', desc: 'Only 5 rows held out for testing.' }
+    ]},
+    { id: 'cv', name: 'Cross-validation', diag: 'fitted', variants: [
+      { id: 'cvnone', name: 'None', desc: 'One train/test split; the test score is the only estimate. Data: a gentle curve, fitted with a straight line.' },
+      { id: 'cvkfold', name: 'k-fold', desc: '5-fold cross-validation on the training rows: every row is validated once.' },
+      { id: 'cvloo', name: 'Leave-one-out', desc: 'n folds of one row each; for least squares it has a closed form from the hat matrix.' },
+      { id: 'cvts', name: 'Time-series split', desc: 'Five expanding windows: train on the past, validate on the next block.' },
+      { id: 'cvnested', name: 'Nested', desc: 'An inner CV picks the polynomial degree, an outer CV scores that whole procedure.' }
+    ]},
+    { id: 'seed', name: 'Random seed', diag: 'fitted', variants: [
+      { id: 'sdfixed', name: 'Fixed', desc: 'One split from one seed: one test score.' },
+      { id: 'sdvaried', name: 'Varied', desc: 'The same 80/20 split repeated with 200 seeds: a distribution of test scores.' }
+    ]}
   ]},
   { id: 'evaluation', name: 'Evaluation', attrs: [
     { id: 'metric', name: 'Metric', variants: ['MSE', 'RMSE', 'MAE', 'MAPE', 'R²', 'Adjusted R²', 'AIC', 'BIC'] },

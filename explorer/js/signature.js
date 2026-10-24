@@ -560,6 +560,40 @@ const SIG = (() => {
   }
   ['solver', 'gdtype', 'lr', 'schedule', 'optimiser', 'init', 'stopping', 'scalegd'].forEach(k => { A[k] = opSig; });
 
+  /* ================= Validation protocol: the same data and model, a different way of estimating the error ================= */
+  function vpSig(ctx){ const { v, P, Pb, a } = ctx, F = ctx.full ? ctx.full.cur : ctx.cur.d, V = P.val, B = Pb.val, I = V ? V.info : {};
+    const gen = `${esc(v.desc)} The data and the model are the same for every variant of ${esc(a.name.toLowerCase())}; only the way the error on new rows is estimated changes.${F.note ? ' ' + esc(F.note) + '.' : ''}`;
+    const est = V ? (V.attr === 'cv' ? V.estimate : P.rmseTe) : NaN;
+    const see = li(!V ? ['—'] : [
+      `The protocol: <b>${esc(V.label)}</b>.`,
+      `Its estimate of the RMSE on new rows: <b>${n(est, 3)}</b>; the truth, measured on 2 000 fresh rows: <b>${n(V.trueRmse, 3)}</b>.`,
+      V.attr !== 'cv' ? `All the re-splits reuse these same ${P.nTr + P.nTe} rows, so they show how much the choice of test rows matters, not how lucky the sample itself is (that is why the truth can sit outside the histogram). Over ${I.S} seeds the test RMSE has sd ${vs(I.sd, B && B.info.sd != null ? B.info.sd : I.sd, 3)} and a middle 90% of [${n(I.q05, 3)}, ${n(I.q95, 3)}]: that is how much one split can mislead.` : '',
+      V.kind === 'nested' ? `Nested CV says ${n(Math.sqrt(I.nestedMse), 3)}; the winning inner score taken at face value says ${n(Math.sqrt(I.flatBest), 3)} (optimistic); the chosen degree-${I.bestFlat} model really scores ${n(V.trueSel, 3)} on fresh rows.` : '',
+      V.kind === 'ts' ? `Validating only forward in time gives ${n(Math.sqrt(I.C.mse), 3)}, against ${n(Math.sqrt(I.kf), 3)} for ordinary 5-fold, which lets the model peek at the future.` : '',
+      V.kind === 'loo' ? `The leave-one-out shortcut Σ(eᵢ/(1 − hᵢᵢ))²/n = ${n(I.press, 4)} equals the ${P.nTr} refits exactly.` : '']);
+    const hist = (c, vals, color, lo, hi, B_ = 24, alpha = 0.6) => { const w = (hi - lo) / B_ || 1, k = new Array(B_).fill(0); vals.forEach(t => k[Math.min(B_ - 1, Math.max(0, Math.floor((t - lo) / w)))]++); k.forEach((q2, i) => q2 && c.rect(lo + i * w, 0, lo + (i + 1) * w, q2, color, alpha)); return Math.max(...k); };
+    const draw = el => { const r1 = row(el), out = []; if (!V) return out;
+      if (V.attr !== 'cv') {
+        const r = I.res.map(t => t.rmseTe), rb = B && B !== V && B.info.res ? B.info.res.map(t => t.rmseTe) : [], all = [...r, ...rb, V.trueRmse].filter(isFinite), lo = Math.min(...all), hi = Math.max(...all);
+        out.push(chart(r1, `Test RMSE over ${I.S} random splits${rb.length ? ': this variant (filled) vs baseline (grey)' : ''}`, 250, c => { const cnt = (() => { const k1 = Array(24).fill(0), k2 = Array(24).fill(0), w = (hi - lo) / 24 || 1; r.forEach(t => k1[Math.min(23, Math.floor((t - lo) / w))]++); rb.forEach(t => k2[Math.min(23, Math.floor((t - lo) / w))]++); return Math.max(...k1, ...k2, 1); })();
+          c.begin([lo, hi], [0, cnt * 1.1], 'test RMSE', 'splits'); if (rb.length) hist(c, rb, BASEC(), lo, hi, 24, 0.35); hist(c, r, CUR(), lo, hi, 24, 0.6); c.vline(V.trueRmse, C('--ink'), [5, 4]); if (V.kind !== 'varied') c.vline(P.rmseTe, C('--normal'), null, 2.4); c.end();
+          c.legend([[CUR(), 'this variant'], ...(rb.length ? [[BASEC(), 'baseline']] : []), [C('--ink'), 'true RMSE (fresh rows)', true], ...(V.kind !== 'varied' ? [[C('--normal'), 'this sample’s one split']] : [])]); }));
+        out.push(chart(r1, `Fitted slope over the same ${I.S} splits`, 250, c => { const s = I.res.map(t => t.w[1]), lo2 = Math.min(...s, 1.5), hi2 = Math.max(...s, 1.5), w = (hi2 - lo2) / 24 || 1, k = Array(24).fill(0); s.forEach(t => k[Math.min(23, Math.floor((t - lo2) / w))]++);
+          c.begin([lo2, hi2], [0, Math.max(...k) * 1.1], 'slope', 'splits'); hist(c, s, CUR(), lo2, hi2); c.vline(1.5, C('--ink'), [5, 4]); c.end(); c.legend([[CUR(), 'slope from each split'], [C('--ink'), 'true slope 1.5', true]]); }));
+      } else {
+        const per = V.kind === 'nested' ? I.rows.map(t => ({ mse: t.outerMse, lab: `outer ${t.o} (deg ${t.best})` })) : I.C ? I.C.per.map((t, k) => ({ mse: t.mse, lab: k + 1 })) : [];
+        if (per.length) out.push(chart(r1, V.kind === 'loo' ? 'Squared leave-one-out error of every training row' : 'Validation MSE of each fold', 250, c => { const m = per.map(t => t.mse), tm = (V.kind === 'nested' ? V.trueSel : V.trueRmse) ** 2, top = Math.max(...m, tm) * 1.1;
+          c.begin([0.4, per.length + 0.6], [0, top], V.kind === 'loo' ? 'training row' : 'fold', 'MSE'); per.forEach((t, k) => c.rect(k + 0.6, 0, k + 1.4, t.mse, CUR(), 0.75)); c.hline(mean(m), C('--normal'), null, 2.2); c.hline(tm, C('--ink'), [5, 4]); c.end();
+          c.legend([[CUR(), V.kind === 'loo' ? 'each row' : 'each fold'], [C('--normal'), `their mean (the estimate) ${n(mean(m), 3)}`], [C('--ink'), `true MSE ${V.kind === 'nested' ? 'of the tuned procedure ' : ''}${n(tm, 3)}`, true]]); }));
+        out.push(chart(r1, '5-fold CV error by polynomial degree (what CV is used to choose)', 250, c => { const dc = I.degCurve; c.begin([0.6, 5.4], range([dc.map(t => t.cv)]), 'degree', 'CV MSE'); c.line(dc.map(t => [t.dg, t.cv]), CUR(), 2.2); dc.forEach(t => c.dot([t.dg, t.cv], CUR(), 3.5)); c.end(); }));
+      }
+      return out; };
+    const tbl = !V ? '' : V.attr !== 'cv' ? table(['seed', 'train rows', 'test rows', 'slope', 'test RMSE'], I.res.map(t => [t.seed, t.nTr, t.nTe, t.w[1], t.rmseTe]), { max: 10, foot: `Mean ${n(I.mean, 3)}, sd ${n(I.sd, 3)} over ${I.S} seeds; true RMSE ${n(V.trueRmse, 3)}.` })
+      : table(['protocol', 'estimated RMSE'], [['one test split (step 12)', P.rmseTe], ...(I.C ? [[esc(V.label), Math.sqrt(I.C.mse)]] : []), ...(V.kind === 'nested' ? [['nested CV', Math.sqrt(I.nestedMse)], ['best inner CV, taken at face value', Math.sqrt(I.flatBest)], [`truth for the chosen degree ${I.bestFlat}`, V.trueSel]] : []), ['truth for the straight line (2 000 fresh rows)', V.trueRmse]], { max: 10 });
+    return { gen, see, draw, table: tbl };
+  }
+  ['split', 'cv', 'seed'].forEach(k => { A[k] = vpSig; });
+
   function howFit(v){
     const d = v.d, f = v.f;
     if (d.X[0].length !== 2) return `the weights solve the normal equations X̃ᵀX̃ w̃ = X̃ᵀy, exactly as in <a href="#step-9a" data-goto="step-9a">step 9a</a>`;

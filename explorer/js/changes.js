@@ -94,6 +94,9 @@ const CHG = (() => {
     pbno: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε; ridge λ = 10, intercept free' }, pbyes: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε; ridge λ = 10, intercept penalised' },
     lfmse: { x: 'x = 10u sorted', e: 'ε = σz, plus s(8 + 4|z₂|) on rows with u₂ < 0.12', y: 'y = 2 + 1.5x + ε; loss: MSE' }, lfmae: { y: 'same y; loss: MAE' }, lfhuber: { y: 'same y; loss: Huber (c = 1.345)' }, lfquant: { y: 'same y; loss: pinball, q = 0.9' }, lflogcosh: { y: 'same y; loss: log-cosh' },
     pnnone: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; loss: SSE' }, pnl2: { y: 'same y; loss: SSE + λΣw̃²' }, pnl1: { y: 'same y; loss: SSE/2N + λΣ|w̃|' }, pnl1l2: { y: 'same y; loss: SSE/2N + λ(½Σ|w̃| + ¼Σw̃²)' },
+    sp8020: { x: 'x = 10u', y: 'y = 2 + 1.5x + σz; 80/20 split' }, sp7030: { y: 'same y; 70/30 split' }, sp5050: { y: 'same y; 50/50 split' }, sptiny: { y: 'same y; 5 test rows' },
+    cvnone: { x: 'x = 10u sorted (time order)', y: 'y = 2 + 1.5x + 0.25(x − 5)² + σz; one split' }, cvkfold: { y: 'same y; 5-fold CV' }, cvloo: { y: 'same y; leave-one-out' }, cvts: { y: 'same y; time-series split' }, cvnested: { y: 'same y; nested CV over degree' },
+    sdfixed: { x: 'x = 10u', y: 'y = 2 + 1.5x + σz; one seed' }, sdvaried: { y: 'same y; 200 seeds' },
     slneq: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; normal equations' }, slpinv: { y: 'same y; SVD pseudo-inverse' }, slqr: { y: 'same y; QR' }, slchol: { y: 'same y; Cholesky' }, slgd: { y: 'same y; gradient descent' }, slcd: { y: 'same y; coordinate descent' },
     gdbatch: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; batch GD, 20 iterations' }, gdsgd: { y: 'same y; SGD, 20 epochs' }, gdmini: { y: 'same y; mini-batch (8), 20 epochs' },
     lrgood: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; η = 0.5 × 2/λ_max' }, lrtiny: { y: 'same y; η = 0.01 × 2/λ_max' }, lrnear: { y: 'same y; η = 0.98 × 2/λ_max' }, lrbig: { y: 'same y; η = 1.05 × 2/λ_max' },
@@ -104,7 +107,7 @@ const CHG = (() => {
     sgscaled: { x: 'x₁ = 10u₁ (0–10), x₂ = 1000 + 4000u₂; standardised', y: 'y = 2 + 1.5x₁ + 0.002x₂ + σz; GD' }, sgunscaled: { x: 'x₁ = 10u₁ (0–10), x₂ = 1000 + 4000u₂; raw', y: 'y = 2 + 1.5x₁ + 0.002x₂ + σz; GD' },
     ofpcr: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; PCR, k by CV' }, ofpls: { y: 'same y; PLS, k by CV' }, ofbayes: { y: 'same y; Bayesian, prior N(0, 1)' },
   };
-  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && (MF.has(v.id) || OP.has(v.id)) ? b0 : {}, R[v.id] || {}) }; };
+  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && (MF.has(v.id) || OP.has(v.id) || VP.has(v.id)) ? b0 : {}, R[v.id] || {}) }; };
 
   /* data-driven comparison of columns */
   function columns(d){
