@@ -241,7 +241,7 @@ const GEN = (() => {
   const SUBS2 = k => String(k).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch]).join('');
   const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3, nlarge: 5, nmod: 5, nsmall: 5, nap: 5, nlp: 5, irfew: 4, irmany: 9, ircopy: 2, interaction: 2, dummytrap: 2, cbin: 2, cmulti: 2, chigh: 2, lktarget: 2, lkprep: 2,
     scnone: 2, scstd: 2, scminmax: 2, scrobust: 2, intnone: 2, intx: 2, encoh: 2, encall: 2, encord: 2, enctarget: 2, selall: 10, selfwd: 10, selbwd: 10, selstep: 10, sellasso: 10, selvif: 10, selp: 10,
-    mtsimple: 2, mtmultiple: 2, mtpoly: 2, mtwls: 2, mtgls: 2, rgnone: 8, rgridge: 8, rglasso: 8, rgenet: 8, lam0: 8, lamsmall: 8, lamcv: 8, lamlarge: 8, lamhuge: 8, alridge: 8, albal: 8, allasso: 8, pbno: 3, pbyes: 3, ofpcr: 8, ofpls: 8, ofbayes: 8, pnnone: 8, pnl2: 8, pnl1: 8, pnl1l2: 8, cise: 3, citt: 3, cici: 3, ftall: 3, ftpart: 3,
+    mtsimple: 2, mtmultiple: 2, mtpoly: 2, mtwls: 2, mtgls: 2, rgnone: 8, rgridge: 8, rglasso: 8, rgenet: 8, lam0: 8, lamsmall: 8, lamcv: 8, lamlarge: 8, lamhuge: 8, alridge: 8, albal: 8, allasso: 8, pbno: 3, pbyes: 3, ofpcr: 8, ofpls: 8, ofbayes: 8, pnnone: 8, pnl2: 8, pnl1: 8, pnl1l2: 8,
     ...Object.fromEntries(['slneq', 'slpinv', 'slqr', 'slchol', 'slgd', 'slcd', 'gdbatch', 'gdsgd', 'gdmini', 'lrgood', 'lrtiny', 'lrnear', 'lrbig', 'schconst', 'schstep', 'schexp', 'schinv', 'opgd', 'opmom', 'opnest', 'oprms', 'opadam', 'inzero', 'inrand', 'infar', 'stfixed', 'stgrad', 'stloss', 'stearly', 'sgscaled', 'sgunscaled'].map(k => [k, 2])) };
   /* 0/1 columns made from a categorical feature (named "feature_level") */
   const CAT_NAMES = ['customer', 'colour', 'segment', 'region', 'branch'];
@@ -252,12 +252,12 @@ const GEN = (() => {
   const pCount = (variant, k) => Math.max(k, baseCount(variant)) + 1 + (P_EXTRA[variant] || 0);
   /* sample-size variants fix N themselves: p = features + 1 */
   const fixedN = (variant, k) => { const p = Math.max(k, baseCount(variant)) + 1;
-    return { nlarge: 200, nmod: 60, nsmall: 15, nap: Math.ceil((p + 1) / 0.8) + 0, nlp: Math.max(3, Math.round((p - 2) / 0.8)), ...EV.FIXED_N }[variant] ?? null; };
+    return { nlarge: 200, nmod: 60, nsmall: 15, nap: Math.ceil((p + 1) / 0.8) + 0, nlp: Math.max(3, Math.round((p - 2) / 0.8)) }[variant] ?? null; };
   /* noise variants set σ themselves */
   const sigmaOf = (variant, sg) => ({ nszero: 0, nsmod: 2.5 * Math.max(sg, 1), nshigh: 6 * Math.max(sg, 1) }[variant] ?? sg);
   const baseCount = variant => BASE_COUNT[variant] || 1;
   /* variants that are defined for a fixed number of features only, with the reason shown on the slider */
-  const MAX_COUNT = { rbtheil: [1, 'classic Theil–Sen (median of pairwise slopes) is defined for one feature'], ...Object.fromEntries(Object.keys(EV.V).map(k => [k, [1, 'the evaluation curves vary the polynomial degree of one feature, x']])) };
+  const MAX_COUNT = { rbtheil: [1, 'classic Theil–Sen (median of pairwise slopes) is defined for one feature'] };
   const maxCount = variant => MAX_COUNT[variant] || null;
   function addFeatures(r, k, seed){
     const numeric = r.names.slice(1).filter(nm => !isCat(nm)).length, feats = numeric + (r.rawCat ? 1 : 0);
@@ -282,16 +282,14 @@ const GEN = (() => {
     return r;
   }
   function generate(variant, { N, sigma, strength, seed, k = 1 }){
-    const P = pools(N, seed), fn = G[variant] || (FE.has(variant) ? (P2, N2, sg2, s2) => FE.data(variant, P2, N2, sg2, s2) : MF.has(variant) ? (P2, N2, sg2, s2) => MF.data(variant, P2, N2, sg2, s2) : OP.has(variant) ? (P2, N2, sg2, s2) => OP.data(variant, P2, N2, sg2, s2) : VP.has(variant) ? (P2, N2, sg2, s2) => VP.data(variant, P2, N2, sg2, s2) : EV.has(variant) ? (P2, N2, sg2, s2) => EV.data(variant, P2, N2, sg2, s2) : IN.has(variant) ? (P2, N2, sg2, s2) => IN.data(variant, P2, N2, sg2, s2) : null);
+    const P = pools(N, seed), fn = G[variant] || (FE.has(variant) ? (P2, N2, sg2, s2) => FE.data(variant, P2, N2, sg2, s2) : MF.has(variant) ? (P2, N2, sg2, s2) => MF.data(variant, P2, N2, sg2, s2) : OP.has(variant) ? (P2, N2, sg2, s2) => OP.data(variant, P2, N2, sg2, s2) : VP.has(variant) ? (P2, N2, sg2, s2) => VP.data(variant, P2, N2, sg2, s2) : null);
     if (!fn) throw new Error('No generator for ' + variant);
     const r = addFeatures(fn(P, N, sigmaOf(variant, sigma), strength), k, seed);
     if (r.post) { r.post(r); delete r.post; }
     if (FE.has(variant)) FE.apply(r, variant, seed);
     if (MF.has(variant)) MF.apply(r, variant, seed);
     if (OP.has(variant)) OP.apply(r, variant);
-    if (VP.has(variant)) VP.apply(r, variant, { N, sigma, strength, seed, k });
-    if (EV.has(variant)) EV.apply(r, variant, { N, sigma, strength, seed, k });
-    if (IN.has(variant)) IN.apply(r, variant, { N, sigma, strength, seed, k });   // inference: Monte Carlo checks re-draw fresh datasets   // evaluation: what to re-run (bias–variance draws fresh datasets)   // validation: the split ratio, and what to re-run   // optimisation: the same model, a different way of finding its weights   // model formulation: the design (model type) and the variant's own model   // feature engineering: the design is built in step 5 from the raw columns
+    if (VP.has(variant)) VP.apply(r, variant, { N, sigma, strength, seed, k });   // validation: the split ratio, and what to re-run   // optimisation: the same model, a different way of finding its weights   // model formulation: the design (model type) and the variant's own model   // feature engineering: the design is built in step 5 from the raw columns
     r.N = r.y.length; r.sigmaUsed = sigmaOf(variant, sigma); return r;
   }
   /* the same feature in two datasets: 'x' and 'x₁' are one feature (x is renamed x₁ only when extra features are added) */

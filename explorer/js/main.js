@@ -222,11 +222,6 @@
       optimiser: { _: 'Solid: least squares. Dashed orange, if visible: where this optimiser was after 200 iterations.' },
       init: { _: 'Every start reaches the same least-squares line: the loss is a convex bowl.' },
       stopping: { _: 'Solid: least squares. Dashed orange: where the run stopped under this rule.' },
-      metric: { _: 'Solid: the straight line every pipeline step uses. Dashed orange: the degree this metric prefers among degrees 1–5.' },
-      traintest: { ttover: 'Dashed orange: a degree-10 polynomial that bends through the training points and swings between them.', ttunder: 'Dashed orange (on the solid line): a straight line through a curve.', _: 'Dashed orange: the degree-2 fit, close to the truth.' },
-      learningcurve: { _: 'Dashed orange: the model whose learning curve is shown below, fitted on all training rows.' },
-      validationcurve: { _: 'Dashed orange: the setting with the lowest validation error, refitted on all training rows.' },
-      biasvariance: { _: 'One dataset of the 200 used for the decomposition; the fingerprint below shows 20 fits of each model.' },
       split: { _: 'The same data for every split ratio. Hollow points would be test rows; the picture barely changes: the difference is in how steady the test score is (fingerprint below).' },
       cv: { _: 'A gentle curve fitted with a straight line. Cross-validation does not change the line: it changes how its error on new rows is estimated (steps 4 and 12, and the fingerprint below).' },
       seed: { _: 'One fitted line from one split. Another seed would move it a little: the fingerprint below shows 200 of them.' },
@@ -258,13 +253,11 @@
     trueLines.forEach((l, k) => Pc.line(l, trueLines.length > 1 ? groupColor(k, groups) : css('--ink'), 1.6, [6, 5], 0.85));
     fitLines.forEach((l, k) => Pc.line(l, lineGroups[k] == null ? css('--surface') : groupColor(lineGroups[k], groups), 2.8));
     const AL = cur.P.alt; if (AL) Pc.line(gx.map(x => [x, LA.dot(rowAt(d, x, 0, j), AL.wOrig)]), css('--residual'), 2.6, [8, 4]);
-    const EVC = cur.P.evr && cur.P.evr.curve ? cur.P.evr : null; if (EVC) { const yl = [Math.min(...d.y), Math.max(...d.y)], pd = (yl[1] - yl[0]) * 0.3; Pc.line(gx.map(x => [x, Math.max(yl[0] - pd, Math.min(yl[1] + pd, EVC.curve(x)))]), css('--residual'), 2.6, [8, 4]); }
     const OPR = cur.P.opt && cur.P.opt.hist && !cur.P.opt.diverged && cur.P.opt.gap > 1e-3 ? cur.P.opt : null; if (OPR) Pc.line(gx.map(x => [x, LA.dot(rowAt(d, x, 0, j), OPR.wOrig)]), css('--residual'), 2.6, [8, 4]);
     if (P.splitFixed) { const trx = P.tr.map(i => xs[i]); Pc.rect(Math.min(...trx), Pc.box.y0, Math.max(...trx), Pc.box.y1, css('--floor'), 0.05); }
     Pc.end();
     const leg = [[css('--surface'), grouped ? 'fitted lines (one per level)' : `fitted line (slope ${num(f.w[j], 3)})`]];
     if (AL) leg.push([css('--residual'), `this variant's model: ${esc(AL.label)} (slope ${num(AL.wOrig[j], 3)})`, true]);
-    if (EVC) leg.push([css('--residual'), `this variant's model: ${esc(EVC.curveLabel)}`, true]);
     if (OPR) leg.push([css('--residual'), `where this run stopped (slope ${num(OPR.wOrig[j], 3)})`, true]);
     if (cur.P.opt && cur.P.opt.diverged) leg.push([css('--normal'), 'this run diverged: its weights are not finite, so no line']);
     if (trueLines.length) leg.push([css('--ink'), trueLines.length > 1 ? 'true line of each group' : 'true mean E[y | x]', true]);
