@@ -283,7 +283,16 @@ const PVIZ = (() => {
       c.legend([[TR(), `train, RMSE ${num(P.rmseTr, 3)}`], [TE(), `test (hollow), RMSE ${num(P.rmseTe, 3)}`], [C('--ink'), 'perfect prediction', true]]);
     });
     note(el, `The ${P.nTe} test rows were standardised with the training μ and s from step 5, then passed through the same w̃.`);
-    return [ch];
+    const out = [ch];
+    if (ctx.attr.id === 'samplesize' && ctx.makeData) {
+      const r2 = box(el), sizes = [P.P + 1, P.P + 3, 15, 25, 40, 60, 100, 150, 200].filter((t, i, a) => t > P.P && a.indexOf(t) === i).sort((a, b) => a - b);
+      const lc = sizes.map(nn => { const PP = PIPE.run(ctx.makeData(Math.ceil(nn / 0.8)), { seed: ctx.S.seed, iters: 40 }); return [PP.nTr, PP.rmseTr, PP.rmseTe]; });
+      out.push(chart(r2, 'Learning curve: the same recipe at other sample sizes', 230, c => { const top = Math.min(Math.max(...lc.flatMap(t => [t[1], t[2]]).filter(isFinite)), 8 * Math.max(ctx.S.sigma, 0.5));
+        c.begin([lc[0][0], lc[lc.length - 1][0]], [0, top], 'training rows', 'RMSE'); c.hline(ctx.S.sigma, C('--ink'), [5, 4]); c.line(lc.map(t => [t[0], t[1]]), TR(), 2.2); c.line(lc.map(t => [t[0], Math.min(t[2], 1e6)]), TE(), 2.2); c.vrule(P.nTr, C('--muted'), [3, 3], 1.4); c.end();
+        c.legend([[TR(), 'train RMSE'], [TE(), 'test RMSE'], [C('--ink'), 'σ: no model beats it on new rows', true], [C('--muted'), `this run (${P.nTr} training rows)`, true]]); }));
+      note(el, 'With few rows the model fits the training noise (train RMSE below σ) and does worse on new rows. As N grows, both curves meet at σ: the gap between them is the price of having too little data.');
+    }
+    return out;
   };
   /* 13. original scale */
   V[13] = (el, ctx) => {
@@ -292,8 +301,12 @@ const PVIZ = (() => {
       const { j } = pick(ctx, 'v13'), adj = FS.adj('v13') && multi(ctx), xs = col(d.X, j), sl = FS.slice(d.X, d.y, P.wOrig, j, { at: means }), ys = adj ? sl.y : d.y;
       const xr = rng(xs); c.begin(xr, rng(ys), P.names[j], adj ? 'y adjusted for the other features' : 'y'); xs.forEach((x, i) => c.dot([x, ys[i]], P.isTrain[i] ? TR() : TE(), 2.8, !P.isTrain[i], 0.7));
       if (d.truth.fn && P.P === 2) c.line(grid(...xr).map(x => [x, d.truth.fn(x, 0)]), C('--ink'), 1.4, [5, 4]);
+      const f = P.f, tc = f.tc || 1.96;
+      if (f.inv && f.df > 0) { const gx = grid(...xr, 50), bandAt = x => { const z = P.Xtr[0].map((_, q) => q === 0 ? 1 : q === j ? (x - P.mu[j]) / P.sd[j] : (means[q] - P.mu[q]) / P.sd[q]), q = LA.dot(z, LA.mv(f.inv, z)); return [Math.sqrt(f.s2 * q), Math.sqrt(f.s2 * (1 + q))]; };
+        const bs = gx.map(x => [x, sl.line(x), ...bandAt(x)]);
+        bs.forEach((b, k) => { if (k) { const a0 = bs[k - 1]; c.rect(a0[0], Math.min(a0[1], b[1]) - tc * b[3], b[0], Math.max(a0[1], b[1]) + tc * b[3], C('--surface'), 0.07); c.rect(a0[0], Math.min(a0[1], b[1]) - tc * b[2], b[0], Math.max(a0[1], b[1]) + tc * b[2], C('--surface'), 0.16); } }); }
       c.line(xr.map(x => [x, sl.line(x)]), C('--surface'), 2.6); c.end();
-      c.legend([[C('--surface'), P.P > 2 ? `ŷ = ${num(sl.c0, 2)} + ${num(P.wOrig[j], 2)}·${P.names[j]} (every other column at its mean; ${num(sl.c0, 2)} = b + Σ w·mean)` : `ŷ = ${num(P.wOrig[0], 2)} + ${num(P.wOrig[1], 2)}·${P.names[1]}`], ...(adj ? [[TR(), 'points: y − Σ w·(x − mean) over the other columns (hollow = test rows)']] : []), ...(d.truth.fn && P.P === 2 ? [[C('--ink'), 'true mean', true]] : [])]);
+      c.legend([...(f.inv && f.df > 0 ? [[C('--surface'), 'dark band: 95% interval for the mean; light band: for a new point (step 13, last sub-step)']] : []), [C('--surface'), P.P > 2 ? `ŷ = ${num(sl.c0, 2)} + ${num(P.wOrig[j], 2)}·${P.names[j]} (every other column at its mean; ${num(sl.c0, 2)} = b + Σ w·mean)` : `ŷ = ${num(P.wOrig[0], 2)} + ${num(P.wOrig[1], 2)}·${P.names[1]}`], ...(adj ? [[TR(), 'points: y − Σ w·(x − mean) over the other columns (hollow = test rows)']] : []), ...(d.truth.fn && P.P === 2 ? [[C('--ink'), 'true mean', true]] : [])]);
     });
     return [adjControls(ch, ctx, 'v13')];
   };

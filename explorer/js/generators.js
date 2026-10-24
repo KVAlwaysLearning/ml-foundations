@@ -21,7 +21,7 @@ const GEN = (() => {
     const z1 = Array.from({ length: K }, g), z2 = Array.from({ length: K }, g), z3 = Array.from({ length: K }, g);
     const ex = Array.from({ length: K }, () => -Math.log(1 - rng()));
     const t3 = Array.from({ length: K }, () => { const c = g() ** 2 + g() ** 2 + g() ** 2; return g() / Math.sqrt(c / 3); });
-    return { u1, u2, grp, z1, z2, z3, ex, t3 };
+    return { u1, u2, grp, z1, z2, z3, ex, t3, seed, rng2: () => mulberry32(seed * 31337 + 5) };
   }
   const sortedX = (P, N) => P.u1.slice(0, N).map(v => 10 * v).sort((a, b) => a - b);
   const lin = x => 2 + 1.5 * x;
@@ -119,19 +119,139 @@ const GEN = (() => {
     return oneFeature(x, lin, e);
   };
 
+
+  /* ================= Data properties branch ================= */
+  /* outliers: a few rows are changed after drawing; they are always kept in the training rows (forceTrain) */
+  const nOut = N => Math.max(1, Math.round(N / 60));
+  const pickMid = (x, k) => { const N = x.length, out = []; for (let q = 0; q < k; q++) out.push(Math.min(N - 1, Math.floor(N * (0.35 + 0.3 * (q + 0.5) / k)))); return out; };
+  G.outnone = G.linear;
+  G.outy = (P, N, sg, s) => { const r = G.linear(P, N, sg), idx = pickMid(r.px, nOut(N)), sh = s * 6 * Math.max(sg, 1);
+    idx.forEach(i => r.y[i] += sh); return Object.assign(r, { forceTrain: idx, flagRows: idx, note: `${idx.length} row(s) pushed up by ${num(sh, 2)} in y (6 × max(σ, 1) × s)` }); };
+  const lever = off => (P, N, sg, s) => { const r = G.linear(P, N, sg), i = N - 1, x = 10 + 15 * s;
+    r.X[i][1] = x; r.px[i] = x; r.y[i] = lin(x) + sg * P.z1[i] - (off ? 20 * s : 0);
+    return Object.assign(r, { forceTrain: [i], flagRows: [i], note: off ? `the last row moved to x = ${num(x, 1)} and ${num(20 * s, 1)} below the true line` : `the last row moved to x = ${num(x, 1)}, still on the true line` }); };
+  G.levon = lever(false); G.levoff = lever(true);
+  G.outcluster = (P, N, sg, s) => { const r = G.linear(P, N, sg), m = Math.max(3, Math.round(N / 12)), idx = [];
+    for (let q = 0; q < m; q++) { const i = N - 1 - 2 * q; if (i < 0) break; idx.push(i); const x = r.px[i]; r.y[i] = lin(x) + sg * P.z1[i] - s * 8 * Math.max(sg, 1); }
+    return Object.assign(r, { forceTrain: idx, flagRows: idx, note: `${idx.length} rows at the top of the x range pulled down together by ${num(s * 8 * Math.max(sg, 1), 2)}` }); };
+  /* sample size: N is set by the variant (see fixedN) */
+  G.nlarge = G.linear; G.nmod = G.linear; G.nsmall = G.linear; G.nap = G.linear; G.nlp = G.linear;
+  /* noise level: σ is set by the variant (see sigmaOf) */
+  G.nslow = G.linear; G.nszero = G.linear; G.nsmod = G.linear; G.nshigh = G.linear;
+  G.nspure = (P, N, sg) => { const x = sortedX(P, N), sy = Math.sqrt(1.5 * 1.5 * 100 / 12 + sg * sg);
+    return oneFeature(x, () => 9.5, P.z1.map(z => sy * z), { truth: { coef: { 0: 9.5, 1: 0 }, fn: () => 9.5 }, note: `y = 9.5 + ${num(sy, 2)}·z: the same spread as the baseline y, but no link to x` }); };
+  /* feature range */
+  G.rwide = G.linear;
+  G.rrestrict = (P, N, sg, s) => { const x = sortedX(P, N).map(v => 5 + (v - 5) * (1 - 0.8 * s)); return oneFeature(x, lin, P.z1.map(z => sg * z), { note: `x squeezed into [${num(5 - 5 * (1 - 0.8 * s), 1)}, ${num(5 + 5 * (1 - 0.8 * s), 1)}]` }); };
+  const bump = s => v => lin(v) + s * 4 * Math.exp(-((v - 5.5) ** 2) / 0.8);
+  G.rgap = (P, N, sg, s) => { const x = sortedX(P, N).map(v => (1 - s) * v + s * (v < 5 ? 0.8 * v : 7 + 0.6 * (v - 5))), f = bump(s);
+    return oneFeature(x, f, P.z1.map(z => sg * z), { truth: { coef: {}, fn: f }, note: 'no rows with x between 4 and 7; the true curve has a bump hidden in the gap' }); };
+  G.rextrap = (P, N, sg, s) => { const x = sortedX(P, N), cut = 10 - 4 * s, f = v => lin(v) + s * 0.35 * Math.max(0, v - 6) ** 2;
+    const te = x.map((v, i) => v > cut ? i : -1).filter(i => i >= 0);
+    return oneFeature(x, f, P.z1.map(z => sg * z), { truth: { coef: {}, fn: f }, testIdx: te.length >= 2 ? te : null, note: `test rows are the ${te.length} rows with x > ${num(cut, 1)}; the training rows never go that far` }); };
+  /* irrelevant features: columns with true coefficient 0 */
+  const noiseCols = (r, m, P, nameOf) => { const rng = P.rng2(); for (let q = 0; q < m; q++) { const nm = nameOf(q); r.names.push(nm); r.X.forEach(row => row.push(10 * rng())); r.truth.coef[r.X[0].length - 1] = 0; } return r; };
+  G.irnone = G.linear;
+  G.irfew = (P, N, sg) => noiseCols(G.linear(P, N, sg), 3, P, q => 'n' + SUBS[q]);
+  G.irmany = (P, N, sg) => noiseCols(G.linear(P, N, sg), 15, P, q => 'n' + SUBS2(q + 1));
+  G.ircopy = (P, N, sg, s) => { const r = G.linear(P, N, sg), sd = 0.05 + 2 * (1 - s); r.names.push('x_copy'); r.X.forEach((row, i) => row.push(row[1] + sd * P.z2[i])); r.truth.coef[2] = 0;
+    return Object.assign(r, { note: `x_copy = x + ${num(sd, 2)}·z: the same information again` }); };
+  /* missing data: values of y are lost; the affected rows are dropped (complete-case analysis) after the extras are added */
+  const dropY = prob => (P, N, sg, s) => { const r = G.linear(P, N, sg); r.post = rr => {
+      const rng = P.rng2(), my = ST.mean(rr.y), sy = ST.sd(rr.y) || 1, lose = rr.y.map((y, i) => rng() < prob(rr, i, s, (y - my) / sy));
+      const keep = lose.map((l, i) => l ? -1 : i).filter(i => i >= 0);
+      if (keep.length < rr.X[0].length + 4) return; // never drop so many that nothing can be fitted
+      rr.dropped = { idx: lose.map((l, i) => l ? i : -1).filter(i => i >= 0) }; rr.dropped.X = rr.dropped.idx.map(i => rr.X[i]); rr.dropped.y = rr.dropped.idx.map(i => rr.y[i]);
+      rr.full = { X: rr.X, y: rr.y, px: rr.px };
+      rr.X = keep.map(i => rr.X[i]); rr.y = keep.map(i => rr.y[i]); rr.px = keep.map(i => rr.px[i]); rr.orig = keep;
+      if (rr.x2) rr.x2 = keep.map(i => rr.x2[i]);
+      rr.note = `${rr.dropped.idx.length} of ${keep.length + rr.dropped.idx.length} rows lost their y and were dropped`;
+    }; return r; };
+  G.mnone = G.linear;
+  G.mcar = dropY((r, i, s) => 0.3 * s);
+  G.mar = dropY((r, i, s) => s * 0.7 * (r.X[i][1] / 10) ** 2);
+  G.mnar = dropY((r, i, s, zy) => s * 0.85 / (1 + Math.exp(-2.2 * zy)));
+  /* target type */
+  G.tcont = G.linear;
+  G.tskew = (P, N, sg, s) => { const x = sortedX(P, N), y = x.map((v, i) => (1 - s) * (lin(v) + sg * P.z1[i]) + s * Math.exp(0.6 + 0.25 * v + 0.12 * Math.max(sg, 0.3) * P.z1[i])), f = v => (1 - s) * lin(v) + s * Math.exp(0.6 + 0.25 * v + 0.5 * (0.12 * Math.max(sg, 0.3)) ** 2);
+    const r = oneFeature(x, f, x.map(() => 0), { truth: { coef: {}, fn: f } }); r.y = y; return r; };
+  G.tbound = (P, N, sg) => { const x = sortedX(P, N), sgm = t => 20 / (1 + Math.exp(-t)), y = x.map((v, i) => sgm(-3 + 0.6 * v + 0.25 * Math.max(sg, 0.3) * P.z1[i])), f = v => sgm(-3 + 0.6 * v);
+    const r = oneFeature(x, f, x.map(() => 0), { truth: { coef: {}, fn: f }, bounds: [0, 20] }); r.y = y; return r; };
+  G.tcount = (P, N) => { const x = sortedX(P, N), lam = v => Math.exp(0.3 + 0.25 * v), u = P.u2;
+    const pois = (l, q) => { let k = 0, p = Math.exp(-l), c = p; while (q > c && k < 200) { k++; p *= l / k; c += p; } return k; };
+    const y = x.map((v, i) => pois(lam(v), u[i])); const r = oneFeature(x, lam, x.map(() => 0), { truth: { coef: {}, fn: lam }, bounds: [0, Infinity], counts: true }); r.y = y; return r; };
+  /* categorical features: one-hot columns (reference level dropped) */
+  const catData = (P, N, sg, L, effect, names, nameOf) => { const x = P.u1.slice(0, N).map(v => 10 * v), rng = P.rng2();
+    // with many levels, the first 2L rows hold every level twice and are kept in training, so every dummy column has rows
+    const g = Array.from({ length: N }, (_, i) => L > 6 && i < 2 * L ? i % L : Math.min(L - 1, Math.floor(L * (L > 6 ? rng() : P.u2[i]))));
+    const y = x.map((v, i) => lin(v) + effect[g[i]] + sg * P.z1[i]), cols = {};
+    const X = x.map((v, i) => [1, v, ...Array.from({ length: L - 1 }, (_, q) => +(g[i] === q + 1))]);
+    for (let q = 1; q < L; q++) cols[q + 1] = q;
+    const coef = { 0: 2 + effect[0], 1: 1.5 }; for (let q = 1; q < L; q++) coef[q + 1] = effect[q] - effect[0];
+    return { X, names: ['1', 'x', ...Array.from({ length: L - 1 }, (_, q) => nameOf(q + 1))], y, px: x, xName: 'x', group: g, groupNames: names, cat: cols, forceTrain: L > 6 ? [...Array(Math.min(N, 2 * L)).keys()] : undefined,
+      truth: { coef, fn: null, byGroup: effect.map(e => v => lin(v) + e) }, focus: [1, 2] };
+  };
+  G.cnone = G.linear;
+  G.cbin = (P, N, sg, s) => { const r = catData(P, N, sg, 2, [0, 4 * s], ['level A (reference)', 'level B'], () => 'B'); return r; };
+  G.cmulti = (P, N, sg, s) => catData(P, N, sg, 4, [0, 3 * s, -2 * s, 5 * s], ['A (reference)', 'B', 'C', 'D'], q => 'BCD'[q - 1]);
+  G.chigh = (P, N, sg, s) => { const L = 25, rng = mulberry32(P.seed * 911 + 3), gz = gaussFn(rng), eff = Array.from({ length: L }, (_, q) => q ? 3 * s * gz() : 0);
+    return catData(P, N, sg, L, eff, Array.from({ length: L }, (_, q) => 'level ' + (q + 1) + (q ? '' : ' (reference)')), q => 'c' + SUBS2(q + 1)); };
+  /* hidden subgroups: the group is real but not a column of X */
+  const hidden = (P, N, sg, s, fns) => { const x0 = P.u1.slice(0, N).map(v => 10 * v), g = P.grp.slice(0, N);
+    const x = x0.map((v, i) => fns.x ? fns.x(v, g[i], i) : v), y = x.map((v, i) => fns.f[g[i]](v) + sg * P.z1[i]);
+    return { X: x.map(v => [1, v]), names: ['1', 'x'], y, px: x, xName: 'x', group: g, groupNames: ['group 0', 'group 1'], hiddenGroup: true,
+      truth: { coef: {}, fn: null, byGroup: fns.f }, focus: [1] }; };
+  G.sgnone = G.linear;
+  G.sgint = (P, N, sg, s) => hidden(P, N, sg, s, { f: [v => lin(v), v => lin(v) + 7 * s], x: (v, g) => g ? 3 + 0.7 * v : v * 0.8 });
+  G.sgslope = (P, N, sg, s) => hidden(P, N, sg, s, { f: [v => lin(v), v => lin(v) - 2 * s * (v - 5)] });
+  G.simpson = (P, N, sg, s) => hidden(P, N, sg, s, { f: [v => lin(v) + 18 * s, v => lin(v)], x: (v, g) => g ? 5 + 0.5 * v : 0.5 * v });
+  /* distribution shift: the test rows come from a different place */
+  G.shnone = G.linear;
+  G.shfeat = (P, N, sg, s) => { const nTe = Math.max(2, Math.round(0.2 * N)), x = P.u1.slice(0, N).map((v, i) => i >= N - nTe ? (1 - s) * 10 * v + s * (7.5 + 1.2 * P.z2[i]) : 10 * v);
+    return oneFeature(x, lin, P.z1.map(z => sg * z), { testIdx: [...Array(nTe).keys()].map(q => N - nTe + q), note: `the last ${nTe} rows (the test set) have x around 7.5 instead of spread over 0–10` }); };
+  G.shrel = (P, N, sg, s) => { const nTe = Math.max(2, Math.round(0.2 * N)), x = P.u1.slice(0, N).map(v => 10 * v), late = i => i >= N - nTe;
+    const f = (v, i) => late(i) ? 2 + (1.5 - 1.2 * s) * v + 3 * s : lin(v);
+    return oneFeature(x, f, P.z1.map(z => sg * z), { truth: { coef: {}, fn: f }, testIdx: [...Array(nTe).keys()].map(q => N - nTe + q), note: `in the last ${nTe} rows (the test period) the slope drops from 1.5 to ${num(1.5 - 1.2 * s, 2)}` }); };
+  /* leakage */
+  G.lknone = G.linear;
+  G.lktarget = (P, N, sg, s) => { const r = G.linear(P, N, sg); r.post = rr => { const sd = 0.3 + 4 * (1 - s); rr.names.push('leak'); rr.X.forEach((row, i) => row.push(rr.y[i] + sd * P.z3[i])); rr.truth.coef[rr.X[0].length - 1] = 0; rr.leakCol = rr.X[0].length - 1;
+      rr.note = `"leak" = y + ${num(sd, 2)}·z: recorded after the outcome, so it will not exist when a real prediction is needed`; }; return r; };
+  G.lkprep = (P, N, sg, s) => { const r = G.linear(P, N, sg); r.post = rr => {
+      // an ID-like category (about one row per level) with NO effect on y, target-encoded (mean y of its level) using every row, before the split
+      const n0 = rr.y.length, L = Math.max(4, n0), rng = P.rng2(), lev = rr.y.map(() => Math.floor(L * rng())), sp = PIPE.splitIdx(n0, P.seed, rr);
+      const enc = idx => { const m = new Map(); idx.forEach(i => { const o = m.get(lev[i]) || [0, 0]; o[0] += rr.y[i]; o[1]++; m.set(lev[i], o); }); return m; };
+      const all = enc([...rr.y.keys()]), trm = enc(sp.tr), gm = ST.mean(sp.tr.map(i => rr.y[i]));
+      const leaky = rr.y.map((_, i) => { const o = all.get(lev[i]); return (1 - s) * gm + s * o[0] / o[1]; });
+      const honest = rr.y.map((_, i) => { const o = trm.get(lev[i]); return (1 - s) * gm + s * (o ? o[0] / o[1] : gm); });
+      rr.names.push('enc'); rr.X.forEach((row, i) => row.push(leaky[i])); rr.truth.coef[rr.X[0].length - 1] = 0; rr.encCol = rr.X[0].length - 1;
+      rr.prep = { L, lev, honest, leaky, sp, gm, rowsPer: n0 / L };
+      rr.note = `a category with ${L} levels and no effect on y, replaced by the mean y of its level computed on ALL rows (test rows included)`; }; return r; };
+
   /* extra independent features, from their own random numbers (shared by a variant and its baseline) */
   const EXTRA_BETA = [0.8, -0.6, 0.5, -0.4, 0.3, 0.7, -0.5, 0.4, -0.3];
   const SUBS = ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉', '₁₀'];
-  const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3 };
+  const SUBS2 = k => String(k).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch]).join('');
+  const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3, nlarge: 5, nmod: 5, nsmall: 5, nap: 5, nlp: 5, irfew: 4, irmany: 16, ircopy: 2 };
+  /* categorical columns (not numeric features): the binary 'group', the A/B/C/D dummies, and c₂…c₂₅ */
+  const isCat = nm => ['group', 'A', 'B', 'C', 'D'].includes(nm) || /^c[₀-₉]+$/.test(nm);
+  /* columns of the design matrix including categorical ones (for the minimum N) */
+  const P_EXTRA = { cbin: 1, cmulti: 3, chigh: 41, dummytrap: 3, interaction: 1, lktarget: 1, lkprep: 1 };
+  const pCount = (variant, k) => Math.max(k, baseCount(variant)) + 1 + (P_EXTRA[variant] || 0);
+  /* sample-size variants fix N themselves: p = features + 1 */
+  const fixedN = (variant, k) => { const p = Math.max(k, baseCount(variant)) + 1;
+    return { nlarge: 200, nmod: 60, nsmall: 15, nap: Math.ceil((p + 1) / 0.8) + 0, nlp: Math.max(3, Math.round((p - 2) / 0.8)) }[variant] ?? null; };
+  /* noise variants set σ themselves */
+  const sigmaOf = (variant, sg) => ({ nszero: 0, nsmod: 2.5 * Math.max(sg, 1), nshigh: 6 * Math.max(sg, 1) }[variant] ?? sg);
   const baseCount = variant => BASE_COUNT[variant] || 1;
   function addFeatures(r, k, seed){
-    const numeric = r.names.slice(1).filter(nm => !['group', 'A', 'B', 'C'].includes(nm)).length;
+    const numeric = r.names.slice(1).filter(nm => !isCat(nm)).length;
     const add = Math.max(0, Math.min(10, k) - numeric);
-    r.m = numeric; r.extra = add; if (!add) return r;
-    // rename a lone 'x' to 'x₁' so the extras can be x₂, x₃, …
-    if (r.names.includes('x')) { r.names = r.names.map(nm => nm === 'x' ? 'x₁' : nm); if (r.xName === 'x') r.xName = 'x₁'; }
+    r.m = numeric; r.extra = add;
+    // rename a lone 'x' to 'x₁' so the extras can be x₂, x₃, … (also when the variant's own columns fill the k features, so names match its baseline)
+    if (k > 1 && r.names.includes('x')) { r.names = r.names.map(nm => nm === 'x' ? 'x₁' : nm); if (r.xName === 'x') r.xName = 'x₁'; }
+    if (!add) return r;
     const rng = mulberry32(seed * 104729 + 77), K = Math.max(r.y.length, 16), U = Array.from({ length: add }, () => Array.from({ length: K }, () => 10 * rng()));
-    const idx = i => r.src ? r.src[i] : i, start = numeric;
+    const idx = i => r.src ? r.src[i] : i, start = r.names.filter(nm => /^x/.test(nm)).length;
     for (let q = 0; q < add; q++) {
       const nm = 'x' + SUBS[start + q], beta = EXTRA_BETA[q], col = r.X.length;
       r.names.push(nm);
@@ -141,14 +261,15 @@ const GEN = (() => {
     if (r.truth.fn) { const f0 = r.truth.fn, cols = r.X[0].length, from = cols - add, X = r.X, B = EXTRA_BETA;
       r.truth.fn = (v, i) => f0(v, i) + (X[i] ? X[i].slice(from).reduce((s, x, q) => s + B[q] * x, 0) : 0); r.truth.partial = true; }
     if (r.truth.byGroup) { r.truth.byGroupPartial = true; }
-    if (!r.x2 && !r.names.includes('group') && !r.names.includes('A')) r.x2 = r.X.map(row => row[2]);
+    if (!r.x2 && !r.names.slice(1).some(isCat)) r.x2 = r.X.map(row => row[2]);
     return r;
   }
   function generate(variant, { N, sigma, strength, seed, k = 1 }){
     const P = pools(N, seed), fn = G[variant];
     if (!fn) throw new Error('No generator for ' + variant);
-    const r = addFeatures(fn(P, N, sigma, strength), k, seed);
-    r.N = r.y.length; return r;
+    const r = addFeatures(fn(P, N, sigmaOf(variant, sigma), strength), k, seed);
+    if (r.post) { r.post(r); delete r.post; }
+    r.N = r.y.length; r.sigmaUsed = sigmaOf(variant, sigma); return r;
   }
-  return { generate, has: id => !!G[id], baseCount, EXTRA_BETA };
+  return { generate, has: id => !!G[id], baseCount, EXTRA_BETA, isCat, pCount, fixedN, sigmaOf };
 })();

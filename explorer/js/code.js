@@ -17,19 +17,24 @@ const CODE = (() => {
 
   function csv(c){
     const d = c.d, P = c.P, feats = d.names.slice(1).map(py), extra = [];
-    if (d.group && !d.names.includes('group') && !d.names.includes('A')) extra.push(c.v.id === 'cluster' ? 'cluster' : 'group');
-    if (d.names.includes('A')) extra.push('category');
+    if (d.group && !d.names.includes('group') && !d.names.includes('A') && !d.cat) extra.push(c.v.id === 'cluster' ? 'cluster' : 'group');
+    if (d.names.includes('A') || d.cat) extra.push('category');
+    if (d.prep) extra.push('level');
+    const lvl = i => d.cat ? (d.groupNames.length > 6 ? 'L' + (d.group[i] + 1) : 'ABCD'[d.group[i]]) : 'ABC'[d.group[i]];
     const head = ['row', ...feats, ...extra, 'y', 'set'];
-    const rows = d.y.map((y, i) => [i + 1, ...d.X[i].slice(1).map(v => +v.toFixed(8)), ...extra.map(e => e === 'category' ? 'ABC'[d.group[i]] : d.group[i]), +y.toFixed(8), P.isTrain[i] ? 'train' : 'test']);
-    return { text: [head.join(','), ...rows.map(r => r.join(','))].join('\n'), feats, extra };
+    const rows = d.y.map((y, i) => [d.orig ? d.orig[i] + 1 : i + 1, ...d.X[i].slice(1).map(v => +v.toFixed(8)), ...extra.map(e => e === 'category' ? lvl(i) : e === 'level' ? d.prep.lev[i] + 1 : d.group[i]), +y.toFixed(8), P.isTrain[i] ? 'train' : 'test']);
+    // rows whose y was never recorded (Missing data): kept in the file with an empty y, as they would arrive
+    if (d.dropped) d.dropped.idx.forEach((i, k) => rows.push([i + 1, ...d.dropped.X[k].slice(1).map(v => +v.toFixed(8)), ...extra.map(() => ''), '', 'missing']));
+    if (d.dropped) rows.sort((a, b) => a[0] - b[0]);
+    return { text: [head.join(','), ...rows.map(r => r.join(','))].join('\n'), feats, extra, nMiss: d.dropped ? d.dropped.idx.length : 0 };
   }
 
   function cells(c){
-    const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra } = csv(c);
+    const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss } = csv(c);
     const F = `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra[0];
     const dummy = names.includes('A'), mark = s => `   # ← ${s}`;
     const lag = P.nw?.lag ?? Math.max(1, Math.floor(4 * (P.nTr / 100) ** (2 / 9)));
-    const fe = feats.filter(x => !['A', 'B', 'C'].includes(x));
+    const fe = feats.filter((x, k) => !GEN.isCat(names[k + 1]));
     const X0 = feats[0], others = fe.filter(x => x !== X0 && x !== 'group'), plus = others.length ? ' + ' + others.join(' + ') : '';
     const extraTxt = d.extra ? `\n#   plus ${d.extra} extra feature${d.extra > 1 ? 's' : ''} (${feats.slice(-d.extra).join(', ')}): each 10*u, independent, true coefficients ${'[' + GEN.EXTRA_BETA.slice(0, d.extra).join(', ') + ']'}` : '';
     const out = [];
@@ -52,10 +57,10 @@ from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_squared_error, r2_score` });
 
     out.push({ id: 1, t: 'Step 1: load the data', code:
-`df = pd.read_csv("dataset.csv")                  # app: N = ${P.N} rows
+`df = pd.read_csv("dataset.csv")                  # app: N = ${P.N + nMiss} rows${nMiss ? ` (${nMiss} of them without y)` : ''}
 features = ${F}
 X, y = df[features], df["y"]
-print(df.shape)                                  # app: (${P.N}, ${2 + feats.length + extra.length + 1})
+print(df.shape)                                  # app: (${P.N + nMiss}, ${2 + feats.length + extra.length + 1})
 
 # How the app generated these rows (the recipe, for reference):
 #   inputs x : ${py(rc.x)}
@@ -64,7 +69,8 @@ print(df.shape)                                  # app: (${P.N}, ${2 + feats.len
 
     out.push({ id: 2, t: 'Step 2: clean', code:
 `print("duplicate rows:", df.duplicated(subset=features + ["y"]).sum())   # app: ${P.dupes}
-print("missing cells:", df[features + ["y"]].isna().sum().sum())        # app: 0
+print("missing cells:", df[features + ["y"]].isna().sum().sum())        # app: ${nMiss}${nMiss ? `
+df = df.dropna(subset=["y"])                                            # complete-case analysis: app keeps ${P.N} rows${mark(v.id === 'mnar' ? 'biased here: y is missing because of its own value' : 'fine when the loss does not depend on y')}` : ''}
 z = df[${fe.length ? `[${fe.map(x => `"${x}"`).join(', ')}, "y"]` : '["y"]'}].apply(lambda col: np.abs(stats.zscore(col, ddof=1)))   # z = (value - mean) / sd, per column
 print("outliers (|z| > 3):", (z > 3).sum().to_dict())                  # app: y ${P.outY}, features ${P.outX}` +
 (vid === 'dupes' ? `\n\n# This variant: every observation is repeated. The fix is to drop the copies:\n# df = df.drop_duplicates(subset=features + ["y"])${mark('do this before anything else')}` : '') });
@@ -137,6 +143,9 @@ cooks = OLSInfluence(ols).cooks_distance[0]
 print(cooks.max())                                           # app: largest Cook's D = ${f.cook ? n(Math.max(...f.cook), 3) : 'nan'}
 # sm.qqplot(r, line="s")   # and plot r against ols.fittedvalues and against row order` });
 
+    // no tests possible (perfect fit or no spare rows): keep the code, commented out, with the reason
+    const mute = (cell, keep, why) => { const L2 = cell.code.split('\n'); cell.code = L2.slice(0, keep).join('\n') + `\n# Not available for this data: ${why}.\n` + L2.slice(keep).map(l => l.startsWith('#') ? l : '# ' + l).join('\n'); };
+    if (P.noDg) mute(out[out.length - 1], 2, py(P.noDg));
     const se = aid === 'independence' && vid === 'cluster' ? 'clustered' : aid === 'independence' && vid !== 'indep' && vid !== 'dupes' ? 'Newey–West' : aid === 'homoscedasticity' && !isBase ? 'HC1' : null;
     out.push({ id: 11, t: 'Step 11: inference', code:
 `print(ols.summary())        # app: slope ${n(P.wOrig[j], 4)} ± ${n(P.seOrig[j], 4)}, t = ${n(f.t?.[j], 2)}, p ${pv(f.pv?.[j])}; F = ${n(((f.SST - f.SSE) / Math.max(1, f.rank - 1)) / (f.SSE / f.df), 2)}
@@ -148,6 +157,7 @@ nw = sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HAC", cov_kwds={"maxlags"
 print(nw.bse)                                                           # app: SE_NW = ${n(P.nw?.se[j], 4)} (lag ${lag})${se === 'Newey–West' ? mark('the right SE for this variant') : ''}` +
 (grp && P.cl ? `\ncl = sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="cluster", cov_kwds={"groups": train["${grp}"]})\nprint(cl.bse)                                                           # app: SE_CL = ${n(P.cl.se[j], 4)}${se === 'clustered' ? mark('the right SE for this variant') : ''}` : '') });
 
+    if (!(f.df > 0)) mute(out[out.length - 1], 0, 'there are no spare rows (N - p <= 0), so s², the SEs, t-tests and intervals are undefined');
     out.push({ id: 12, t: 'Step 12: evaluate on the test rows', code:
 `yhat_te = model.predict(X_te)                     # scaled with the training μ, s inside the pipeline
 print(np.sqrt(mean_squared_error(y_te, yhat_te)))  # test RMSE: app ${n(P.rmseTe, 3)} (train ${n(P.rmseTr, 3)})
@@ -165,7 +175,54 @@ print(lr.coef_ / sc.scale_, lr.intercept_ - np.sum(lr.coef_ * sc.mean_ / sc.scal
       homoscedasticity: vid === 'constant' ? null : vid === 'groupvar' ? `w = 1 / train.groupby("${grp}")["y"].transform(lambda s: ols.resid[s.index].var())\nsm.WLS(y_tr, sm.add_constant(X_tr), weights=w).fit()   # weight each group by 1 / its variance` : `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HC3")   # robust SEs; or WLS, or model np.log(y)`,
       normality: vid === 'normal' ? null : vid === 'heavy' ? `from sklearn.linear_model import HuberRegressor\nHuberRegressor().fit(Xs_tr, y_tr)   # down-weights the extreme rows` : `# bootstrap the slope instead of trusting the t interval:\nboot = [sm.OLS(s["y"], sm.add_constant(s[features])).fit().params.iloc[1] for s in (train.sample(frac=1, replace=True, random_state=k) for k in range(2000))]\nprint(np.percentile(boot, [2.5, 97.5]))`,
       multicollinearity: vid === 'uncorr' ? null : dummy ? `pd.get_dummies(df["category"], drop_first=True)   # keep k - 1 dummies` : vid === 'perfect' || vid === 'combo' ? `features = [${feats.filter(x => x !== (vid === 'perfect' ? 'x2' : 'x3')).map(x => `"${x}"`).join(', ')}]   # drop the redundant ${vid === 'perfect' ? 'x2' : 'x3'}, then refit` : `from sklearn.linear_model import RidgeCV\nmake_pipeline(StandardScaler(), RidgeCV(alphas=np.logspace(-3, 3, 50))).fit(X_tr, y_tr)   # shrink the unstable directions`,
-      exogeneity: vid === 'exo' ? null : `# No residual test can detect this. Add the missing variable if you have it, or use an instrument:\n# from linearmodels.iv import IV2SLS\n# IV2SLS.from_formula("y ~ 1 + [x ~ instrument]", data=df).fit()`
+      exogeneity: vid === 'exo' ? null : `# No residual test can detect this. Add the missing variable if you have it, or use an instrument:\n# from linearmodels.iv import IV2SLS\n# IV2SLS.from_formula("y ~ 1 + [x ~ instrument]", data=df).fit()`,
+      outliers: vid === 'outnone' ? null : `infl = OLSInfluence(ols)
+k = int(np.argmax(infl.cooks_distance[0]))                      # the most influential training row
+print(train.iloc[k], np.asarray(infl.hat_matrix_diag)[k], np.asarray(infl.resid_studentized_internal)[k])
+refit = sm.OLS(y_tr.drop(y_tr.index[k]), sm.add_constant(X_tr.drop(X_tr.index[k]))).fit()
+print(ols.params, refit.params)                                  # how much one row moves the fit
+from sklearn.linear_model import HuberRegressor
+HuberRegressor().fit(Xs_tr, y_tr)                                # robust loss: large residuals count linearly, not squared`,
+      samplesize: vid === 'nlarge' ? null : `print(len(train) - (len(features) + 1))   # spare rows N - p: app ${P.f.df}
+from sklearn.linear_model import RidgeCV
+RidgeCV(alphas=np.logspace(-3, 3, 13)).fit(Xs_tr, y_tr)   # shrinkage keeps the fit stable when N is close to (or below) p
+from sklearn.model_selection import learning_curve
+# sizes, tr_sc, te_sc = learning_curve(LinearRegression(), X, y, train_sizes=np.linspace(0.2, 1, 6), cv=5, scoring="neg_root_mean_squared_error")`,
+      noise: vid === 'nslow' ? null : vid === 'nspure' ? `print(ols.f_pvalue)          # the overall F-test: app p ${pv(ST.fSF(((f.SST - f.SSE) / Math.max(1, f.rank - 1)) / (f.SSE / Math.max(1, f.df)), Math.max(1, f.rank - 1), Math.max(1, f.df)))}
+print(r2_score(y_te, yhat_te))  # test R² near 0 or negative: no signal (app ${n(P.r2Te, 3)})` : vid === 'nszero' ? `print(ols.ssr)                # 0: a perfect fit. Real data always have noise, so suspect a formula or leakage` : `print(np.sqrt(ols.scale))      # s, the estimate of σ: app ${n(Math.sqrt(f.s2), 3)}
+# more rows or better features are the only cure; the slope stays unbiased`,
+      range: vid === 'rwide' ? null : `print(X_tr["${X0}"].min(), X_tr["${X0}"].max(), X_te["${X0}"].min(), X_te["${X0}"].max())   # is the model used outside its training range?
+pred = ols.get_prediction(sm.add_constant(X_te, has_constant="add")).summary_frame(alpha=0.05)
+print(pred[["mean", "mean_ci_lower", "mean_ci_upper", "obs_ci_lower", "obs_ci_upper"]].head())   # confidence vs prediction intervals`,
+      irrelevant: vid === 'irnone' ? null : vid === 'ircopy' ? `features = [f for f in features if f != "x_copy"]   # keep one copy of the information` : `print(ols.rsquared, ols.rsquared_adj)                # app: R² vs adjusted R²
+from sklearn.linear_model import LassoCV
+lasso = LassoCV(cv=5).fit(Xs_tr, y_tr)
+print(dict(zip(features, np.round(lasso.coef_, 3))))     # the noise columns are set to 0`,
+      missing: vid === 'mnone' ? null : `raw = pd.read_csv("dataset.csv")
+print(raw["y"].isna().groupby(pd.cut(raw["${X0}"], 5)).mean())   # does the chance of missing change with x? (MAR)
+# MNAR cannot be seen in the data: it needs knowledge of how values got lost.
+# Imputation for features (not for y): from sklearn.impute import SimpleImputer, IterativeImputer (inside a Pipeline)`,
+      target: vid === 'tcont' ? null : vid === 'tcount' ? `pois = smf.glm("y ~ ${fe.join(' + ')}", data=train, family=sm.families.Poisson()).fit()
+print(pois.params)                         # log(mean) = b + w·x: predictions stay positive` : vid === 'tskew' ? `logm = smf.ols("np.log(y) ~ ${fe.join(' + ')}", data=train).fit()
+print(logm.params)                          # each unit of x multiplies y by exp(w)` : `train = train.assign(z=np.log(train["y"] / (20 - train["y"])))   # the logit of y scaled to (0, 20)
+print(smf.ols("z ~ ${fe.join(' + ')}", data=train).fit().params)`,
+      categorical: vid === 'cnone' ? null : vid === 'chigh' ? `# 24 one-hot columns for 25 levels overfit. Alternatives:
+# from category_encoders import TargetEncoder           # target encoding, fitted inside cross-validation
+mixed = smf.mixedlm("y ~ ${X0}", train, groups=train["category"]).fit()   # a random effect per level shrinks rare levels
+print(mixed.params)` : `tr2 = train.drop(columns=[${names.filter(GEN.isCat).map(x => `"${py(x)}"`).join(', ')}])   # keep the raw category instead of the 0/1 columns
+full = smf.ols("y ~ ${X0} + C(category)", data=tr2).fit()       # the formula one-hot encodes and drops the reference level
+print(full.params)
+print(sm.stats.anova_lm(smf.ols("y ~ ${X0}", data=tr2).fit(), full))   # partial F-test for the whole category`,
+      subgroups: vid === 'sgnone' ? null : `print(smf.ols("y ~ ${X0}", data=train).fit().params)                 # pooled
+print(smf.ols("y ~ ${X0} * C(group)", data=train).fit().params)      # with the group: each group gets its own line${mark('the group must be recorded')}`,
+      shift: vid === 'shnone' ? null : `print(X_tr.describe().loc[["mean", "std"]], X_te.describe().loc[["mean", "std"]])   # compare the input distributions
+# drift in the rule shows as test residuals that trend: plot (y_te - yhat_te) against X_te
+# from sklearn.model_selection import TimeSeriesSplit   # validate on later periods`,
+      leakage: vid === 'lknone' ? null : vid === 'lktarget' ? `print(df[features + ["y"]].corr()["y"].round(3))   # a near-perfect correlation is a red flag
+features = [f for f in features if f != "leak"]        # drop every column not known at prediction time` : `# enc was computed from y on ALL rows before the split. Fit the encoding on the training rows only:
+# from sklearn.preprocessing import TargetEncoder        # scikit-learn >= 1.3; cross-fits inside fit_transform
+# pipe = make_pipeline(ColumnTransformer([("te", TargetEncoder(), ["level"])], remainder="passthrough"), LinearRegression())
+# Any step that learns from data (encoding, selection, imputation) belongs inside the Pipeline, after the split.`
     }[aid];
     out.push({ id: 'fix', t: `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${(influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
     return out;

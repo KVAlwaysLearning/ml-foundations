@@ -71,8 +71,9 @@
   const mcCache = new Map(); let mcTimer = null, R = 200;
   const kEff = variant => Math.max(S.k, GEN.baseCount(variant));
   /* enough rows for the coefficients and the tests: N_train ≥ p + 6, where p = features + 1 (+ categorical columns) */
-  const nMin = variant => Math.max(8, Math.ceil((kEff(variant) + 1 + 3 + 6) / 0.8));
-  const nEff = variant => Math.max(S.N, nMin(variant));
+  const nMin = variant => Math.max(8, Math.ceil((GEN.pCount(variant, S.k) + 3 + 6) / 0.8));
+  /* the sample-size variants set N themselves (N ≈ p and N < p are below the usual minimum on purpose) */
+  const nEff = variant => GEN.fixedN(variant, S.k) ?? Math.max(S.N, nMin(variant));
   const gen = (variant, strength) => GEN.generate(variant, { N: nEff(variant), sigma: S.sigma, strength, seed: S.seed, k: kEff(variant) });
   /* the training rows of a dataset, fitted in original units (same predictions and diagnostics as the standardised run) */
   function view(d, tr){
@@ -104,8 +105,9 @@
     // the chosen feature (Controls) drives the worked examples, notes and code: it becomes the focus column
     [d, db].forEach(dd => { const g = FS.global(dd.names); dd.focus0 = dd.focus; dd.focus = [g.j, ...(dd.focus.length > 1 && g.j2 > 0 ? [g.j2] : [])]; });
     const P = PIPE.run(d, { seed: S.seed, lr: S.lr, iters: S.iters });
-    const tv = view(d, P.tr), tb = isBase ? tv : view(db, P.tr);
-    cur = { d, P, tv }; base = { d: db, tv: tb };
+    const Pb = isBase ? P : PIPE.run(db, { seed: S.seed, lr: S.lr, iters: S.iters });
+    const tv = view(d, P.tr), tb = isBase ? tv : view(db, Pb.tr);
+    cur = { d, P, tv }; base = { d: db, tv: tb, P: Pb };
     const inf = influence(a.id, v, isBase, S.strength);
     const k1 = [v.id, S.strength, nEff(v.id), S.sigma, kEff(v.id)].join('|'), k0 = [baseId, 0, nEff(baseId), S.sigma, kEff(baseId)].join('|');
     mcCur = mcCache.get(k1) || null; mcBase = mcCache.get(k0) || null;
@@ -131,7 +133,8 @@
     sK.el.style.display = v.strength ? '' : 'none';
     sK.el.querySelector('label').firstChild.textContent = 'Strength: ' + (v.strength || '');
     sF.set(kEff(v.id)); sF.el.querySelector('label').firstChild.textContent = GEN.baseCount(v.id) > 1 ? `Number of features k (this variant has ${GEN.baseCount(v.id)} built in)` : 'Number of features k';
-    sN.set(nEff(v.id)); sN.el.querySelector('label').firstChild.textContent = nMin(v.id) > 8 ? `Sample size N (at least ${nMin(v.id)} for ${kEff(v.id)} features)` : 'Sample size N';
+    sN.set(nEff(v.id)); sN.el.querySelector('label').firstChild.textContent = GEN.fixedN(v.id, S.k) != null ? `Sample size N (set by this variant: ${nEff(v.id)})` : nMin(v.id) > 8 ? `Sample size N (at least ${nMin(v.id)} for ${GEN.pCount(v.id, S.k)} coefficients)` : 'Sample size N';
+    sS.el.querySelector('label').firstChild.textContent = GEN.sigmaOf(v.id, S.sigma) !== S.sigma ? `Noise σ (this variant uses σ = ${num(GEN.sigmaOf(v.id, S.sigma), 2)})` : 'Noise σ';
     sS.set(S.sigma); sK.set(S.strength); sLR.set(S.lr); sIt.set(S.iters);
     $('#cmp').checked = S.cmp; $('#seedlbl').textContent = 'sample #' + S.seed;
     { const nm = cur.d.names, cs = FS.cols(nm), g = FS.global(nm), fb = $('#fboxF');
@@ -159,6 +162,7 @@
     const r = colMeans(d.X); r[j] = x;
     const gi = d.names.indexOf('group'); if (gi >= 0) r[gi] = g;
     if (d.names.includes('A')) ['A', 'B', 'C'].forEach((n, k) => r[d.names.indexOf(n)] = +(k === g));
+    if (d.cat) Object.entries(d.cat).forEach(([col, lev]) => { r[+col] = +(lev === g); });
     return r;
   }
   const bins = (x, e, B) => { const idx = [...x.keys()].sort((a, b) => x[a] - x[b]), n = x.length, out = []; for (let b = 0; b < B; b++) { const s2 = idx.slice(Math.floor(b * n / B), Math.floor((b + 1) * n / B)); if (s2.length) out.push([ST.mean(s2.map(i => x[i])), ST.mean(s2.map(i => e[i]))]); } return out; };
@@ -172,7 +176,7 @@
   function drawFit(P, isBase, id = 'fit'){
     const { d, f } = cur.tv, { j } = FS.pick(d.names, id), adj = FS.adj(id), xs = d.X.map(r => r[j]), groups = d.group ? d.groupNames.length : 0;
     const lo = Math.min(...xs), hi = Math.max(...xs), gx = grid(lo, hi), multi = FS.cols(d.names).length > 1 || FS.catCols(d.names).length > 0;
-    const grouped = d.names.includes('group') || d.names.includes('A');
+    const grouped = (d.names.includes('group') || d.names.includes('A') || !!d.cat) && groups <= 6;
     const lineGroups = grouped ? [...Array(groups).keys()] : [null];
     const fitLines = lineGroups.map(g => gx.map(x => [x, LA.dot(rowAt(d, x, g ?? 0, j), f.w)]));
     // adjusted points: remove the other numeric features' share of each prediction (categorical columns stay, so points match their group's line)
@@ -328,9 +332,9 @@
   const chgEl = $('#changed'), notesEl = $('#notes'); let chgCharts = [];
   function renderChanged(a, v, isBase, inf){
     chgCharts.forEach(c => c.dispose()); chgCharts = [];
-    try { chgCharts = CHG.render(chgEl, { cur: cur.tv, base: base.tv, full: { cur: cur.d, base: base.d }, a, v, isBase, S, inf }); } catch (err) { console.error(err); chgEl.innerHTML = `<p class="pv-note">Could not draw this view: ${esc(err.message)}</p>`; }
+    try { chgCharts = CHG.render(chgEl, { cur: cur.tv, base: base.tv, full: { cur: cur.d, base: base.d }, a, v, isBase, S, inf, P: cur.P, Pb: base.P }); } catch (err) { console.error(err); chgEl.innerHTML = `<p class="pv-note">Could not draw this view: ${esc(err.message)}</p>`; }
     const sp = chgEl.querySelector('#sig-part');
-    if (sp) try { chgCharts.push(...SIG.render(sp, { cur: cur.tv, base: base.tv, a, v, isBase, S, embedded: true })); } catch (err) { console.error(err); }
+    if (sp) try { chgCharts.push(...SIG.render(sp, { cur: cur.tv, base: base.tv, a, v, isBase, S, embedded: true, P: cur.P, Pb: base.P, full: { cur: cur.d, base: base.d } })); } catch (err) { console.error(err); }
     MATH.typeset(chgEl);
   }
   document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (!g) return; e.preventDefault();
@@ -353,7 +357,7 @@
   procEl.addEventListener('change', e => { if (e.target.id === 'onlyAff') { S.onlyAffected = e.target.checked; update(); } if (e.target.id === 'expandAll') { S.expandAll = e.target.checked; if (!S.expandAll) openHow.clear(); update(); } });
   function renderProcess(a, v, isBase, inf){
     const P = cur.P, d = cur.d;
-    const ctx = { P, d, S, attr: a, variant: v, isBase, focus: d.focus[0], FS };
+    const ctx = { P, d, S, attr: a, variant: v, isBase, focus: d.focus[0], FS, makeData: N => GEN.generate(v.id, { N, sigma: S.sigma, strength: S.strength, seed: S.seed, k: kEff(v.id) }) };
     const lvOf = id => inf[id] ? inf[id][0] : 'none';
     try { NOTES.render(notesEl, { P, d, a, v, isBase, inf, S, cur }); MATH.typeset(notesEl); } catch (err) { console.error(err); }
     try { CODE.render($('#code'), { P, d, a, v, isBase, inf, S }); } catch (err) { console.error(err); $('#code').innerHTML = `<p class="pv-note">The code could not be generated: ${esc(err.message)}</p>`; }
@@ -415,7 +419,7 @@
     procEl.querySelectorAll('.sviz').forEach(el => { const fn = PVIZ[el.dataset.step]; if (!fn) return;
       try { procCharts.push(...(fn(el, ctx) || [])); } catch (err) { console.error(err); el.innerHTML = `<p class="pv-note">This picture could not be drawn: ${esc(err.message)}</p>`; } });
     const sv = id => procEl.querySelector(`.sviz[data-step="${id}"]`);
-    const feats = d.names.slice(1), numeric = feats.filter(nm => !['group', 'A', 'B', 'C'].includes(nm)), kNum = numeric.length, cat = feats.length > kNum;
+    const feats = d.names.slice(1), numeric = feats.filter(nm => !GEN.isCat(nm)), kNum = numeric.length, cat = feats.length > kNum;
     const gsel = FS.global(d.names), gj = d.names[gsel.j], gj2 = gsel.j2 > 0 ? d.names[gsel.j2] : '';
     const dimNote = kNum <= 1 ? '' : kNum === 2 && !cat ? `With 2 features the fitted model is a <b>plane</b> in 3 dimensions (${d.names[1]}, ${d.names[2]}, y), drawn below and rotatable. The flat chart is a slice: y against ${gj} with the other feature held at its mean. Pick the feature in the chart header (or for every chart in the Controls box); "points: adjusted" moves each point by the other feature's share of its prediction, so the vertical gap to the line is exactly the residual.`
       : `With ${kNum} features${cat ? ' plus categorical columns' : ''} the fitted model is a hyperplane in ${feats.length + 1} dimensions, so it <b>cannot be drawn</b> whole (a picture is possible only up to 3 dimensions: two features and y). The flat chart is a slice: y against ${gj}, with every other feature held at its mean; the 3D view is a slice through two features, ${gj} and ${gj2}. Pick the features in each chart header (or for every chart in the Controls box). With "points: adjusted", each point is y − Σ w·(x − mean) over the other features (a <b>partial residual</b>), so it sits exactly its residual away from the slice; with raw y the other features add vertical scatter. The residual charts of step 10 work in any number of dimensions, because residuals are one number per row.`;

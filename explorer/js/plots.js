@@ -2,10 +2,10 @@
    2D charts with independent axes, ticks and axis names.
    ============================================================ */
 function niceTicksX(lo, hi, n = 5){
-  const span = hi - lo; if (!(span > 0)) return [lo];
+  const span = hi - lo; if (!(span > 0) || !isFinite(span) || span < 1e-12 * Math.max(Math.abs(lo), Math.abs(hi))) return [lo];
   const raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
   const step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag, out = [];
-  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+  for (let v = Math.ceil(lo / step) * step, k = 0; v <= hi + step * 1e-9 && k < 200; v += step, k++) out.push(+v.toFixed(10));
   return out;
 }
 const tickFmt = v => { const a = Math.abs(v); return (a >= 1e4 || (a > 0 && a < 1e-3) ? v.toExponential(0) : String(+v.toFixed(4))).replace('-', '−'); };

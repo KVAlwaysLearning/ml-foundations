@@ -52,18 +52,74 @@ const CATALOG = [
       { id: 'reverse', name: 'Reverse causality', desc: 'y also feeds back into x (x = a + γy + u), so x is correlated with the error.', strength: 'feedback γ from 0 to 0.4' }
     ]}
   ]},
-  { id: 'data', name: 'Data properties', attrs: [
-    { id: 'outliers', name: 'Outliers and influence', variants: ['None', 'Outlier in y', 'High leverage, on trend', 'High leverage, off trend', 'Cluster of outliers'] },
-    { id: 'samplesize', name: 'Sample size', variants: ['Large', 'Moderate', 'Small', 'N ≈ p', 'N < p'] },
-    { id: 'noise', name: 'Noise level', variants: ['Low', 'None', 'Moderate', 'High', 'Pure noise'] },
-    { id: 'range', name: 'Feature range', variants: ['Wide', 'Restricted', 'Gaps', 'Extrapolation at test time'] },
-    { id: 'irrelevant', name: 'Irrelevant features', variants: ['None', 'A few', 'Many', 'Redundant copies'] },
-    { id: 'missing', name: 'Missing data', variants: ['None', 'Completely at random', 'Depends on another feature', 'Depends on its own value'] },
-    { id: 'target', name: 'Target type', variants: ['Continuous', 'Skewed', 'Bounded', 'Counts'] },
-    { id: 'categorical', name: 'Categorical features', variants: ['None', 'Binary', 'Multi-category', 'High-cardinality'] },
-    { id: 'subgroups', name: 'Hidden subgroups', variants: ['None', 'Different intercepts', 'Different slopes', "Simpson's paradox"] },
-    { id: 'shift', name: 'Distribution shift', variants: ['None', 'Feature shift', 'Relationship shift'] },
-    { id: 'leakage', name: 'Data leakage', variants: ['None', 'Target leaked into a feature', 'Preprocessing before the split'] }
+  { id: 'data', name: 'Data properties', live: true, attrs: [
+    { id: 'outliers', name: 'Outliers and influence', diag: 'leverage', variants: [
+      { id: 'outnone', name: 'None', desc: 'Every row follows y = 2 + 1.5x + ε.' },
+      { id: 'outy', name: 'Outlier in y', desc: 'One row (about 1 in 60) at a typical x has y pushed up by 6σ (at least 6 units).', strength: 'size of the push' },
+      { id: 'levon', name: 'High leverage, on trend', desc: 'The last row is moved far out in x (x = 25 at full strength) but stays on the true line.', strength: 'how far out in x' },
+      { id: 'levoff', name: 'High leverage, off trend', desc: 'The last row is moved far out in x and 20 units below the true line.', strength: 'how far out and how far off' },
+      { id: 'outcluster', name: 'Cluster of outliers', desc: 'About 1 row in 12, all at high x, pulled down together by 8σ.', strength: 'size of the pull' }
+    ]},
+    { id: 'samplesize', name: 'Sample size', diag: 'fitted', variants: [
+      { id: 'nlarge', name: 'Large', desc: 'N = 200 rows for 5 features (p = 6 coefficients): plenty of spare rows.' },
+      { id: 'nmod', name: 'Moderate', desc: 'N = 60 rows for 5 features.' },
+      { id: 'nsmall', name: 'Small', desc: 'N = 15 rows for 5 features: 12 training rows, only 6 to spare.' },
+      { id: 'nap', name: 'N ≈ p', desc: 'Training rows = p + 1: one row more than coefficients.' },
+      { id: 'nlp', name: 'N < p', desc: 'Fewer training rows than coefficients: infinitely many exact fits.' }
+    ]},
+    { id: 'noise', name: 'Noise level', diag: 'fitted', variants: [
+      { id: 'nslow', name: 'Low', desc: 'σ as set by the Noise slider.' },
+      { id: 'nszero', name: 'None', desc: 'σ = 0: every point lies exactly on the true line.' },
+      { id: 'nsmod', name: 'Moderate', desc: 'σ = 2.5 × max(slider σ, 1).' },
+      { id: 'nshigh', name: 'High', desc: 'σ = 6 × max(slider σ, 1): the noise swamps most of the signal.' },
+      { id: 'nspure', name: 'Pure noise', desc: 'y has the same spread as before but no relationship with x: the true slope is 0.' }
+    ]},
+    { id: 'range', name: 'Feature range', diag: 'fitted', variants: [
+      { id: 'rwide', name: 'Wide', desc: 'x spread over 0–10.' },
+      { id: 'rrestrict', name: 'Restricted', desc: 'x squeezed into 4–6 at full strength.', strength: 'how much the range is squeezed' },
+      { id: 'rgap', name: 'Gaps', desc: 'No rows with x between 4 and 7, and the true curve has a bump hidden in the gap.', strength: 'width of the gap and size of the bump' },
+      { id: 'rextrap', name: 'Extrapolation at test time', desc: 'Train on x < 6, test on x > 6; beyond 6 the true relationship starts to bend.', strength: 'test region and bend' }
+    ]},
+    { id: 'irrelevant', name: 'Irrelevant features', diag: 'fitted', variants: [
+      { id: 'irnone', name: 'None', desc: 'Only features that matter.' },
+      { id: 'irfew', name: 'A few', desc: 'Three pure-noise columns n₁, n₂, n₃ (true coefficient 0) are added.' },
+      { id: 'irmany', name: 'Many', desc: 'Fifteen pure-noise columns: p gets close to the number of training rows.' },
+      { id: 'ircopy', name: 'Redundant copies', desc: 'x_copy = x + a little noise: the same information twice.', strength: 'how exact the copy is' }
+    ]},
+    { id: 'missing', name: 'Missing data', diag: 'fitted', variants: [
+      { id: 'mnone', name: 'None', desc: 'Every y is recorded.' },
+      { id: 'mcar', name: 'Completely at random', desc: 'Each y is lost with probability 0.3 × s, regardless of anything (MCAR).', strength: 'share lost' },
+      { id: 'mar', name: 'Depends on another feature', desc: 'y is lost more often when x is high (MAR: the chance depends on an observed column).', strength: 'how strongly it depends on x' },
+      { id: 'mnar', name: 'Depends on its own value', desc: 'y is lost more often when y itself is high (MNAR), like high incomes left blank.', strength: 'how strongly it depends on y' }
+    ]},
+    { id: 'target', name: 'Target type', diag: 'qq', variants: [
+      { id: 'tcont', name: 'Continuous', desc: 'y is an unbounded measurement with bell-shaped noise.' },
+      { id: 'tskew', name: 'Skewed', desc: 'y grows exponentially with x, with multiplicative noise: a long right tail.', strength: 'blend from linear to exponential' },
+      { id: 'tbound', name: 'Bounded', desc: 'y is a score between 0 and 20 that follows an S-curve in x.' },
+      { id: 'tcount', name: 'Counts', desc: 'y is a whole number of events (Poisson), with mean exp(0.3 + 0.25x).' }
+    ]},
+    { id: 'categorical', name: 'Categorical features', diag: 'fitted', variants: [
+      { id: 'cnone', name: 'None', desc: 'Only the numeric x.' },
+      { id: 'cbin', name: 'Binary', desc: 'A two-level category (A, B); level B adds 4 to y. One 0/1 column B.', strength: 'effect of level B' },
+      { id: 'cmulti', name: 'Multi-category', desc: 'Four levels A–D with effects 0, +3, −2, +5; one-hot with A dropped: columns B, C, D.', strength: 'size of the level effects' },
+      { id: 'chigh', name: 'High-cardinality', desc: '25 levels with random effects; one-hot with level 1 dropped gives 24 columns, and most levels have only a few rows.', strength: 'spread of the level effects' }
+    ]},
+    { id: 'subgroups', name: 'Hidden subgroups', diag: 'fitted', variants: [
+      { id: 'sgnone', name: 'None', desc: 'One population.' },
+      { id: 'sgint', name: 'Different intercepts', desc: 'Two groups 7 units apart, not recorded as a column; group 1 also tends to have higher x.', strength: 'gap between the groups' },
+      { id: 'sgslope', name: 'Different slopes', desc: 'In group 1 the slope is 1.5 − 2s instead of 1.5; the group is not a column.', strength: 'slope difference' },
+      { id: 'simpson', name: "Simpson's paradox", desc: 'Within each group the slope is +1.5, but the high-x group sits 18 units lower, so the pooled slope turns negative.', strength: 'gap between the groups' }
+    ]},
+    { id: 'shift', name: 'Distribution shift', diag: 'fitted', variants: [
+      { id: 'shnone', name: 'None', desc: 'Test rows come from the same place as training rows.' },
+      { id: 'shfeat', name: 'Feature shift', desc: 'The test rows (the last 20%) have x concentrated around 7.5; the rule linking x to y is unchanged.', strength: 'how far the test x move' },
+      { id: 'shrel', name: 'Relationship shift', desc: 'In the test period (the last 20% of rows) the slope drops from 1.5 to 0.3: the rule itself changed.', strength: 'size of the change' }
+    ]},
+    { id: 'leakage', name: 'Data leakage', diag: 'fitted', variants: [
+      { id: 'lknone', name: 'None', desc: 'Every feature is known before y.' },
+      { id: 'lktarget', name: 'Target leaked into a feature', desc: 'A column "leak" = y + small noise, recorded after the outcome.', strength: 'how exact the leak is' },
+      { id: 'lkprep', name: 'Preprocessing before the split', desc: 'An ID-like category (about one row per level, no real effect) is target-encoded, each level replaced by its mean y, using all rows before the split.', strength: 'blend from the overall mean to the leaky encoding' }
+    ]}
   ]},
   { id: 'features', name: 'Feature engineering', attrs: [
     { id: 'scaling', name: 'Scaling', variants: ['None', 'Standardisation', 'Min–max', 'Robust'] },

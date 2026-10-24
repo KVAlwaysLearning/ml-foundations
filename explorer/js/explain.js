@@ -388,7 +388,22 @@ const EXPLAIN = (() => {
         c.P.names.slice(1).map((nm, k) => `${nm}: ${n(w[k + 1], 4)} / ${n(sd[k + 1], 4)} = <b>${n(w[k + 1] / sd[k + 1], 4)}</b>`).join('; ') +
         `; b = ${n(w[0], 4)} − ${c.P.names.slice(1).map((_, k) => `${n(w[k + 1], 4)} × ${n(mu[k + 1], 4)} / ${n(sd[k + 1], 4)}`).join(' − ')} = <b>${n(c.P.wOrig[0], 4)}</b>`,
         'These are the numbers you would report, and they can be compared with the true β from step 1.'); },
-    null
+    null,
+    c => { const P = c.P, f = P.f, j = c.focus, b = band(P, j);
+      if (!b) return ex('Intervals need s² and (X̃ᵀX̃)⁻¹.', '—', `Not available: ${P.noDg || 'X̃ᵀX̃ has no inverse'}.`, '—');
+      const q = b.pts[4], z = q.z, v = LA.mv(f.inv, z), s = Math.sqrt(f.s2), lab = P.names.map((nm, k) => k ? `x̃(${nm})` : '1');
+      return ex(`Two different questions get two different intervals. <b>Where is the average y at this x?</b> Only the uncertainty in the fitted line matters: the confidence interval. <b>Where will one new observation fall?</b> The line's uncertainty plus the noise of a single row: the prediction interval, always wider. Both are narrowest at the centre of the data and widen as x moves away from it.`,
+        TX(String.raw`\text{SE}_{\text{mean}}(x_0) = s\sqrt{\tilde x_0^\top(\tilde X^\top\tilde X)^{-1}\tilde x_0},\qquad \text{SE}_{\text{new}}(x_0) = s\sqrt{1 + \tilde x_0^\top(\tilde X^\top\tilde X)^{-1}\tilde x_0}`),
+        ol([
+          `Take ${P.names[j]} = ${n(q.x, 3)} (the largest training value), with every other feature at its training mean. Standardised: x̃₀ = ${vec(z, 4)}.`,
+          `(X̃ᵀX̃)⁻¹x̃₀ first:` + MXM.html(f.inv, z.map(t => [t]), { a: '(X̃ᵀX̃)⁻¹', b: 'x̃₀', c: '(X̃ᵀX̃)⁻¹x̃₀', aRows: lab, aCols: lab, bCols: ['x̃₀'], pick: [Math.min(1, P.P - 1), 0] }) + `then x̃₀ᵀ times it: ${z.map((t, k) => `${n(t, 3)}×${n(v[k], 4)}`).join(' + ')} = <b>${n(q.q, 5)}</b>.`,
+          `s = √s² = √${n(f.s2, 4)} = ${n(s, 4)} (step 11). SE of the mean = ${n(s, 4)} × √${n(q.q, 5)} = ${n(s * Math.sqrt(q.q), 4)}; SE of a new point = ${n(s, 4)} × √(1 + ${n(q.q, 5)}) = ${n(s * Math.sqrt(1 + q.q), 4)}.`,
+          `With the t critical value ${n(b.tc, 3)} (df = ${f.df}): ŷ₀ = ${n(q.yh, 4)}, confidence interval ${n(q.yh, 3)} ± ${n(q.ci, 3)}, prediction interval ${n(q.yh, 3)} ± ${n(q.pi, 3)}.`,
+          `Along ${P.names[j]}:` + T([P.names[j], 'x̃₀ᵀ(X̃ᵀX̃)⁻¹x̃₀', 'ŷ₀', '± mean', '± new point'], b.pts.map(t => [t.x, t.q, t.yh, t.ci, t.pi]), { k: 6, label: '' }) + `The last row is 30% beyond the training range: the band keeps widening, but it assumes the straight line still holds there, which the data cannot confirm.`
+        ]),
+        'The prediction interval can never be narrower than about ±t·s, whatever N is: the noise of one new row does not average out. The confidence interval shrinks toward 0 as N grows.',
+        { pit: 'Both intervals assume the model is right (straight line, constant variance, normal errors for the prediction interval). Outside the data, or inside a gap with no rows, the band says nothing about whether the line is still the right shape.',
+          qa: [['Confidence vs prediction interval?', 'Confidence: for the mean of y at x₀, shrinks with N. Prediction: for one new y at x₀, includes the noise σ², so it stays wide.'], ['Why are the bands curved?', 'x̃₀ᵀ(X̃ᵀX̃)⁻¹x̃₀ grows with the distance of x₀ from the centre of the data: a wrong slope matters more far from the middle.']] }); }
   ];
   /* ---------------- Step 10: every diagnostic in full ---------------- */
   function E10(){
@@ -550,7 +565,26 @@ const EXPLAIN = (() => {
             ['What range does leverage take?', 'Between 1/N (with an intercept) and 1. The leverages add up to p, so the average is p/N, and rows above 2p/N or 3p/N are called high leverage.'],
             ['Related measures?', 'DFFITS (change in a row\'s own prediction), DFBETAS (change in each coefficient), and studentised deleted residuals for outlier tests.'],
             ['What to do with an influential row?', 'Check it for errors first. If it is genuine, report results with and without it, or use robust regression (Huber, M-estimators) that down-weights large residuals.']
-          ] }); }
+          ] }); },
+    /* ---- refit without the most influential row ---- */
+    c => { const P = c.P, f = P.f, r = dropOne(P, c.focus);
+      if (!r) return unavailable(P.noDg ? `Not available: ${P.noDg}.` : 'Refitting needs (X̃ᵀX̃)⁻¹ and at least one spare row after deleting a row.');
+      const g2 = r.g, k = r.k, N = P.Xtr.length, p = f.rank, keep = P.Xtr.map((_, i) => i).filter(i => i !== k);
+      const yNew = P.Xtr.map(x => LA.dot(x, g2.w)), shift = f.yhat.map((v, i) => v - yNew[i]), Dd = sum(shift.map(v => v * v)) / (p * f.s2);
+      const cols = P.names.map((nm, q) => nm === '1' ? 'w̃₀' : `w̃ (${nm})`);
+      return ex(`Cook's distance predicts how much the fit would move if one row were deleted. Here we actually delete it and fit again, exactly as in steps 6 → 9a, on the other ${N - 1} rows. If a conclusion depends on one row, you must know that before reporting it.`,
+        TX(String.raw`\text{DFBETA}_j = \hat w_j - \hat w_{j(i)},\qquad D_i = \dfrac{\sum_m (\hat y_m - \hat y_{m(i)})^2}{p\,s^2}`),
+        ol([
+          `The row with the largest Cook's distance is original row ${r.row + 1} (D = ${n(r.cook, 4)}, leverage h = ${n(r.lev, 4)}, residual e = ${n(P.ytr[k], 4)} − ${n(f.yhat[k], 4)} = ${n(f.e[k], 4)}).`,
+          `Fit again without it: the normal equations X̃ᵀX̃ w̃ = X̃ᵀy on ${N - 1} rows (X̃ᵀX̃ loses this row's outer product x̃x̃ᵀ, and X̃ᵀy loses x̃·y).` + T(['', ...cols], [f.w, g2.w, f.w.map((v, q) => v - g2.w[q])].map((rw, q) => [['with the row', 'without it', 'DFBETA = change'][q], ...rw]), { label: '#', k: 3 }),
+          `On the original scale, the slope of ${P.names[r.j]} goes from ${n(r.w0, 4)} to ${n(r.w1, 4)}: a change of ${n(r.dw, 4)}, which is ${n(Math.abs(r.dw) / r.se, 2)} standard errors (SE = ${n(r.se, 4)}).`,
+          `Every prediction moves a little. The first rows: ` + T(['ŷ with the row', 'ŷ without it', 'shift', 'shift²'], f.yhat.map((v, i) => [v, yNew[i], shift[i], shift[i] ** 2]), { label: 'train row', total: ['Σ', '', '', '', sum(shift.map(v => v * v))] }) +
+            `Σ shift² / (p s²) = ${n(sum(shift.map(v => v * v)), 4)} / (${p} × ${n(f.s2, 4)}) = <b>${n(Dd, 4)}</b>, the same as the Cook's distance from the formula (${n(r.cook, 4)}). The formula is a shortcut for this refit.`
+        ]) + `<p class="wdec ${Math.abs(r.dw) > 2 * r.se ? 'rej' : 'acc'}"><b>Reading:</b> ${Math.abs(r.dw) > 2 * r.se ? 'one row moves the slope by more than 2 standard errors: the conclusion depends on it, so investigate it and report both fits' : 'removing the most influential row moves the slope by less than 2 standard errors: no single row decides the result'}.</p>`,
+        'A large change means the result rests on one row. Check that row for errors before anything else; if it is genuine, report both fits or use a robust method.',
+        { pit: 'Deleting one row at a time misses a group of outliers that sit together (masking): delete one and the others still hold the line in place.',
+          qa: [['Is it OK to delete outliers?', 'Only for a reason outside the fit: a data-entry error, a different population, a broken sensor. Deleting points because they do not fit makes the model look better than it is.'],
+            ['What is DFBETAS?', 'The change in a coefficient when row i is deleted, divided by that coefficient\'s SE. |DFBETAS| > 2/√N is a common flag.']] }); }
     ];
   }
 

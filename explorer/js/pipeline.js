@@ -12,6 +12,17 @@ const PIPE = (() => {
   const addM = (A, B, k = 1) => A.map((r, i) => r.map((v, j) => v + k * B[i][j]));
   const sandwich = (inv, meat, k) => LA.mul(LA.mul(inv, meat), inv).map(r => r.map(v => v * k));
 
+  /* the train/test split: random 80/20, unless the data say otherwise
+     d.testIdx: these rows are the test set (extrapolation, distribution shift)
+     d.forceTrain: these rows must be training rows (outliers, so their effect is visible) */
+  function splitIdx(N, seed, d = {}){
+    if (d.testIdx && d.testIdx.length) { const T = new Set(d.testIdx); return { tr: [...Array(N).keys()].filter(i => !T.has(i)), te: [...T].sort((a, b) => a - b), fixed: true }; }
+    const rng = mulberry32(seed * 131 + 7), order = [...Array(N).keys()];
+    for (let i = N - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    const nTr = Math.max(2, Math.round(0.8 * N));
+    if (d.forceTrain) d.forceTrain.forEach(i => { const at = order.indexOf(i); if (at >= nTr) { const sw = order.findIndex((v, k) => k < nTr && !d.forceTrain.includes(v)); if (sw >= 0) [order[at], order[sw]] = [order[sw], order[at]]; } });
+    return { tr: order.slice(0, nTr).sort((a, b) => a - b), te: order.slice(nTr).sort((a, b) => a - b), fixed: false };
+  }
   function run(d, { seed, ar = false, lr = 0.2, iters: T = 400 }){
     const N = d.N, P = d.X[0].length, names = d.names;
     const rows = d.X.map((r, i) => [...r.slice(1), d.y[i]]);
@@ -31,16 +42,18 @@ const PIPE = (() => {
       maxFeatCorr: (() => { let m = 0; for (let a = 1; a < P; a++) for (let b = a + 1; b < P; b++) { const r = Math.abs(corr(cols[a], cols[b])); if (isFinite(r)) m = Math.max(m, r); } return P > 2 ? m : NaN; })()
     };
     // ---- 4. split (random 80/20) ----
-    const rng = mulberry32(seed * 131 + 7), order = [...Array(N).keys()];
-    for (let i = N - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
-    const nTr = Math.max(2, Math.round(0.8 * N)), tr = order.slice(0, nTr).sort((a, b) => a - b), te = order.slice(nTr).sort((a, b) => a - b);
+    const sp = splitIdx(N, seed, d), tr = sp.tr, te = sp.te, nTr = tr.length;
     // ---- 5. standardise with train statistics ----
     const mu = [0], sd = [1];
     for (let j = 1; j < P; j++) { const c = tr.map(i => d.X[i][j]); mu.push(ST.mean(c)); const s = Math.sqrt(ST.mean(c.map(v => (v - mu[j]) ** 2))); sd.push(s > 1e-12 ? s : 1); }
     const z = r => r.map((v, j) => j === 0 ? 1 : (v - mu[j]) / sd[j]);
     const Xtr = tr.map(i => z(d.X[i])), ytr = tr.map(i => d.y[i]), Xte = te.map(i => z(d.X[i])), yte = te.map(i => d.y[i]);
     // ---- 6–9. fit ----
-    const f = ST.ols(Xtr, ytr), dg = nTr > f.rank + 1 ? ST.diagnostics(Xtr, ytr, f) : null;
+    const f = ST.ols(Xtr, ytr);
+    // a perfect fit (no noise, or no spare rows) leaves residuals that are only rounding error: the tests would be reading noise of size 1e-15
+    const perfect = !(f.SSE > 1e-18 * Math.max(1, f.SST)), why = perfect ? (nTr <= f.rank ? `there are ${nTr} training rows and ${f.rank} independent columns, so the fit passes through every point and no residual is left` : 'σ = 0: every point lies exactly on the line, so every residual is 0 (up to rounding)') : '';
+    let dg = null; try { dg = !perfect && nTr > f.rank + 1 ? ST.diagnostics(Xtr, ytr, f) : null; } catch (err) { dg = null; }
+    const noDg = dg ? '' : perfect ? why : `only ${nTr} training rows for ${f.rank} independent columns: the tests need more rows than coefficients`;
     const H = LA.mul(LA.T(Xtr), Xtr).map(r => r.map(v => 2 * v / nTr)), eigH = LA.eigSym(H).values;
     const lim = 2 / eigH[0], eta = lr * lim, XT = LA.T(Xtr);
     let w = new Array(P).fill(0); const iters = [], lossHist = [], wHist = [];
@@ -80,7 +93,7 @@ const PIPE = (() => {
     const isTrain = new Array(N).fill(false); tr.forEach(i => isTrain[i] = true);
     return { N, P, names, dupes, outY, outX, eda, nTr, nTe: te.length, mu, sd, Xtr, ytr, Xte, yte, yhte, ete, tr, te, isTrain, dupFlag, outFlag, lossHist, wHist, f, dg, eigH, lim, eta, frac: lr, T, iters, diverged: !isFinite(lossHist[lossHist.length - 1]) || lossHist[lossHist.length - 1] > 1e12,
       hc: unscale(hc), nw: nw && { se: unscale(nw.se), lag: nw.lag }, cl: cl && { se: unscale(cl.se), groups: cl.groups },
-      rmseTr: Math.sqrt(f.SSE / nTr), rmseTe, r2Te, wOrig, seOrig, ar };
+      rmseTr: Math.sqrt(f.SSE / nTr), rmseTe, r2Te, wOrig, seOrig, ar, perfect, noDg, splitFixed: sp.fixed, dropped: d.dropped || null };
   }
-  return { run };
+  return { run, splitIdx };
 })();

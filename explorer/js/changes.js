@@ -41,9 +41,39 @@ const CHG = (() => {
     dummytrap: { x: 'x = 10u, plus three 0/1 columns A, B, C (one per category, all kept)', y: 'y = 2 + 1.5x + (0, 3 or 6 by category) + ε' },
     confounder: { x: 'x = 5 + 2s·z + 2.2·z₃, where z is a hidden variable', e: 'error seen by the model = 3s·z + σ·zᵢ: the hidden z is inside it', y: 'y = 2 + 1.5·x + 3s·z + σ·zᵢ' },
     measerr: { x: 'recorded x = true x + 3s·z₂ (true x = 10u)', e: 'error seen by the model = σ·zᵢ − 1.5·(recorded x − true x)', y: 'y = 2 + 1.5·(true x) + σ·zᵢ' },
-    reverse: { x: 'x = 10u + γ/(1 − 1.5γ)·ε with γ = 0.4s: x responds to y', e: 'εᵢ = σ·zᵢ (but now x moves with it)' }
+    reverse: { x: 'x = 10u + γ/(1 − 1.5γ)·ε with γ = 0.4s: x responds to y', e: 'εᵢ = σ·zᵢ (but now x moves with it)' },
+    /* data properties */
+    outy: { y: 'y = 2 + 1.5x + ε, except about 1 row in 60 at a typical x: y + 6·max(σ, 1)·s' },
+    levon: { x: 'x = 10u sorted, except the last row: x = 10 + 15s (far out)', y: 'y = 2 + 1.5x + ε for every row, the far-out one included' },
+    levoff: { x: 'x = 10u sorted, except the last row: x = 10 + 15s (far out)', y: 'y = 2 + 1.5x + ε, except the far-out row: 20s below the line' },
+    outcluster: { y: 'y = 2 + 1.5x + ε, except about 1 row in 12 at high x: − 8·max(σ, 1)·s, all together' },
+    nlarge: { x: 'N = 200 rows; x = 10u sorted, plus the extra features' }, nmod: { x: 'N = 60 rows; x = 10u sorted, plus the extra features' }, nsmall: { x: 'N = 15 rows; x = 10u sorted, plus the extra features' },
+    nap: { x: 'N chosen so that the training rows = p + 1' }, nlp: { x: 'N chosen so that the training rows < p' },
+    nszero: { e: 'εᵢ = 0 for every row (σ = 0)' }, nsmod: { e: 'εᵢ = 2.5·max(σ, 1)·zᵢ' }, nshigh: { e: 'εᵢ = 6·max(σ, 1)·zᵢ' },
+    nspure: { e: 'εᵢ = √(1.5²·100/12 + σ²)·zᵢ: the whole spread of the baseline y', y: 'y = 9.5 + ε: no x at all' },
+    rrestrict: { x: 'x = 5 + (10u − 5)(1 − 0.8s): squeezed toward 5' },
+    rgap: { x: 'x = 10u, with the middle moved out: values 0–5 go to 0–4, 5–10 go to 7–10 (blended by s)', y: 'y = 2 + 1.5x + 4s·exp(−(x − 5.5)²/0.8) + ε: a bump inside the gap' },
+    rextrap: { x: 'x = 10u sorted; rows with x > 10 − 4s are the test set', y: 'y = 2 + 1.5x + 0.35s·max(0, x − 6)² + ε: bends beyond x = 6' },
+    irfew: { x: 'x = 10u, plus 3 columns n = 10u that y does not use' }, irmany: { x: 'x = 10u, plus 15 columns n = 10u that y does not use' },
+    ircopy: { x: 'x = 10u, plus x_copy = x + (0.05 + 2(1 − s))·z' },
+    mcar: { y: 'y = 2 + 1.5x + ε, then each y lost with probability 0.3s; rows without y dropped' },
+    mar: { y: 'y = 2 + 1.5x + ε, then lost with probability 0.7s·(x/10)²; rows without y dropped' },
+    mnar: { y: 'y = 2 + 1.5x + ε, then lost with probability 0.85s / (1 + e^(−2.2·z_y)), z_y = standardised y; rows dropped' },
+    tskew: { e: 'multiplicative: e^(0.12·max(σ, 0.3)·zᵢ)', y: 'y = (1 − s)(2 + 1.5x + σzᵢ) + s·e^(0.6 + 0.25x + 0.12·max(σ, 0.3)·zᵢ)' },
+    tbound: { e: 'inside the curve: 0.25·max(σ, 0.3)·zᵢ', y: 'y = 20 / (1 + e^(−(−3 + 0.6x + 0.25·max(σ, 0.3)·zᵢ))): always between 0 and 20' },
+    tcount: { e: 'Poisson noise: variance equals the mean', y: 'y ~ Poisson(λ), λ = e^(0.3 + 0.25x): whole numbers 0, 1, 2, …' },
+    cbin: { x: 'x = 10u, plus a 0/1 column B (level B of a two-level category)', y: 'y = 2 + 1.5x + 4s·B + ε' },
+    cmulti: { x: 'x = 10u, plus one-hot columns B, C, D (level A is the reference)', y: 'y = 2 + 1.5x + (0, 3s, −2s or 5s by level) + ε' },
+    chigh: { x: 'x = 10u, plus 24 one-hot columns c₂ … c₂₅ (level 1 is the reference)', y: 'y = 2 + 1.5x + (a random effect per level, sd 3s) + ε' },
+    sgint: { x: 'two hidden groups; group 1 has x = 3 + 0.7·10u, group 0 x = 0.8·10u', y: 'y = 2 + 1.5x + 7s·[group 1] + ε (the group is not a column)' },
+    sgslope: { y: 'y = 2 + 1.5x − 2s·(x − 5)·[group 1] + ε (the group is not a column)' },
+    simpson: { x: 'group 0: x = 0.5·10u; group 1: x = 5 + 0.5·10u', y: 'y = 2 + 1.5x + 18s·[group 0] + ε: slope +1.5 inside each group' },
+    shfeat: { x: 'training rows x = 10u; the last 20% (test) x = (1 − s)·10u + s·(7.5 + 1.2z)' },
+    shrel: { y: 'training rows y = 2 + 1.5x + ε; the last 20% (test) y = 2 + (1.5 − 1.2s)x + 3s + ε' },
+    lktarget: { x: 'x = 10u, plus leak = y + (0.3 + 4(1 − s))·z, recorded after y' },
+    lkprep: { x: 'x = 10u, plus enc = (1 − s)·ȳ_train + s·(mean y of the row\'s level over ALL rows): target encoding before the split' }
   };
-  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one; return { base: B, cur: Object.assign({}, B, R[v.id] || {}) }; };
+  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, R[v.id] || {}) }; };
 
   /* data-driven comparison of columns */
   function columns(d){
@@ -54,7 +84,8 @@ const CHG = (() => {
     return cols;
   }
   function diff(cur, base){
-    const cc = columns(cur.d), bc = columns(base.d), out = [];
+    const cc = columns(cur.d), bc = columns(base.d), out = [], om = cur.d.orig;
+    if (om) bc.forEach(b => { b.vals = om.map(i => b.vals[i]); });
     cc.forEach(c => { const b = bc.find(x => x.key === c.key);
       if (!b) { out.push({ ...c, status: 'new' }); return; }
       const m = Math.min(c.vals.length, b.vals.length); let mx = 0; for (let i = 0; i < m; i++) mx = Math.max(mx, Math.abs(c.vals[i] - b.vals[i]));
@@ -85,7 +116,7 @@ const CHG = (() => {
     const steps = STEPS.filter(st => inf[st.id] && inf[st.id][0] !== 'none').map(st => { const L = LEVELS[inf[st.id][0]];
       return `<li><a href="#step-${st.id}" data-goto="step-${st.id}"><span class="lv ${L.cls}"><b>${L.glyph}</b></span> Process step ${st.id}, ${esc(st.title)}</a>: ${esc(inf[st.id][1])}</li>`; }).join('');
     const quiet = STEPS.filter(st => !inf[st.id] || inf[st.id][0] === 'none').map(st => st.id).join(', ');
-    const sub10 = { linearity: 0, homoscedasticity: 1, independence: 2, normality: 3, multicollinearity: 4, exogeneity: 0 }[a.id], tests = ['RESET', 'Breusch–Pagan', 'Durbin–Watson', 'Jarque–Bera', 'VIF', "Cook's distance"];
+    const sub10 = { linearity: 0, homoscedasticity: 1, independence: 2, normality: 3, multicollinearity: 4, exogeneity: 0, outliers: 6, samplesize: 0, noise: 0, range: 0, irrelevant: 4, missing: 0, target: 3, categorical: 0, subgroups: 0, shift: 0, leakage: 4 }[a.id] ?? 0, tests = ['RESET', 'Breusch–Pagan', 'Durbin–Watson', 'Jarque–Bera', 'VIF', "Cook's distance", 'the refit without the most influential row'];
     return `<div class="chg-cols"><div><h3>Where to look, in order</h3><ol class="chg-trail">
         <li><a href="#chg-data" data-goto="chg-data">The dataset table in section 2</a>: the changed column is tinted, so compare baseline and variant cell by cell.</li>
         <li><a href="#sig-part" data-goto="sig-part">Section 3, what it looks like</a>: the fingerprint, measured against the baseline.</li>

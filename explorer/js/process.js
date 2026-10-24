@@ -105,6 +105,100 @@ const INF = {
     11: ['major', 'The CI is centred on the wrong value and almost never covers the true effect.'],
     12: ['none', 'Predictive accuracy on similar data can still be good.'],
     13: ['major', 'Reading the slope as a causal effect is wrong.']
+  },
+  /* ---------- Data properties ---------- */
+  outliers: {
+    1: ['origin', 'A few rows do not follow the pattern of the rest.'],
+    2: ['major', 'The |z| > 3 check flags unusual values; each flag means "investigate", not "delete".'],
+    3: ['minor', 'The scatter shows a point far from the cloud.'],
+    '9a': ['major', 'Squared errors give a far-away point a large pull on the fitted line.'], '9b': ['minor', 'Gradient descent reaches the same pulled line.'],
+    10: ['major', "Leverage, studentised residuals and Cook's distance single out the row; refit without it to see how much it moves the fit."],
+    11: ['major', 'One large residual inflates s², so every SE grows; a pulled slope can also move the interval.'],
+    12: ['minor', 'Test error depends on whether test rows look like the outlier or like the rest.'],
+    13: ['minor', 'Report the result with and without the influential row.']
+  },
+  samplesize: {
+    1: ['origin', 'How many rows were collected, compared with the number of coefficients p.'],
+    4: ['minor', 'With few rows, a 20% test set is only a handful of rows: the test score itself is noisy.'],
+    6: ['minor', 'X̃ᵀX̃ needs at least p rows to be invertible.'],
+    '9a': ['minor', 'The estimate is unbiased but swings a lot from sample to sample.'],
+    10: ['minor', 'Tests have little power with few rows: "no problem found" means little.'],
+    11: ['major', 'SE shrinks like 1/√N; with few spare rows the t critical value grows too.'],
+    12: ['major', 'Test error is much larger than training error when N is close to p.'],
+    13: ['minor', 'Coefficients are hard to interpret when their intervals are wide.']
+  },
+  noise: {
+    1: ['origin', 'How large the random errors are compared with the signal.'],
+    '9a': ['none', 'The least-squares estimate stays unbiased at any noise level.'],
+    10: ['minor', 'The tests still work, but with more noise each pattern is harder to see.'],
+    11: ['major', 'SE grows in proportion to σ: s² estimates σ².'],
+    12: ['major', 'The test RMSE cannot go below σ: noise is the irreducible error.'],
+    13: ['minor', 'With a lot of noise the slope is real but explains little (low R²).']
+  },
+  range: {
+    1: ['origin', 'Which x values were observed decides where the model has information.'],
+    3: ['minor', 'The histogram of x shows the narrow range or the gap.'],
+    11: ['major', 'SE of the slope is σ / √Σ(x − x̄)²: a narrow range of x means a large SE.'],
+    12: ['minor', 'Test rows from the same range score as usual.'],
+    13: ['major', 'Predictions are only supported inside the observed range of x.']
+  },
+  irrelevant: {
+    1: ['origin', 'Some columns have nothing to do with y.'],
+    5: ['major', 'Feature selection (or regularisation) should remove them.'],
+    6: ['minor', 'More columns: p grows and the spare rows N − p shrink.'],
+    '9a': ['minor', 'The fit uses the noise columns to chase noise in y: training error drops.'],
+    11: ['major', 'Each noise column has a 5% chance of looking significant; adjusted R² and the F-test account for the extra columns.'],
+    12: ['major', 'Test error rises: the noise columns add variance, not information.'],
+    13: ['minor', 'The noise coefficients are not zero in the sample, but they mean nothing.']
+  },
+  missing: {
+    1: ['origin', 'Some values of y were never recorded.'],
+    2: ['major', 'The missing-value check counts them; here the incomplete rows are dropped (complete-case analysis).'],
+    4: ['minor', 'Fewer rows are left to split.'],
+    '9a': ['minor', 'Fewer rows; whether the estimate is biased depends on why the values are missing.'],
+    11: ['major', 'Fewer rows means larger SEs.'],
+    13: ['minor', 'The result describes the rows that were recorded.']
+  },
+  target: {
+    1: ['origin', 'y is not an unbounded measurement with bell-shaped noise.'],
+    3: ['major', 'The histogram of y is skewed, piled up at a bound, or made of whole numbers.'],
+    5: ['major', 'Transform y (log), or choose a model made for this kind of y.'],
+    7: ['major', 'A generalised linear model (log link, logistic, Poisson) matches the shape of y.'],
+    10: ['major', 'Residuals curve, fan out and are skewed: RESET, Breusch–Pagan and Jarque–Bera react.'],
+    11: ['major', 'Classical SEs assume constant variance, which this y does not have.'],
+    12: ['minor', 'Some predictions fall outside the possible range of y.'],
+    13: ['major', 'One constant slope cannot describe a y that grows multiplicatively or saturates.']
+  },
+  categorical: {
+    1: ['origin', 'A feature is a category, not a number.'],
+    3: ['minor', 'Plot y by category: each level has its own average.'],
+    5: ['major', 'One-hot encode with one level dropped: each column is 1 for its level and 0 otherwise.'],
+    6: ['minor', 'Each level adds one column to X̃.'],
+    '9a': ['minor', 'Each dummy coefficient is a level’s difference from the reference level.'],
+    11: ['minor', 'Test the levels together with a partial F-test, not one dummy at a time.'],
+    13: ['major', 'Read each dummy coefficient as "compared with the reference level, holding x fixed".']
+  },
+  subgroups: {
+    1: ['origin', 'The rows come from two groups that behave differently, and the group is not recorded as a column.'],
+    3: ['major', 'Colour the scatter by any candidate grouping: two clouds appear.'],
+    7: ['major', 'Add the group (and, if needed, group × x) to the model.'],
+    '9a': ['major', 'One pooled line averages two different relationships, and can even reverse the sign (Simpson’s paradox).'],
+    10: ['major', 'Residuals form two bands, or two different trends.'],
+    11: ['major', 'The interval is centred on the pooled slope, which is not the slope in either group.'],
+    13: ['major', 'The pooled slope is the wrong reading for both groups.']
+  },
+  shift: {
+    1: ['origin', 'The test rows do not come from the same place as the training rows.'],
+    4: ['major', 'The test rows are a later period or a different population, not a random 20%.'],
+    12: ['major', 'Test error reflects the shift, not just noise.'],
+    13: ['minor', 'Monitor the inputs and the errors in production.']
+  },
+  leakage: {
+    1: ['origin', 'Information about y reaches the model in a way that will not be available at prediction time.'],
+    2: ['major', 'The leakage check asks of each column and step: was it known before y, and was it decided without the test rows?'],
+    4: ['major', 'The split must come before anything that learns from the data.'],
+    12: ['major', 'The test score is too good to be true.'],
+    13: ['major', 'The model will disappoint in real use.']
   }
 };
 const INF_V = {
@@ -122,13 +216,60 @@ const INF_V = {
     6: ['major', 'The dummies add up to the intercept column, so rank(X) < p.'], 13: ['major', 'Category coefficients have no unique meaning until one level is dropped.'] },
   confounder: { 7: ['major', 'Include the confounder z (or an instrument for x).'] },
   measerr: { 2: ['minor', 'Better measurement of x is the real fix.'], 7: ['major', 'Use an errors-in-variables model or instruments.'], '9a': ['major', 'ŵ is shrunk toward 0 (attenuation bias).'] },
-  reverse: { 7: ['major', 'Needs an instrument or a structural (simultaneous-equation) model.'] }
+  reverse: { 7: ['major', 'Needs an instrument or a structural (simultaneous-equation) model.'] },
+  levon: { '9a': ['none', 'The far-out row lies on the true line, so it does not pull the slope.'], 10: ['major', "Leverage is huge but the residual is small, so Cook's distance stays modest: a good leverage point."], 11: ['minor', 'The SE of the slope actually shrinks, because the far-out x widens the range.'] },
+  levoff: { 12: ['major', 'The pulled line predicts the ordinary test rows worse.'], 13: ['major', 'The slope mostly reflects one row.'] },
+  outcluster: { 10: ['major', "Masking: each row of the cluster hides the others, so removing one at a time barely changes the fit; Cook's distance under-flags them."] },
+  outy: { '9a': ['minor', 'At a typical x the outlier mostly lifts the intercept; the slope moves little.'] },
+  nlarge: { 1: ['origin', 'N = 200: many more rows than coefficients.'], 11: ['minor', 'SEs are small.'], 12: ['minor', 'Train and test error are close.'] },
+  nmod: { 11: ['minor', 'SEs are moderate.'] },
+  nap: { 6: ['major', 'With N_train = p + 1 rows, X̃ᵀX̃ is invertible but barely determined.'], 10: ['major', 'With one spare row the tests have nothing to work with.'], 11: ['major', 'One degree of freedom: t critical value 12.7 instead of 2, so the intervals are huge.'] },
+  nlp: { 6: ['major', 'Fewer rows than columns: rank(X̃) < p, X̃ᵀX̃ has zero eigenvalues and no inverse.'], '9a': ['major', 'Infinitely many weight vectors fit the training rows exactly; the minimum-length one is reported.'], 10: ['major', 'No residuals are left, so no test can be run.'], 11: ['major', 'No spare rows: s², SEs, t and p are undefined.'] },
+  nslow: { 11: ['minor', 'SEs scale with σ.'] },
+  nszero: { 10: ['major', 'Every residual is 0, so the tests have nothing to test.'], 11: ['major', 's² = 0, so the SEs are 0 and t is infinite: perfect certainty, which real data never give.'], 12: ['major', 'Test error is 0: there is nothing irreducible left.'] },
+  nspure: { 1: ['origin', 'y does not depend on x at all: the true slope is 0.'], 11: ['major', 'The F-test should not reject; about 5% of samples still show a "significant" slope by chance.'], 12: ['major', 'Test R² is about 0 or negative: the model is no better than predicting the mean.'], 13: ['major', 'Any slope estimated here is noise.'] },
+  rrestrict: { 13: ['major', 'Outside 4–6 the model has no evidence at all.'] },
+  rgap: { 11: ['minor', 'The SE of the slope is fine: the gap does not reduce the spread of x.'], 12: ['minor', 'The test rows come from the same gappy distribution, so the score looks fine.'], 13: ['major', 'Inside the gap the line is a guess: the true curve has a bump there that no data point shows.'] },
+  rextrap: { 4: ['origin', 'The test rows are the high-x rows: beyond anything the model was trained on.'], 12: ['major', 'Test error jumps: the line keeps going straight where the truth bends.'], 13: ['major', 'Extrapolation: never trust the line outside the training range.'] },
+  irfew: { 12: ['minor', 'Test error rises a little.'] },
+  ircopy: { 6: ['major', 'x and x_copy are almost the same column: κ is large.'], '9a': ['major', 'The credit is split arbitrarily between x and x_copy.'], 11: ['major', 'Both SEs inflate (the same story as multicollinearity).'], 12: ['none', 'Predictions are fine.'] },
+  mcar: { '9a': ['none', 'Missing completely at random: the rows left are a random sample, so no bias.'] },
+  mar: { '9a': ['none', 'The chance of missing depends only on x, which is in the model, so the slope is still unbiased.'], 13: ['minor', 'High-x rows are under-represented, so that region is less precise.'] },
+  mnar: { '9a': ['major', 'High y values are missing, so the line is pulled down where y is high: the slope is biased.'], 11: ['major', 'The interval is centred on a biased slope and misses the truth.'], 13: ['major', 'Results do not describe the full population.'] },
+  tbound: { 12: ['major', 'Predictions can go below 0 or above 20.'] },
+  tcount: { 12: ['major', 'Predictions are not whole numbers and can be negative near x = 0.'] },
+  cbin: { 6: ['minor', 'One extra 0/1 column.'] },
+  chigh: { 6: ['major', '24 dummy columns: p jumps, and some columns have only one or two 1s.'], '9a': ['major', 'Levels with one or two rows get noisy coefficients.'], 11: ['major', 'Rare levels have very large SEs.'], 12: ['major', 'Test rows whose level was rare or unseen are predicted poorly: overfitting.'] },
+  sgint: { 10: ['major', 'Residuals form two bands (bimodal): Jarque–Bera may react.'], '9a': ['major', 'Because group 1 also has higher x, the pooled slope absorbs the group gap.'] },
+  sgslope: { 10: ['major', 'Residuals fan out along x: the two groups drift apart.'] },
+  simpson: { '9a': ['major', 'The pooled slope has the opposite sign to the slope inside each group.'], 13: ['major', 'Simpson’s paradox: the pooled reading is backwards.'] },
+  shfeat: { 12: ['minor', 'The rule is the same, so a correct model still predicts well; test error mostly reflects noise.'], 13: ['minor', 'Covariate shift hurts when the model is only approximately right.'] },
+  shrel: { 12: ['major', 'Test error jumps: the slope learned on the past no longer applies.'], 13: ['major', 'Retrain on recent data and monitor the errors over time.'] },
+  lktarget: { 3: ['major', 'The leak column correlates almost perfectly with y: suspicious, not good news.'], '9a': ['major', 'The model leans on the leak and ignores x.'], 11: ['minor', 'The leak looks extremely significant.'] },
+  lkprep: { 5: ['origin', 'Target encoding (each level replaced by its mean y) was computed on every row, before the split.'], '9a': ['major', 'The model puts weight on enc, a column built from y.'], 11: ['major', 'enc looks significant although the category has no effect.'] }
 };
+/* "no test" with its reason */
+const noTest = c => c.P.noDg ? `${mark(false)} not available: ${c.P.noDg}` : '—';
+/* refit without the row with the largest Cook's distance (standardised scale, then back to original units) */
+function dropOne(P, j = null){
+  const f = P.f; if (!f.cook || P.perfect || P.nTr - 1 <= f.rank) return null;
+  const row = f.cook.indexOf(Math.max(...f.cook)), keep = P.Xtr.map((_, i) => i).filter(i => i !== row);
+  const g = ST.ols(keep.map(i => P.Xtr[i]), keep.map(i => P.ytr[i]), true), jj = j ?? (P.f.w.length > 1 ? 1 : 0);
+  return { row: P.tr[row], k: row, j: jj, w0: f.w[jj] / P.sd[jj], w1: g.w[jj] / P.sd[jj], dw: (g.w[jj] - f.w[jj]) / P.sd[jj], se: f.se[jj] / P.sd[jj], g, cook: f.cook[row], lev: f.lev ? f.lev[row] : NaN };
+}
+/* confidence band for the mean and prediction band for a new point along feature j, other features at their training means (standardised 0) */
+function band(P, j){
+  const f = P.f; if (!f.inv || !(f.df > 0)) return null;
+  const xs = P.tr.map((_, k) => P.Xtr[k][j] * P.sd[j] + P.mu[j]), lo = Math.min(...xs), hi = Math.max(...xs), span = hi - lo || 1, tc = f.tc || 1.96;
+  const pts = [0, 0.25, 0.5, 0.75, 1, 1.3].map(t => { const x = lo + span * t, z = P.Xtr[0].map((_, q) => q === 0 ? 1 : q === j ? (x - P.mu[j]) / P.sd[j] : 0);
+    const q = LA.dot(z, LA.mv(f.inv, z)), yh = LA.dot(z, f.w); return { x, z, q, yh, ci: tc * Math.sqrt(f.s2 * q), pi: tc * Math.sqrt(f.s2 * (1 + q)) }; });
+  return { pts, tc, lo, hi };
+}
 function influence(attrId, variant, isBase, strength){
   const out = {};
   if (isBase) return out;
   Object.assign(out, INF[attrId] || {}, INF_V[variant.id] || {});
-  const weak = variant.id === 'moderate' || (variant.strength && strength < 0.3);
+  const weak = variant.id === 'moderate' || variant.id === 'nmod' || (variant.strength && strength < 0.3);
   if (weak) for (const k in out) if (out[k][0] === 'major') out[k] = ['minor', out[k][1]];
   return out;
 }
@@ -146,9 +287,9 @@ const STEPS = [
     attrs: ['outliers', 'missing', 'leakage'],
     subs: [
       ['', 'Duplicate rows', c => c.P.dupes ? `${mark(false, true)} ${c.P.dupes} duplicate rows found. Kept here so you can see their effect downstream; normally you would remove them.` : `${mark(true)} none found`],
-      ['', 'Missing values', () => `${mark(true)} none (this generator never drops values)`],
+      ['', 'Missing values', c => c.P.dropped ? `${mark(false, true)} ${c.P.dropped.idx.length} rows had no y and were dropped before anything else (complete-case analysis); ${c.P.N} rows remain` : `${mark(true)} none`],
       [sy('z'), 'Outliers with |z| > 3', c => `${c.P.outY + c.P.outX ? mark(false, true) : mark(true)} y: ${c.P.outY}, features: ${c.P.outX}`],
-      ['', 'Leakage check', () => `${mark(true)} no feature is built from y`]
+      ['', 'Leakage check', c => c.variant.id === 'lktarget' ? `${mark(false)} the column "leak" is recorded after y (correlation with y ${num(c.P.eda.corrXY[c.P.names.indexOf('leak') - 1], 3)}): it must be removed` : c.variant.id === 'lkprep' ? `${mark(false)} the column enc (target encoding of a category) was computed from y on every row, test rows included, so each test row's own y is inside its feature` : `${mark(true)} no feature is built from y, and nothing was learned before the split`]
     ]},
   { id: 3, title: 'Exploratory analysis', goal: 'Look before you fit: distributions, shape of the relationship, correlated features.',
     attrs: ['subgroups', 'multicollinearity', 'linearity', 'target', 'colltest'],
@@ -161,7 +302,7 @@ const STEPS = [
   { id: 4, title: 'Train / test split', goal: 'Hold data back before any step that learns from the data, so the test score is honest.',
     attrs: ['split', 'cv', 'seed', 'shift'],
     subs: [
-      [`${sy('Ntr')}, ${sy('Nte')}`, 'Random 80 / 20 split', c => `${sy('Ntr')} = ${c.P.nTr}, ${sy('Nte')} = ${c.P.nTe} (shuffled with sample #${c.S.seed})`],
+      [`${sy('Ntr')}, ${sy('Nte')}`, c => c.P.splitFixed ? 'Split fixed by the data (not random)' : 'Random 80 / 20 split', c => c.P.splitFixed ? `${sy('Ntr')} = ${c.P.nTr}, ${sy('Nte')} = ${c.P.nTe}: ${esc(c.d.note || 'the test rows are set by the data')}` : `${sy('Ntr')} = ${c.P.nTr}, ${sy('Nte')} = ${c.P.nTe} (shuffled with sample #${c.S.seed}${c.d.forceTrain ? '; the changed rows are kept in training so their effect can be seen' : ''})`],
       ['', 'Split method used', c => c.variant.id === 'dupes' ? `${mark(false, true)} random shuffle; copies of the same row land on both sides, so remove duplicates (or split by unique observation) first` : c.attr.id === 'independence' && !c.isBase ? `${mark(false, true)} random shuffle; this variant needs a ${c.variant.id === 'cluster' ? 'group' : 'time-ordered'} split instead` : `${mark(true)} random shuffle, appropriate for independent rows`],
       ['', 'Cross-validation', () => 'not used here (covered in the Validation branch)']
     ]},
@@ -170,7 +311,7 @@ const STEPS = [
     subs: [
       [`${sy('mu')}, ${sy('sd')}`, 'Training mean and SD of each feature', c => c.P.names.slice(1).map((n, k) => `${n}: ${sy('mu')} = ${num(c.P.mu[k + 1], 3)}, ${sy('sd')} = ${num(c.P.sd[k + 1], 3)}`).join('; ')],
       [sy('Xt'), 'Standardise: x̃ = (x − μ) / s, first training row', c => `${vec(c.P.Xtr[0], 3)}`],
-      ['', 'Categorical encoding', c => c.P.names.includes('A') ? `${mark(false)} all three dummies A, B, C kept alongside the intercept` : c.P.names.includes('group') ? `${mark(true)} one binary group column` : 'no categorical features'],
+      ['', 'Categorical encoding', c => c.P.names.includes('A') ? `${mark(false)} all three dummies A, B, C kept alongside the intercept` : c.d.cat ? `${Object.keys(c.d.cat).length > 10 ? mark(false, true) : mark(true)} one-hot, reference level dropped: ${Object.keys(c.d.cat).length} 0/1 column${Object.keys(c.d.cat).length > 1 ? 's' : ''} (${c.P.names.filter(GEN.isCat).slice(0, 6).join(', ')}${Object.keys(c.d.cat).length > 6 ? ', …' : ''})` : c.P.names.includes('group') ? `${mark(true)} one binary group column` : c.d.hiddenGroup ? `${mark(false, true)} the rows come from two groups, but no group column was recorded` : 'no categorical features'],
       ['', 'Transforms, polynomials, selection', () => 'none applied (covered in the Feature engineering branch)']
     ]},
   { id: 6, title: 'Design matrix', goal: 'Assemble X̃ with the intercept column and check it can be solved.',
@@ -213,17 +354,18 @@ const STEPS = [
   { id: 10, title: 'Diagnostics', goal: 'Check the assumptions on the training residuals.',
     attrs: ['residplots', 'influence', 'lintest', 'vartest', 'indtest', 'normtest', 'colltest'],
     subs: [
-      [sy('reset'), 'Linearity (Ramsey RESET)', c => c.P.dg?.reset ? `${c.P.dg.reset.p >= 0.05 ? mark(true) : mark(false)} ${pEq(c.P.dg.reset.p)}` : '—'],
-      [sy('bp'), 'Constant variance (Breusch–Pagan)', c => c.P.dg?.bp ? `${c.P.dg.bp.p >= 0.05 ? mark(true) : mark(false)} ${pEq(c.P.dg.bp.p)}` : '—'],
-      [sy('dw'), 'Independence (Durbin–Watson, rows in order)', c => c.P.dg ? `${c.P.dg.dw > 1.5 && c.P.dg.dw < 2.5 ? mark(true) : mark(false)} ${sy('dw')} = ${num(c.P.dg.dw, 2)}` : '—'],
-      [sy('jb'), 'Normality (Jarque–Bera)', c => c.P.dg ? `${c.P.dg.jb.p >= 0.05 ? mark(true) : mark(false)} ${pEq(c.P.dg.jb.p)}` : '—'],
-      [sy('vif'), 'Collinearity (largest VIF)', c => c.P.dg?.vif.length ? (v => `${v <= 5 ? mark(true) : v <= 10 ? mark(false, true) : mark(false)} ${isFinite(v) ? num(v, 1) : '∞'}`)(Math.max(...c.P.dg.vif)) : '—'],
-      [sy('cook'), "Influence (largest Cook's distance)", c => c.P.f.cook ? (v => `${v < 1 ? mark(true) : mark(false)} ${num(v, 3)}`)(Math.max(...c.P.f.cook)) : '—']
+      [sy('reset'), 'Linearity (Ramsey RESET)', c => c.P.dg?.reset ? `${c.P.dg.reset.p >= 0.05 ? mark(true) : mark(false)} ${pEq(c.P.dg.reset.p)}` : noTest(c)],
+      [sy('bp'), 'Constant variance (Breusch–Pagan)', c => c.P.dg?.bp ? `${c.P.dg.bp.p >= 0.05 ? mark(true) : mark(false)} ${pEq(c.P.dg.bp.p)}` : noTest(c)],
+      [sy('dw'), 'Independence (Durbin–Watson, rows in order)', c => c.P.dg ? `${c.P.dg.dw > 1.5 && c.P.dg.dw < 2.5 ? mark(true) : mark(false)} ${sy('dw')} = ${num(c.P.dg.dw, 2)}` : noTest(c)],
+      [sy('jb'), 'Normality (Jarque–Bera)', c => c.P.dg ? `${c.P.dg.jb.p >= 0.05 ? mark(true) : mark(false)} ${pEq(c.P.dg.jb.p)}` : noTest(c)],
+      [sy('vif'), 'Collinearity (largest VIF)', c => c.P.dg?.vif.length ? (v => `${v <= 5 ? mark(true) : v <= 10 ? mark(false, true) : mark(false)} ${isFinite(v) ? num(v, 1) : '∞'}`)(Math.max(...c.P.dg.vif)) : noTest(c)],
+      [sy('cook'), "Influence (largest Cook's distance)", c => c.P.f.cook && !c.P.perfect ? (v => `${v < 1 ? mark(true) : mark(false)} ${num(v, 3)}`)(Math.max(...c.P.f.cook)) : noTest(c)],
+      ['', 'Refit without the most influential row', c => { const r = dropOne(c.P); if (!r) return noTest(c); return `${Math.abs(r.dw) > 2 * r.se ? mark(false, true) : mark(true)} row ${r.row + 1}: slope of ${c.P.names[r.j]} ${num(r.w0, 3)} → ${num(r.w1, 3)} without it (change ${num(r.dw, 3)} = ${num(Math.abs(r.dw) / r.se, 2)} SEs)`; }]
     ]},
   { id: 11, title: 'Inference', goal: 'How uncertain is each coefficient, and which standard error is right for this data?',
     attrs: ['coefinf', 'ftest', 'robustse', 'intervals'],
     subs: [
-      [sy('s2'), 'Error variance', c => `${sy('s2')} = SSE / (${c.P.nTr} − ${c.P.f.rank}) = ${num(c.P.f.s2, 4)}`],
+      [sy('s2'), 'Error variance', c => c.P.f.df > 0 ? `${sy('s2')} = SSE / (${c.P.nTr} − ${c.P.f.rank}) = ${num(c.P.f.s2, 4)}${c.P.perfect ? ` ${mark(false)} every residual is 0, so s² = 0 and every SE below is 0 (t is infinite)` : ''}` : `${mark(false)} undefined: SSE / (${c.P.nTr} − ${c.P.f.rank}) divides by ${c.P.nTr - c.P.f.rank}. There are no spare rows to measure the noise with, so s², the SEs, t, p and the intervals cannot be computed`],
       [sy('se'), c => `Standard errors of the ${c.P.names[c.focus]} slope (original scale)`, c => {
         const j = c.focus, P = c.P, need = c.isBase || c.variant.id === 'dupes' ? null : c.attr.id === 'independence' ? (c.variant.id === 'cluster' ? 'cl' : 'nw') : c.attr.id === 'homoscedasticity' ? 'hc' : null;
         const row = (k, label, v) => `<span class="se-opt${k === need ? ' pick' : ''}"${k === need ? ' title="the right standard error for this variant"' : ''}>${label} ${isFinite(v) ? num(v, 4) : 'n/a'}</span>`;
@@ -254,6 +396,8 @@ const STEPS = [
     attrs: ['reading', 'causal', 'intervals'],
     subs: [
       [sy('w'), 'Back to the original scale: w_j = w̃_j / s_j, b = w̃₀ − Σ w̃_j μ_j / s_j', c => c.P.names.map((n, j) => `${n === '1' ? 'b' : n}: ${num(c.P.wOrig[j], 3)}${c.d.truth.coef[j] != null ? ` (true ${c.d.truth.coef[j]})` : ''}`).join(', ')],
-      ['', 'Reading the slope', c => { const j = c.focus; return `one unit more of ${c.P.names[j]} changes ${sy('yhat')} by ${num(c.P.wOrig[j], 3)}, holding the other features fixed`; }]
+      ['', 'Reading the slope', c => { const j = c.focus; return `one unit more of ${c.P.names[j]} changes ${sy('yhat')} by ${num(c.P.wOrig[j], 3)}, holding the other features fixed`; }],
+      ['', 'Confidence and prediction intervals at a new x', c => { const b = band(c.P, c.focus); if (!b) return `${mark(false)} not available: ${c.P.noDg || 'X̃ᵀX̃ has no inverse'}`;
+        return b.pts.filter((_, k) => k % 2 === 0).map(q => `${c.P.names[c.focus]} = ${num(q.x, 1)}: ŷ ${num(q.yh, 2)}, mean ± ${num(q.ci, 2)}, new point ± ${num(q.pi, 2)}`).join('; '); }]
     ]}
 ];
