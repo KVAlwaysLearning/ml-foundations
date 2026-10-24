@@ -517,6 +517,49 @@ const SIG = (() => {
   }
   ['intercept', 'modeltype', 'robust', 'regularisation', 'lambda', 'alpha', 'penalisebias', 'otherforms', 'lossfn', 'penalty'].forEach(k => { A[k] = mfSig; });
 
+  /* ================= Optimisation: the same model, a different way of finding its weights ================= */
+  function opSig(ctx){ const { v, P, Pb, a } = ctx, F = ctx.full ? ctx.full.cur : ctx.cur.d, O = P.opt, B = Pb.opt, E2 = OP.ex;
+    const iterAxis = O && (O.attr === 'gdtype' || O.attr === 'schedule') ? 'epoch' : 'iteration', perE = o => (o && o.perEpoch && iterAxis === 'epoch') ? o.perEpoch : 1;
+    const gen = `${esc(v.desc)} The data, the model (least squares) and the loss are the same for every variant of ${esc(a.name.toLowerCase())}; only the way the weights are found changes.${F.note ? ' ' + esc(F.note) + '.' : ''}`;
+    const runTxt = o => !o ? '—' : !o.hist ? 'exact (no iterations)' : `${o.stop.t} ${o.perEpoch > 1 ? 'updates' : o.info.method === 'cd' ? 'sweeps' : 'iterations'}, final L ${o.diverged ? (isFinite(o.Lfinal) ? E2(o.Lfinal) + ', diverging' : '∞') : n(o.Lfinal, 5)}`;
+    const see = li(!O ? ['—'] : [
+      `The method: <b>${esc(O.label)}</b>.`,
+      O.hist ? `It stopped at ${O.stop.t}: ${esc(O.stop.reason)}.` : `Exact: the normal-equation residual ‖X̃ᵀX̃w̃ − X̃ᵀy‖ is ${E2(O.info.resid ?? 0)}, i.e. zero up to rounding.`,
+      `Final loss ${O.diverged ? `<b>${isFinite(O.Lfinal) ? E2(O.Lfinal) + ' and still growing' : '∞'} (diverging)</b>` : `<b>${n(O.Lfinal, 6)}</b>`} vs the minimum ${n(O.Lstar, 6)}; largest gap to the least-squares weights (original units) ${O.diverged ? '∞' : E2(O.gap)}.`,
+      B && B !== O ? `Baseline (${esc(a.variants[0].name)}): ${runTxt(B)}.` : '',
+      O.attr === 'scalegd' ? `Eigenvalues of the curvature H: ${O.info.ev.map(t => E2(t)).join(', ')}, so κ = ${E2(O.info.ev[0] / O.info.ev[O.info.ev.length - 1])}.` : '',
+      O.attr === 'solver' && O.info.kX ? `κ(X̃) = ${n(O.info.kX, 2)}, κ(X̃ᵀX̃) = ${n(O.info.kA, 2)}: the normal equations and Cholesky work with the squared one.` : '']);
+    const draw = el => { const r1 = row(el), out = [];
+      if (O && O.hist) {
+        out.push(chart(r1, `Excess loss L − L_min at each ${iterAxis} (log scale)`, 250, c => { const ser = [[O, CUR(), false], ...(B && B !== O && B.hist ? [[B, BASEC(), true]] : [])];
+          const pts = ser.map(([o]) => o.hist.map(h => [h.t / perE(o), Math.max(Math.min(h.L - o.Lstar, 1e12), 1e-14)]).filter(q => isFinite(q[1])));
+          const all = pts.flat().map(q => q[1]), xm = Math.max(...pts.flat().map(q => q[0]), 1);
+          c.begin([0, xm], [Math.max(Math.min(...all), 1e-14), Math.max(...all)], iterAxis === 'epoch' ? 'epoch (passes over the training rows)' : O.info.method === 'cd' ? 'sweep' : 'iteration', 'L − L_min', { logY: true });
+          pts.forEach((q, k) => c.line(q, ser[k][1], k ? 2 : 2.4, ser[k][2] ? [5, 4] : null)); c.end();
+          c.legend([[CUR(), 'this variant'], ...(ser.length > 1 ? [[BASEC(), `baseline (${esc(a.variants[0].name)})`, true]] : [])]); }));
+        out.push(chart(r1, 'The path of (w̃₁, w̃₂) over the loss surface (darker = lower loss)', 250, c => { const X = O.raw ? O.info.Xr : P.Xtr, y = P.ytr, path = O.hist.map(h => h.w).filter(w => w.every(isFinite) && Math.abs(w[1]) < 1e6), wS = O.raw ? O.info.wStarRaw : P.f.w;
+          const xs = [...path.map(w => w[1]), wS[1]], ys = [...path.map(w => w[2]), wS[2]], xr = range([xs]), yr = range([ys]), padX = (xr[1] - xr[0]) * 0.15 || 1, padY = (yr[1] - yr[0]) * 0.15 || 1;
+          const X0 = [xr[0] - padX, xr[1] + padX], Y0 = [yr[0] - padY, yr[1] + padY], G = 36, Ls = [];
+          for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) { const w = [...wS]; w[1] = X0[0] + (X0[1] - X0[0]) * (i + 0.5) / G; w[2] = Y0[0] + (Y0[1] - Y0[0]) * (j + 0.5) / G; Ls.push([i, j, Math.log10(OP.lossOf(X, y, w) - O.Lstar + 1e-9)]); }
+          const lo = Math.min(...Ls.map(t => t[2])), hi = Math.max(...Ls.map(t => t[2]));
+          c.begin(X0, Y0, O.raw ? 'w₁ (raw)' : 'w̃₁', O.raw ? 'w₂ (raw)' : 'w̃₂');
+          Ls.forEach(([i, j, l]) => c.rect(X0[0] + (X0[1] - X0[0]) * i / G, Y0[0] + (Y0[1] - Y0[0]) * j / G, X0[0] + (X0[1] - X0[0]) * (i + 1) / G, Y0[0] + (Y0[1] - Y0[0]) * (j + 1) / G, C('--floor'), 0.04 + 0.8 * (1 - (l - lo) / (hi - lo || 1)) ** 1.5));
+          const step = Math.max(1, Math.floor(path.length / 400)); c.line(path.filter((_, k) => k % step === 0 || k === path.length - 1).map(w => [w[1], w[2]]), CUR(), 1.8);
+          c.dot([path[0][1], path[0][2]], C('--normal'), 5); c.dot([wS[1], wS[2]], C('--ink'), 5, true); c.end();
+          c.legend([[CUR(), 'path of the run'], [C('--normal'), 'start'], [C('--ink'), 'least-squares minimum']]); }));
+      } else if (O) {
+        out.push(chart(r1, 'Digits at risk: log₁₀ of the condition number', 250, c => { const kx = O.info.kX || Math.sqrt(P.f.kappa), ka = O.info.kA || P.f.kappa; c.begin([0.4, 2.6], [0, Math.max(Math.log10(ka), 1) * 1.15], '', 'log₁₀ κ');
+          c.rect(0.6, 0, 1.4, Math.log10(kx), C('--surface'), 0.8); c.rect(1.6, 0, 2.4, Math.log10(ka), C('--normal'), 0.8); c.text('κ(X̃): QR, SVD', [0.6, Math.log10(kx)], C('--ink')); c.text('κ(X̃ᵀX̃): normal eq., Cholesky', [1.5, Math.log10(ka)], C('--ink')); c.end(); }));
+        out.push(chart(r1, 'Training rows and the fitted line (x₂ at its mean)', 250, c => { const xs = P.tr.map(i => F.X[i][1]), yy = P.ytr, xr = range([xs]), m2 = mean(P.tr.map(i => F.X[i][2])), L2 = xv => O.wOrig[0] + O.wOrig[1] * xv + O.wOrig[2] * m2;
+          c.begin(xr, range([yy]), 'x₁', 'y'); xs.forEach((t, k) => c.dot([t, yy[k]], C('--floor'), 3, false, 0.7)); c.line([[xr[0], L2(xr[0])], [xr[1], L2(xr[1])]], CUR(), 2.4); c.end(); }));
+      }
+      return out; };
+    const tbl = O && O.hist ? table(['iteration', 'L', '‖∇L‖', ...P.names.map((_, j) => j ? `w̃ (${P.names[j]})` : 'w̃₀')], (() => { const K = O.hist.length - 1, pick = [...new Set(Array.from({ length: 11 }, (_, q) => Math.round(q * K / 10)))]; return pick.map(t => [O.hist[t].t, O.hist[t].L, O.hist[t].gn ?? '—', ...O.hist[t].w]); })(), { max: 12, foot: `Least squares (step 9a): w̃ = ${'[' + P.f.w.map(t => n(t, 4)).join(', ') + ']'}, L = ${n(O.Lstar, 6)}.` })
+      : table(['coefficient', 'this solver', 'normal equations', 'difference'], P.names.map((nm, j) => [nm === '1' ? 'w̃₀' : nm, O ? O.w[j] : NaN, P.f.w[j], O ? E2(Math.abs(O.w[j] - P.f.w[j])) : '—']), { max: 12 });
+    return { gen, see, draw, table: tbl };
+  }
+  ['solver', 'gdtype', 'lr', 'schedule', 'optimiser', 'init', 'stopping', 'scalegd'].forEach(k => { A[k] = opSig; });
+
   function howFit(v){
     const d = v.d, f = v.f;
     if (d.X[0].length !== 2) return `the weights solve the normal equations X̃ᵀX̃ w̃ = X̃ᵀy, exactly as in <a href="#step-9a" data-goto="step-9a">step 9a</a>`;

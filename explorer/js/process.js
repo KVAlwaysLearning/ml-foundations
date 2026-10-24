@@ -290,6 +290,14 @@ const INF = {
   penalisebias: { 8: ['origin', 'Whether the intercept is part of the penalty.'], '9a': ['major', 'A penalised intercept is pulled toward 0, away from the mean of y.'], 12: ['major', 'Every prediction is shifted toward 0.'], 13: ['major', 'The intercept is wrong; the slopes are barely affected.'] },
   lossfn: { 8: ['origin', 'The loss decides how much each residual costs: squared, absolute, Huber, pinball or log-cosh.'], '9a': ['major', 'Only squared loss has the normal equations; the others are solved by iteratively reweighted least squares.'], 10: ['major', 'Residuals of a non-squared loss need not average 0.'], 11: ['major', 'Classical SEs belong to OLS; other losses need their own (sandwich or bootstrap) SEs.'], 12: ['major', 'The best loss for the test score depends on the metric: MSE is scored best by the squared loss, MAE by the absolute loss.'], 13: ['major', 'Each loss estimates a different line: mean, median, a quantile, or a robust centre.'] },
   penalty: { 5: ['major', 'Features must be standardised so the penalty treats them alike.'], 8: ['origin', 'A penalty term on the weights is added to the loss.'], '9a': ['major', 'L2 keeps a closed form (λ on the diagonal); L1 needs coordinate descent.'], 11: ['major', 'Classical SEs do not apply to penalised estimates.'], 12: ['major', 'With correlated features a penalty usually lowers the test error.'], 13: ['major', 'Coefficients are shrunk; L1 sets some exactly to 0.'] },
+  solver: { '9a': ['origin', 'A different way of solving the same normal equations.'], '9b': ['major', 'Iterative solvers (gradient or coordinate descent) approach the answer step by step.'], 6: ['major', 'The condition number decides how accurate each solver is: κ(X̃) for QR and SVD, κ(X̃)² for the normal equations and Cholesky.'] },
+  gdtype: { '9b': ['origin', 'How many rows each gradient step uses.'], 12: ['minor', 'An unconverged SGD run predicts slightly worse.'], 13: ['minor', 'The weights wander around the minimum unless η decays.'] },
+  lr: { '9b': ['origin', 'The step size η decides whether gradient descent crawls, converges, zig-zags or explodes.'], 12: ['major', 'A run that has not converged (or diverged) gives worse predictions.'], 13: ['major', 'The weights are wherever the run stopped, not the least-squares weights.'] },
+  schedule: { '9b': ['origin', 'How η changes over the epochs of SGD.'], 12: ['minor', 'A decaying η lets SGD settle near the minimum.'] },
+  optimiser: { '9b': ['origin', 'The update rule: plain, momentum, Nesterov, RMSProp or Adam.'], 12: ['minor', 'All reach the same minimum eventually; they differ in speed.'] },
+  init: { '9b': ['origin', 'Where the weights start.'], 13: ['minor', 'The loss is a convex bowl: every start reaches the same minimum.'] },
+  stopping: { '9b': ['origin', 'When to stop iterating.'], 4: ['major', 'Early stopping holds out part of the training rows as a validation set.'], 12: ['minor', 'Stopping early leaves the weights short of the minimum (sometimes on purpose).'], 13: ['minor', 'The weights depend on where the run stopped.'] },
+  scalegd: { 5: ['origin', 'Whether the features are standardised before gradient descent.'], 6: ['major', 'Unscaled features make κ huge: the bowl is a very long, narrow valley.'], '9b': ['major', 'The safe step is set by the steep direction, so the flat direction barely moves.'], 12: ['major', 'An unconverged run predicts badly.'] },
   otherforms: { 6: ['major', 'PCA and PLS replace the correlated columns by a few uncorrelated components.'], 7: ['origin', 'A different model built on the same features.'], '9a': ['major', 'The solution is found in component space (PCA, PLS) or as a posterior (Bayesian).'], 11: ['major', 'Bayesian credible intervals replace confidence intervals.'], 12: ['major', 'Fewer effective parameters: less variance on correlated data.'], 13: ['major', 'Coefficients are mapped back from the components, or come with posterior spreads.'] }
 };
 const INF_V = {
@@ -351,6 +359,14 @@ const INF_V = {
 };
 /* Model formulation: what the variant's own model is, minimises, finds and scores (next to the OLS backbone) */
 const ALT_MODEL = { origin: 'ŷ = w·x (no intercept: the line must pass through 0)', wls: 'ŷ = X̃w̃, the same columns as OLS', gls: 'ŷ = X̃w̃, with errors εₜ = ρεₜ₋₁ + uₜ', huber: 'ŷ = X̃w̃, the same line shape as OLS', ransac: 'ŷ = X̃w̃, fitted on the inliers only', theil: 'ŷ = b + w·x', quantile: 'ŷ = X̃w̃ estimates the median of y, not its mean', ridge: 'ŷ = X̃w̃, the same columns as OLS', lasso: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', enet: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', pcr: 'ŷ = b + Σ γₖ·(component k); each component is a fixed mix of the features', pls: 'ŷ = b + Σ qₖ·(PLS component k)', bayes: 'w̃ has a prior N(0, τ²); ŷ uses its posterior mean' };
+function optText(c, part){
+  const O = c.P.opt; if (!O) return part === 'solver' ? 'not used: the normal equations above (the Optimisation branch has the other solvers)' : 'not used: the plain gradient descent above (the Optimisation branch has the other set-ups)';
+  if (part === 'solver' && O.attr !== 'solver') return 'the normal equations above';
+  if (part === 'run' && O.attr === 'solver' && !O.hist) return `no iterations: ${esc(O.label)} is exact (see step 9a)`;
+  if (part === 'solver') return `${esc(O.label)}: w̃ = ${vec(O.w, 4)}${O.info.diff != null ? `, the same as the normal equations to ${O.info.diff < 1e-9 ? 'machine precision' : num(O.info.diff, 2)}` : O.gap < 1e-3 ? ', the same as the normal equations' : ` (${num(O.gap, 3)} away from the normal equations)`}`;
+  const st = O.stop || {};
+  return `${O.diverged ? mark(false) : O.gap < 1e-3 ? mark(true) : mark(false, true)} ${esc(O.label)}; stopped at ${st.t}: ${esc(st.reason || '')}. L = ${O.diverged ? (isFinite(O.Lfinal) ? OP.ex(O.Lfinal) + ', diverging' : '∞ (diverged)') : num(O.Lfinal, 5)} vs the minimum ${num(O.Lstar, 5)}`;
+}
 function altText(c, part){
   const A = c.P.alt; if (!A) return c.d.mf ? 'this variant is ordinary least squares itself: see above' : 'not used: this is ordinary least squares (the Model formulation branch has the alternatives)';
   const m = A.info.method || A.kind, lam = A.info.lam;
@@ -477,7 +493,8 @@ const STEPS = [
       [`${sy('XtX')}, ${sy('det')}`, 'From the loss to the normal equations X̃ᵀX̃ w̃ = X̃ᵀy', c => `${c.P.P}×${c.P.P}, ${sy('det')} = ${num(c.P.f.det, 4)}`],
       [sy('wt'), 'Solve them: w̃ = (X̃ᵀX̃)⁻¹X̃ᵀy', c => `${c.P.f.full ? mark(true) : mark(false)} ${sy('wt')}* = ${vec(c.P.f.w)}${c.P.f.full ? '' : ' (minimum-norm: the solution is not unique)'}`],
       [sy('L'), 'Loss at the solution', c => `${sy('L')}(${sy('wt')}*) = ${num(c.P.f.SSE / c.P.nTr, 4)}`],
-      ['', "This variant's fit", c => altText(c, 'fit')]
+      ['', "This variant's fit", c => altText(c, 'fit')],
+      ['', "This variant's solver", c => optText(c, 'solver')]
     ]},
   { id: '9b', title: 'Optimise: gradient descent', goal: 'Reach the same minimum by repeated downhill steps.',
     attrs: ['gdtype', 'lr', 'schedule', 'optimiser', 'init', 'stopping', 'scalegd'],
@@ -486,7 +503,8 @@ const STEPS = [
       [sy('eta'), 'Step size used', c => `${sy('eta')} = ${num(c.P.frac, 2)} × 2/${sy('lmax')} = ${num(c.P.eta, 4)}${c.P.diverged ? ' (too big: the run diverges)' : ''}`],
       [`${sy('t')}, ${sy('grad')}`, 'Loop: predict → residual → loss → gradient → update', c => `<div class="it-tbl"><table><tr><th>${sy('t')}</th><th>${sy('wt')}_t</th><th>${sy('L')}</th><th>‖${sy('grad')}‖</th><th>${sy('wt')}_t − ${sy('eta')}${sy('grad')}</th></tr>` +
         c.P.iters.map(i => `<tr><td>${i.t}</td><td>${vec(i.w, 3)}</td><td>${num(i.L, 4)}</td><td>${num(i.gn, 4)}</td><td>${vec(i.next, 3)}</td></tr>`).join('') + `</table></div>`],
-      ['', 'Compared with the closed form', c => { const last = c.P.iters[c.P.iters.length - 1], gap = Math.abs(last.L - c.P.f.SSE / c.P.nTr); return `${gap < 1e-6 ? mark(true) : mark(false, true)} after ${last.t} iterations ${sy('L')} = ${num(last.L, 4)} vs ${num(c.P.f.SSE / c.P.nTr, 4)}`; }]
+      ['', 'Compared with the closed form', c => { const last = c.P.iters[c.P.iters.length - 1], gap = Math.abs(last.L - c.P.f.SSE / c.P.nTr); return `${gap < 1e-6 ? mark(true) : mark(false, true)} after ${last.t} iterations ${sy('L')} = ${num(last.L, 4)} vs ${num(c.P.f.SSE / c.P.nTr, 4)}`; }],
+      ['', "This variant's run", c => optText(c, 'run')]
     ]},
   { id: 10, title: 'Diagnostics', goal: 'Check the assumptions on the training residuals.',
     attrs: ['residplots', 'influence', 'lintest', 'vartest', 'indtest', 'normtest', 'colltest'],

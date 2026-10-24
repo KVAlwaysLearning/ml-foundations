@@ -100,8 +100,11 @@ const PIPE = (() => {
     const res = { N, P, names, dupes, outY, outX, eda, nTr, nTe: te.length, mu, sd, Xtr, ytr, Xte, yte, yhte, ete, tr, te, isTrain, dupFlag, outFlag, lossHist, wHist, f, dg, eigH, lim, eta, frac: lr, T, iters, diverged: !isFinite(lossHist[lossHist.length - 1]) || lossHist[lossHist.length - 1] > 1e12,
       hc: unscale(hc), nw: nw && { se: unscale(nw.se), lag: nw.lag }, cl: cl && { se: unscale(cl.se), groups: cl.groups },
       rmseTr: Math.sqrt(f.SSE / nTr), rmseTe, r2Te, wOrig, seOrig, ar, perfect, noDg, splitFixed: sp.fixed, dropped: d.dropped || null, orig, scale: d.scale || 'std' };
+    res.seed = seed;
     // Model formulation: the variant's own model, fitted next to OLS on the same standardised training rows
     try { res.alt = d.alt ? MF.fit(d.alt, res, d) : null; } catch (err) { console.error(err); res.alt = null; }
+    // Optimisation: the variant's own way of finding the weights, recorded iteration by iteration
+    try { res.opt = d.opt ? OP.run(d.opt, res, d) : null; } catch (err) { console.error(err); res.opt = null; }
     return res;
   }
   return { run, splitIdx };

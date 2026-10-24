@@ -194,6 +194,125 @@ ${chkW('post_sd', I.sdPost, 'posterior SD')}
     }
     return null;
   }
+  /* Optimisation: replay the variant's solver or run in numpy, step for step */
+  function optCode(c, { L, n, mark }){
+    const P = c.P, O = P.opt; if (!O) return null;
+    const I = O.info, k = O.kind, E = v => String(+v.toPrecision(12));
+    const base = `yv = y_tr.to_numpy()
+D = sm.add_constant(Xs_tr, has_constant="add")   # X̃ (standardised, column of 1s first)
+n = len(yv)
+w_ls = np.linalg.lstsq(D, yv, rcond=None)[0]     # the least-squares answer, for comparison: app ${L(P.f.w)}
+`;
+    const rngPy = `
+def mulberry32(a):                               # the app's random-number generator, bit for bit
+    st = [a & 0xFFFFFFFF]
+    imul = lambda x, y: (x * y) & 0xFFFFFFFF
+    def r():
+        a = (st[0] + 0x6D2B79F5) & 0xFFFFFFFF; st[0] = a
+        t = imul(a ^ (a >> 15), 1 | a)
+        t = ((t + imul(t ^ (t >> 7), 61 | t)) & 0xFFFFFFFF) ^ t
+        return ((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296
+    return r
+`;
+    const gdPy = `
+def run_gd(X, y, w0, T, eta, opt="gd", batch=None, rng=None, stop=None, tol=None, val=None, patience=10):
+    """Gradient descent exactly as the app runs it. eta(t, epoch) -> step size."""
+    N, p = X.shape; bs = batch or N; per_epoch = -(-N // bs)
+    w = np.array(w0, float); v = np.zeros(p); m = np.zeros(p); s = np.zeros(p)
+    L = lambda w, X=X, y=y: np.mean((y - X @ w) ** 2)
+    G = lambda w, X=X, y=y: -2 / len(y) * X.T @ (y - X @ w)
+    hist = [L(w)]; order = np.arange(N); best = None; bad = 0
+    for t in range(1, T + 1):
+        epoch, k = (t - 1) // per_epoch, (t - 1) % per_epoch
+        if bs < N and k == 0:                    # reshuffle every epoch (Fisher–Yates, as in the app)
+            order = list(range(N))
+            for i in range(N - 1, 0, -1):
+                j = int(rng() * (i + 1)); order[i], order[j] = order[j], order[i]
+            order = np.array(order)
+        idx = order[k * bs:(k + 1) * bs] if bs < N else order
+        Xb, yb, e = X[idx], y[idx], eta(t, epoch)
+        if opt == "nest":
+            g = G(w + 0.9 * v, Xb, yb); v = 0.9 * v - e * g; step = v
+        else:
+            g = G(w, Xb, yb)
+            if opt == "gd": step = -e * g
+            if opt == "mom": v = 0.9 * v - e * g; step = v
+            if opt == "rms": s = 0.9 * s + 0.1 * g**2; step = -e * g / (np.sqrt(s) + 1e-8)
+            if opt == "adam":
+                m = 0.9 * m + 0.1 * g; s = 0.999 * s + 0.001 * g**2
+                step = -e * (m / (1 - 0.9**t)) / (np.sqrt(s / (1 - 0.999**t)) + 1e-8)
+        w = w + step; hist.append(L(w))
+        if not np.all(np.isfinite(w)) or hist[-1] > 1e12: return w, hist, ("diverged", t)
+        if stop == "grad" and np.linalg.norm(G(w)) < tol: return w, hist, ("gradient tolerance", t)
+        if stop == "loss" and abs(hist[-2] - hist[-1]) / max(hist[-1], 1e-12) < tol: return w, hist, ("loss tolerance", t)
+        if val is not None:
+            lv = L(w, *val)
+            if best is None or lv < best[0] - 1e-12: best, bad = (lv, w.copy(), t), 0
+            else: bad += 1
+            if bad >= patience: return best[1], hist, ("early stopping, best iteration %d" % best[2], t)
+    return w, hist, ("budget used up", T)
+`;
+    const lmaxPy = `lmax = np.linalg.eigvalsh(2 / n * D.T @ D).max()   # curvature of the steepest direction: app ${n(2 / P.lim, 6)}
+lim = 2 / lmax`;
+    const tail = !O.stop ? '' : `\nprint(np.round(w, 4))${' '.repeat(29)}# app: w̃ = ${O.w.every(isFinite) ? L(O.w) : 'not finite'}${O.diverged ? ' (diverging)' : ''}
+print(stopped, round(hist[-1], 6) if np.isfinite(hist[-1]) else "inf")   # app: stopped at ${O.stop.t}, L = ${O.w.every(isFinite) ? n(OP.lossOf(O.raw ? O.info.Xr : P.Xtr, P.ytr, O.w), 6) : 'inf'}${O.kind === 'rms' ? `\n# RMSProp's steps stay about η in size near the minimum, so its last iterates jitter: rounding differences between\n# numpy and the app grow there, and the final digits can differ (the loss agrees to about 3 decimals).` : ''}`;
+    switch (O.attr) {
+      case 'solver':
+        if (k === 'neq') return base + `w = np.linalg.solve(D.T @ D, D.T @ yv)${mark('the normal equations')}\nprint(np.round(w, 4))                            # app: w̃ = ${L(O.w)}`;
+        if (k === 'chol') return base + `from scipy.linalg import solve_triangular
+Lc = np.linalg.cholesky(D.T @ D)                 # X̃ᵀX̃ = L Lᵀ, L lower triangular${mark('Cholesky')}
+print(np.round(Lc, 4))                           # app: L = ${'[' + I.L.map(r => L(r)).join(', ') + ']'}
+z = solve_triangular(Lc, D.T @ yv, lower=True)   # forward substitution: app z = ${L(I.z)}
+w = solve_triangular(Lc.T, z, lower=False)       # back substitution
+print(np.round(w, 4))                            # app: w̃ = ${L(O.w)}`;
+        if (k === 'qr') return base + `Q, R = np.linalg.qr(D)                           # Householder QR (numpy); Gram–Schmidt gives the same factors up to signs${mark('QR')}
+s = np.sign(np.diag(R)); Q, R = Q * s, R * s[:, None]   # make R's diagonal positive, as Gram–Schmidt does
+print(np.round(R, 4))                            # app: R = ${'[' + I.R.map(r => L(r)).join(', ') + ']'}
+print(np.allclose(Q.T @ Q, np.eye(D.shape[1])))  # the columns of Q are orthonormal
+print(np.round(Q.T @ yv, 4))                     # app: Qᵀy = ${L(I.qty)}
+from scipy.linalg import solve_triangular
+w = solve_triangular(R, Q.T @ yv)                # back substitution
+print(np.round(w, 4))                            # app: w̃ = ${L(O.w)}`;
+        if (k === 'pinv') return base + `U, S, Vt = np.linalg.svd(D, full_matrices=False)  # X̃ = U Σ Vᵀ${mark('SVD')}
+print(np.round(S, 4))                            # singular values: app σ = ${L(I.sig)}
+print(np.round(S.max() / S.min(), 3), np.round((S.max() / S.min())**2, 3))   # κ(X̃), κ(X̃ᵀX̃): app ${n(I.kX, 3)} ${n(I.kA, 3)}
+w = Vt.T @ np.diag(1 / S) @ U.T @ yv             # V Σ⁺ Uᵀ y  (np.linalg.pinv(D) @ yv is the same)
+print(np.round(w, 4))                            # app: w̃ = ${L(O.w)}`;
+        if (k === 'cd') return base + `w = np.zeros(D.shape[1]); nrm = (D**2).sum(axis=0)
+for sweep in range(1, 501):${mark('coordinate descent')}
+    biggest = 0
+    for j in range(D.shape[1]):
+        r_j = yv - D @ w + D[:, j] * w[j]        # residual without feature j
+        new = D[:, j] @ r_j / nrm[j]; biggest = max(biggest, abs(new - w[j])); w[j] = new
+    if biggest < 1e-12: break
+print(sweep, np.round(w, 4))                     # app: ${O.stop.t} sweeps, w̃ = ${L(O.w)}`;
+        if (k === 'gd') return base + gdPy + lmaxPy + `\nw, hist, stopped = run_gd(D, yv, np.zeros(D.shape[1]), 200, lambda t, ep: 0.5 * lim)${mark('gradient descent as the solver')}` + tail;
+        break;
+      case 'gdtype': return base + rngPy + gdPy + lmaxPy + `\nbs, eta = ${k === 'batch' ? 'n, 0.5 * lim' : k === 'sgd' ? '1, 0.01' : '8, 0.05'}
+w, hist, stopped = run_gd(D, yv, np.zeros(D.shape[1]), 20 * -(-n // bs), lambda t, ep: eta, batch=bs, rng=mulberry32(${I.seedRng}))${mark(k === 'batch' ? 'full batch' : k === 'sgd' ? 'one row per step' : '8 rows per step')}` + tail + `
+# scikit-learn's version: SGDRegressor(learning_rate="constant", eta0=..., penalty=None) (its loss is ½·MSE and its shuffling differs)`;
+      case 'lr': return base + gdPy + lmaxPy + `\nw, hist, stopped = run_gd(D, yv, np.zeros(D.shape[1]), 100, lambda t, ep: ${I.frac} * lim)${mark(`η = ${I.frac} × 2/λ_max`)}` + tail + `
+print(np.round(np.abs(1 - ${I.frac} * lim * np.linalg.eigvalsh(2 / n * D.T @ D)), 4))   # per-direction factor |1 − ηλₖ| (> 1 diverges)`;
+      case 'schedule': return base + rngPy + gdPy + `\neta = ${{ const: 'lambda t, ep: 0.03', step: 'lambda t, ep: 0.03 * 0.5 ** (ep // 5)', exp: 'lambda t, ep: 0.03 * 0.9 ** ep', inv: 'lambda t, ep: 0.03 / (1 + ep / 2)' }[k]}${mark('the schedule')}
+w, hist, stopped = run_gd(D, yv, np.zeros(D.shape[1]), 20 * n, eta, batch=1, rng=mulberry32(${I.seedRng}))` + tail;
+      case 'optimiser': return base + gdPy + lmaxPy + `\neta = ${k === 'rms' ? '0.1' : k === 'adam' ? '0.2' : '0.05 * lim'}
+w, hist, stopped = run_gd(D, yv, np.zeros(D.shape[1]), 200, lambda t, ep: eta, opt="${k}")${mark(k)}` + tail + (k === 'adam' ? '\n# PyTorch: torch.optim.Adam(params, lr=0.2) uses the same update' : '');
+      case 'init': return base + gdPy + lmaxPy + `\nw0 = np.array(${k === 'rand' ? L(I.w0) : L(I.w0)})${k === 'rand' ? '                # app: 0.01 × N(0, 1) draws' : ''}${mark('the starting point')}
+w, hist, stopped = run_gd(D, yv, w0, 3000, lambda t, ep: 0.5 * lim, stop="grad", tol=1e-6)` + tail;
+      case 'stopping': return base + gdPy + lmaxPy + (k === 'early' ? `\nnv = ${I.nv}                                      # the last ${I.nv} training rows are the validation set
+w, hist, stopped = run_gd(D[:-nv], yv[:-nv], np.zeros(D.shape[1]), 5000, lambda t, ep: 0.05 * lim, val=(D[-nv:], yv[-nv:]), patience=10)${mark('early stopping')}` + `\nprint(np.round(w, 4))${' '.repeat(29)}# app: w̃ = ${L(O.w)}\nprint(stopped)                                   # app: stopped at ${O.stop.t}; ${O.stop.reason}`
+        : `\nw, hist, stopped = run_gd(D, yv, np.zeros(D.shape[1]), ${k === 'fixed' ? 100 : 5000}, lambda t, ep: 0.05 * lim${k === 'fixed' ? '' : `, stop="${k}", tol=${k === 'grad' ? '0.01' : '1e-6'}`})${mark(k === 'fixed' ? 'fixed budget' : k === 'grad' ? 'gradient tolerance' : 'loss tolerance')}` + tail);
+      case 'scalegd': return k === 'scaled' ? base + gdPy + lmaxPy + `\nw, hist, stopped = run_gd(D, yv, np.zeros(D.shape[1]), 200, lambda t, ep: 0.9 * lim)${mark('standardised features')}` + tail
+        : `yv = y_tr.to_numpy()
+Dr = sm.add_constant(X_tr.to_numpy(), has_constant="add")   # RAW features: no StandardScaler${mark('unscaled')}
+n = len(yv)
+ev = np.linalg.eigvalsh(2 / n * Dr.T @ Dr)
+print(ev[::-1], ev.max() / ev.min())             # eigenvalues of the raw curvature and κ: app ${L(I.ev)}
+lim = 2 / ev.max()` + gdPy + `\nw, hist, stopped = run_gd(Dr, yv, np.zeros(Dr.shape[1]), 200, lambda t, ep: 0.9 * lim)` + tail.replace('w̃ =', 'w (raw) =') + `
+print(np.round(np.linalg.lstsq(Dr, yv, rcond=None)[0], 4))   # where it should have gone: app ${L(I.wStarRaw)}`;
+    }
+    return null;
+  }
   function cells(c){
     const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss, num, cat, nCols } = csv(c);
     const F = cat ? `num + cat` : `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra.find(e => e === 'group' || e === 'cluster');
@@ -411,7 +530,8 @@ features = [f for f in features if f != "leak"]        # drop every column not k
     }[aid];
     const MFC = MF.has(vid) ? mfCode(c, { feats, L, n, mark }) : undefined;
     if (MF.has(vid)) FIX = MFC;
-    out.push({ id: 'fix', t: MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
+    if (OP.has(vid)) FIX = optCode(c, { L, n, mark });
+    out.push({ id: 'fix', t: OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
     return out;
   }
 

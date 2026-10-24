@@ -243,15 +243,54 @@ const CATALOG = [
       { id: 'pnl1l2', name: 'L1 + L2', desc: 'Loss = (1/2N)·squared error + λ(½Σ|w̃| + ¼Σw̃²) (elastic net, α = 0.5), λ by CV.' }
     ]}
   ]},
-  { id: 'optimisation', name: 'Optimisation', attrs: [
-    { id: 'solver', name: 'Solver', variants: ['Normal equations', 'Pseudo-inverse (SVD)', 'QR', 'Cholesky', 'Gradient descent', 'Coordinate descent'] },
-    { id: 'gdtype', name: 'GD type', variants: ['Batch', 'Stochastic', 'Mini-batch'] },
-    { id: 'lr', name: 'Learning rate', variants: ['Good', 'Tiny', 'Near the limit', 'Too large'] },
-    { id: 'schedule', name: 'Learning-rate schedule', variants: ['Constant', 'Step decay', 'Exponential', '1/t'] },
-    { id: 'optimiser', name: 'Optimiser', variants: ['Plain GD', 'Momentum', 'Nesterov', 'RMSProp', 'Adam'] },
-    { id: 'init', name: 'Initialisation', variants: ['Zeros', 'Small random', 'Far away'] },
-    { id: 'stopping', name: 'Stopping rule', variants: ['Fixed iterations', 'Gradient tolerance', 'Loss tolerance', 'Early stopping'] },
-    { id: 'scalegd', name: 'Feature scaling × GD', variants: ['Scaled', 'Unscaled'] }
+  { id: 'optimisation', name: 'Optimisation', live: true, attrs: [
+    { id: 'solver', name: 'Solver', diag: 'fitted', variants: [
+      { id: 'slneq', name: 'Normal equations', desc: 'Solve X̃ᵀX̃w̃ = X̃ᵀy by elimination, on two correlated features (r ≈ 0.9).' },
+      { id: 'slpinv', name: 'Pseudo-inverse (SVD)', desc: 'Split X̃ = UΣVᵀ and use w̃ = VΣ⁺Uᵀy; never forms X̃ᵀX̃, and handles rank deficiency.' },
+      { id: 'slqr', name: 'QR', desc: 'Split X̃ = QR (Q orthonormal, R triangular) and solve Rw̃ = Qᵀy by back-substitution.' },
+      { id: 'slchol', name: 'Cholesky', desc: 'Split X̃ᵀX̃ = LLᵀ (L lower triangular) and do two triangular solves.' },
+      { id: 'slgd', name: 'Gradient descent', desc: 'Repeated downhill steps, η = 0.5 × 2/λ_max, 200 iterations.' },
+      { id: 'slcd', name: 'Coordinate descent', desc: 'Set one weight at a time to its exact best value, cycling until nothing moves.' }
+    ]},
+    { id: 'gdtype', name: 'GD type', diag: 'fitted', variants: [
+      { id: 'gdbatch', name: 'Batch', desc: 'Every step uses the gradient over all training rows.' },
+      { id: 'gdsgd', name: 'Stochastic', desc: 'Every step uses one row, in a shuffled order each epoch.' },
+      { id: 'gdmini', name: 'Mini-batch', desc: 'Every step uses 8 rows.' }
+    ]},
+    { id: 'lr', name: 'Learning rate', diag: 'fitted', variants: [
+      { id: 'lrgood', name: 'Good', desc: 'η = 0.5 × 2/λ_max: steady progress.' },
+      { id: 'lrtiny', name: 'Tiny', desc: 'η = 0.01 × 2/λ_max: safe but barely moves in 100 iterations.' },
+      { id: 'lrnear', name: 'Near the limit', desc: 'η = 0.98 × 2/λ_max: zig-zags across the valley, slowly.' },
+      { id: 'lrbig', name: 'Too large', desc: 'η = 1.05 × 2/λ_max: every step overshoots more, and the loss explodes.' }
+    ]},
+    { id: 'schedule', name: 'Learning-rate schedule', diag: 'fitted', variants: [
+      { id: 'schconst', name: 'Constant', desc: 'SGD with a constant η = 0.03: it never settles, it keeps bouncing around the minimum.' },
+      { id: 'schstep', name: 'Step decay', desc: 'η halves every 5 epochs.' },
+      { id: 'schexp', name: 'Exponential', desc: 'η = 0.03 × 0.9^epoch.' },
+      { id: 'schinv', name: '1/t', desc: 'η = 0.03 / (1 + epoch/2).' }
+    ]},
+    { id: 'optimiser', name: 'Optimiser', diag: 'fitted', variants: [
+      { id: 'opgd', name: 'Plain GD', desc: 'w ← w − η∇L, η = 0.3 × 2/λ_max.' },
+      { id: 'opmom', name: 'Momentum', desc: 'A velocity that remembers 90% of the previous step.' },
+      { id: 'opnest', name: 'Nesterov', desc: 'Momentum with the gradient taken at the look-ahead point.' },
+      { id: 'oprms', name: 'RMSProp', desc: 'Each weight\u2019s step divided by a running RMS of its gradients.' },
+      { id: 'opadam', name: 'Adam', desc: 'Momentum + RMSProp with bias correction.' }
+    ]},
+    { id: 'init', name: 'Initialisation', diag: 'fitted', variants: [
+      { id: 'inzero', name: 'Zeros', desc: 'Start from w̃ = 0.' },
+      { id: 'inrand', name: 'Small random', desc: 'Start from small random weights, N(0, 0.01²).' },
+      { id: 'infar', name: 'Far away', desc: 'Start from w̃ = [40, −40, 40].' }
+    ]},
+    { id: 'stopping', name: 'Stopping rule', diag: 'fitted', variants: [
+      { id: 'stfixed', name: 'Fixed iterations', desc: 'Stop after 100 iterations, wherever the weights are.' },
+      { id: 'stgrad', name: 'Gradient tolerance', desc: 'Stop when the gradient is small: ‖∇L‖ < 0.01.' },
+      { id: 'stloss', name: 'Loss tolerance', desc: 'Stop when the loss changes by less than 10⁻⁶ (relative).' },
+      { id: 'stearly', name: 'Early stopping', desc: 'Hold out 20% of the training rows; stop when their loss has not improved for 10 iterations.' }
+    ]},
+    { id: 'scalegd', name: 'Feature scaling × GD', diag: 'fitted', variants: [
+      { id: 'sgscaled', name: 'Scaled', desc: 'Gradient descent on standardised features (x₂ is in the thousands).' },
+      { id: 'sgunscaled', name: 'Unscaled', desc: 'The same gradient descent on the raw features.' }
+    ]}
   ]},
   { id: 'validation', name: 'Validation protocol', attrs: [
     { id: 'split', name: 'Train/test split', variants: ['80/20', '70/30', '50/50', 'Tiny test set'] },

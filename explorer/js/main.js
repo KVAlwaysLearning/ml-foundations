@@ -214,7 +214,15 @@
       penalisebias: { _: 'A slice through x₁. Solid: OLS; dashed orange: ridge. With the intercept penalised the whole line drops toward 0.' },
       otherforms: { _: 'A slice through x₁. Solid: OLS; dashed orange: this variant’s model.' },
       lossfn: { lfmse: 'Pink points carry the extra upward error. The squared loss pulls the line up toward them: it estimates the mean, not the bulk.', lfquant: 'Solid: the mean line (MSE). Dashed orange: the 90th-percentile line, which about 10% of the points lie above.', _: 'Pink points carry the extra upward error. Solid: the MSE line, pulled up by them. Dashed orange: the line this loss chooses.' },
-      penalty: { _: 'A slice through x₁ with the other 7 features at their means. Solid: no penalty; dashed orange: the penalised model.' }
+      penalty: { _: 'A slice through x₁ with the other 7 features at their means. Solid: no penalty; dashed orange: the penalised model.' },
+      solver: { _: 'Every exact solver gives the same line as the normal equations: the difference is in how the numbers are computed (step 9a) and how accurate they stay when the features are nearly collinear.', slgd: 'After 200 iterations gradient descent sits on the least-squares line.', slcd: 'Coordinate descent converges to the least-squares line.' },
+      gdtype: { _: 'A slice through x₁ (x₂ at its mean). Solid: least squares. Dashed orange, if visible: where this run stopped, short of the minimum.' },
+      lr: { lrtiny: 'Dashed orange: where gradient descent got to in 100 tiny steps, far from the least-squares line (solid).', lrbig: 'The run diverged, so it has no line: its weights grew without limit.', _: 'Solid: least squares. Dashed orange, if visible: where this run stopped.' },
+      schedule: { _: 'Solid: least squares. Dashed orange: where SGD ended after 20 epochs; a decaying η ends closer.' },
+      optimiser: { _: 'Solid: least squares. Dashed orange, if visible: where this optimiser was after 200 iterations.' },
+      init: { _: 'Every start reaches the same least-squares line: the loss is a convex bowl.' },
+      stopping: { _: 'Solid: least squares. Dashed orange: where the run stopped under this rule.' },
+      scalegd: { sgunscaled: 'Dashed orange: after 200 steps on the raw features gradient descent is still far from the least-squares line.', _: 'On standardised features gradient descent reaches the least-squares line.' }
     }[a.id] || {};
     return C2[v.id] || C2._ || 'The variant (filled) against the baseline built from the same random numbers (small grey dots), with the fitted line and the true mean (dashed).';
   }
@@ -242,10 +250,13 @@
     trueLines.forEach((l, k) => Pc.line(l, trueLines.length > 1 ? groupColor(k, groups) : css('--ink'), 1.6, [6, 5], 0.85));
     fitLines.forEach((l, k) => Pc.line(l, lineGroups[k] == null ? css('--surface') : groupColor(lineGroups[k], groups), 2.8));
     const AL = cur.P.alt; if (AL) Pc.line(gx.map(x => [x, LA.dot(rowAt(d, x, 0, j), AL.wOrig)]), css('--residual'), 2.6, [8, 4]);
+    const OPR = cur.P.opt && cur.P.opt.hist && !cur.P.opt.diverged && cur.P.opt.gap > 1e-3 ? cur.P.opt : null; if (OPR) Pc.line(gx.map(x => [x, LA.dot(rowAt(d, x, 0, j), OPR.wOrig)]), css('--residual'), 2.6, [8, 4]);
     if (P.splitFixed) { const trx = P.tr.map(i => xs[i]); Pc.rect(Math.min(...trx), Pc.box.y0, Math.max(...trx), Pc.box.y1, css('--floor'), 0.05); }
     Pc.end();
     const leg = [[css('--surface'), grouped ? 'fitted lines (one per level)' : `fitted line (slope ${num(f.w[j], 3)})`]];
     if (AL) leg.push([css('--residual'), `this variant's model: ${esc(AL.label)} (slope ${num(AL.wOrig[j], 3)})`, true]);
+    if (OPR) leg.push([css('--residual'), `where this run stopped (slope ${num(OPR.wOrig[j], 3)})`, true]);
+    if (cur.P.opt && cur.P.opt.diverged) leg.push([css('--normal'), 'this run diverged: its weights are not finite, so no line']);
     if (trueLines.length) leg.push([css('--ink'), trueLines.length > 1 ? 'true line of each group' : 'true mean E[y | x]', true]);
     if (showBase) leg.push([css('--muted'), 'baseline data (same random numbers)']);
     if (sign) leg.push([css('--floor'), 'above the line'], [css('--normal'), 'below the line']);

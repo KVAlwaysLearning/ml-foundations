@@ -94,9 +94,17 @@ const CHG = (() => {
     pbno: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε; ridge λ = 10, intercept free' }, pbyes: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε; ridge λ = 10, intercept penalised' },
     lfmse: { x: 'x = 10u sorted', e: 'ε = σz, plus s(8 + 4|z₂|) on rows with u₂ < 0.12', y: 'y = 2 + 1.5x + ε; loss: MSE' }, lfmae: { y: 'same y; loss: MAE' }, lfhuber: { y: 'same y; loss: Huber (c = 1.345)' }, lfquant: { y: 'same y; loss: pinball, q = 0.9' }, lflogcosh: { y: 'same y; loss: log-cosh' },
     pnnone: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; loss: SSE' }, pnl2: { y: 'same y; loss: SSE + λΣw̃²' }, pnl1: { y: 'same y; loss: SSE/2N + λΣ|w̃|' }, pnl1l2: { y: 'same y; loss: SSE/2N + λ(½Σ|w̃| + ¼Σw̃²)' },
+    slneq: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; normal equations' }, slpinv: { y: 'same y; SVD pseudo-inverse' }, slqr: { y: 'same y; QR' }, slchol: { y: 'same y; Cholesky' }, slgd: { y: 'same y; gradient descent' }, slcd: { y: 'same y; coordinate descent' },
+    gdbatch: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; batch GD, 20 iterations' }, gdsgd: { y: 'same y; SGD, 20 epochs' }, gdmini: { y: 'same y; mini-batch (8), 20 epochs' },
+    lrgood: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; η = 0.5 × 2/λ_max' }, lrtiny: { y: 'same y; η = 0.01 × 2/λ_max' }, lrnear: { y: 'same y; η = 0.98 × 2/λ_max' }, lrbig: { y: 'same y; η = 1.05 × 2/λ_max' },
+    schconst: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; SGD, η = 0.03' }, schstep: { y: 'same y; SGD, step decay' }, schexp: { y: 'same y; SGD, exponential decay' }, schinv: { y: 'same y; SGD, 1/t decay' },
+    opgd: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; plain GD' }, opmom: { y: 'same y; momentum' }, opnest: { y: 'same y; Nesterov' }, oprms: { y: 'same y; RMSProp' }, opadam: { y: 'same y; Adam' },
+    inzero: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; start at 0' }, inrand: { y: 'same y; small random start' }, infar: { y: 'same y; start at [40, −40, 40]' },
+    stfixed: { x: 'x₁ = 10u₁, x₂ = 0.9x₁ + 1.3z₂ (r ≈ 0.9)', y: 'y = 2 + 1.5x₁ + 1.0x₂ + σz; 100 iterations' }, stgrad: { y: 'same y; stop at ‖∇L‖ < 0.01' }, stloss: { y: 'same y; stop when ΔL/L < 10⁻⁶' }, stearly: { y: 'same y; early stopping' },
+    sgscaled: { x: 'x₁ = 10u₁ (0–10), x₂ = 1000 + 4000u₂; standardised', y: 'y = 2 + 1.5x₁ + 0.002x₂ + σz; GD' }, sgunscaled: { x: 'x₁ = 10u₁ (0–10), x₂ = 1000 + 4000u₂; raw', y: 'y = 2 + 1.5x₁ + 0.002x₂ + σz; GD' },
     ofpcr: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; PCR, k by CV' }, ofpls: { y: 'same y; PLS, k by CV' }, ofbayes: { y: 'same y; Bayesian, prior N(0, 1)' },
   };
-  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && MF.has(v.id) ? b0 : {}, R[v.id] || {}) }; };
+  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && (MF.has(v.id) || OP.has(v.id)) ? b0 : {}, R[v.id] || {}) }; };
 
   /* data-driven comparison of columns */
   function columns(d){
@@ -136,6 +144,8 @@ const CHG = (() => {
       ['Largest VIF', vif(base.dg), vif(cur.dg), fmtI, (x, y) => !isFinite(y) || y > 2 * x],
       ...(PA || PB ? [['Slope of ' + cur.d.names[j] + ", this variant's own model", jb > 0 ? (PB ? PB.wOrig[jb] : ctx.Pb.wOrig[jb]) : NaN, PA ? PA.wOrig[j] : ctx.P.wOrig[j], t => isFinite(t) ? n(t, 3) : '—', (x, y) => Math.abs(x - y) > 0.1 * Math.abs(x) + 0.05],
         ["Test RMSE, this variant's own model", PB ? PB.rmseTe : ctx.Pb.rmseTe, PA ? PA.rmseTe : ctx.P.rmseTe, t => n(t, 3), (x, y) => Math.abs(y / x - 1) > 0.05]] : []),
+      ...(ctx.P && ctx.P.opt ? [["Final loss of this variant's run (minimum " + n(ctx.P.opt.Lstar, 4) + ')', ctx.Pb.opt ? ctx.Pb.opt.Lfinal : NaN, ctx.P.opt.Lfinal, t => isFinite(t) ? (t > 1e6 ? OP.ex(t) : n(t, 5)) : '∞ (diverged)', (x, y) => !isFinite(y) || Math.abs(y - x) > 1e-3 * Math.abs(x)],
+        ['Iterations (or updates) used', ctx.Pb.opt && ctx.Pb.opt.stop ? ctx.Pb.opt.stop.t : NaN, ctx.P.opt.stop ? ctx.P.opt.stop.t : 0, t => isFinite(t) ? n(t, 0) : '—', (x, y) => x !== y]] : []),
       ['Condition number κ (eigenvalues of X̃ᵀX̃, step 6)', base.gram?.kappa, cur.gram?.kappa, t => isFinite(t) ? n(t, 0) : '∞', (x, y) => !isFinite(y) || y > 3 * x]
     ];
     const rows = M.map(([lab, b, c, fm, ch]) => { const moved = isFinite(b) && (isFinite(c) ? ch(b, c) : true); return `<tr class="${moved ? 'hl' : ''}"><td>${lab}</td><td>${fm(b)}</td><td>${fm(c)}</td><td>${moved ? '<b>changed</b>' : 'about the same'}</td></tr>`; }).join('');
