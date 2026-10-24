@@ -306,6 +306,13 @@ const INF = {
   init: { '9b': ['origin', 'Where the weights start.'], 13: ['minor', 'The loss is a convex bowl: every start reaches the same minimum.'] },
   stopping: { '9b': ['origin', 'When to stop iterating.'], 4: ['major', 'Early stopping holds out part of the training rows as a validation set.'], 12: ['minor', 'Stopping early leaves the weights short of the minimum (sometimes on purpose).'], 13: ['minor', 'The weights depend on where the run stopped.'] },
   scalegd: { 5: ['origin', 'Whether the features are standardised before gradient descent.'], 6: ['major', 'Unscaled features make κ huge: the bowl is a very long, narrow valley.'], '9b': ['major', 'The safe step is set by the steep direction, so the flat direction barely moves.'], 12: ['major', 'An unconverged run predicts badly.'] },
+  residplots: { 10: ['origin', 'A picture of the residuals that shows shape, spread and odd rows at a glance.'] },
+  influence: { 10: ['origin', 'Per-row measures of how unusual a row is and how much it moves the fit.'], '9a': ['major', 'Influential rows pull the fitted line.'], 13: ['major', 'One or two rows can change the coefficients.'] },
+  lintest: { 10: ['origin', 'A test and a plot for a missing shape.'], 7: ['major', 'A straight line is the wrong model for a curve.'], 12: ['major', 'The missing curve raises the test error.'] },
+  vartest: { 10: ['origin', 'Tests for error spread that changes with the features.'], 11: ['major', 'Changing spread makes classical SEs wrong.'] },
+  indtest: { 10: ['origin', 'Tests for residuals that carry over from row to row.'], 11: ['major', 'Correlated errors make classical SEs too small.'], 4: ['major', 'Time-ordered rows need a time-ordered split.'] },
+  normtest: { 10: ['origin', 'Tests for normal errors.'], 11: ['minor', 'Small-sample t-tests and prediction intervals rely on normality; large samples less so.'] },
+  colltest: { 3: ['major', 'Correlated features show up in the pair plot.'], 6: ['major', 'Collinearity shows as a small eigenvalue of X̃ᵀX̃.'], 10: ['origin', 'Checks for features that carry the same information.'], 11: ['major', 'Collinear features have inflated SEs.'] },
   coefinf: { 11: ['origin', 'Standard errors, t-tests and confidence intervals, from s²(XᵀX)⁻¹.'], 13: ['major', 'A coefficient is reported with its uncertainty, not alone.'] },
   ftest: { 11: ['origin', 'An F-test compares the model with a smaller one: all slopes zero, or a chosen group zero.'] },
   intervals: { 11: ['origin', 'Uncertainty of a prediction: for the mean of y, or for one new y.'], 13: ['major', 'The prediction interval is always wider: it adds the noise of a single new row.'] },
@@ -373,6 +380,21 @@ const INF_V = {
 };
 /* Model formulation: what the variant's own model is, minimises, finds and scores (next to the OLS backbone) */
 const ALT_MODEL = { origin: 'ŷ = w·x (no intercept: the line must pass through 0)', wls: 'ŷ = X̃w̃, the same columns as OLS', gls: 'ŷ = X̃w̃, with errors εₜ = ρεₜ₋₁ + uₜ', huber: 'ŷ = X̃w̃, the same line shape as OLS', ransac: 'ŷ = X̃w̃, fitted on the inliers only', theil: 'ŷ = b + w·x', quantile: 'ŷ = X̃w̃ estimates the median of y, not its mean', ridge: 'ŷ = X̃w̃, the same columns as OLS', lasso: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', enet: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', pcr: 'ŷ = b + Σ γₖ·(component k); each component is a fixed mix of the features', pls: 'ŷ = b + Σ qₖ·(PLS component k)', bayes: 'w̃ has a prior N(0, τ²); ŷ uses its posterior mean' };
+function dgText(c){
+  const R = c.P.dgr; if (!R) return 'not used here (the Diagnostics branch works through each residual plot, influence measure and test)';
+  if (!R.fit) return `${mark(false)} ${esc(R.label)}`;
+  const I = R.info, pv = p => p < 0.05 ? mark(false) : mark(true), mx = a => Math.max(...a.map(Math.abs));
+  switch (R.attr) {
+    case 'residplots': return `${esc(R.label)}: largest |standardised residual| ${num(mx(I.r), 2)}, largest Cook’s D ${num(Math.max(...I.cook), 3)}`;
+    case 'influence': return `${I.flag.length ? mark(false, true) : mark(true)} ${esc(R.label)}: ${I.flag.length} row${I.flag.length === 1 ? '' : 's'} flagged; most extreme training row ${I.top + 1} (${num(I.val[I.top], 3)})`;
+    case 'lintest': return R.kind === 'reset' ? `${pv(I.p)} RESET F = ${num(I.F, 3)}, ${pEq(I.p)}` : 'component-plus-residual plot: compare the bin means with the straight line';
+    case 'vartest': return `${pv(I.p)} ${R.kind === 'gq' ? `Goldfeld–Quandt F = ${num(I.F, 3)}` : `${R.kind === 'bp' ? 'Breusch–Pagan' : 'White'} LM = ${num(I.LM, 3)} on ${I.df} df`}, ${pEq(I.p)}`;
+    case 'indtest': return R.kind === 'dw' ? `${I.dw > 1.5 && I.dw < 2.5 ? mark(true) : mark(false)} DW = ${num(I.dw, 3)} (ρ̂₁ = ${num(I.rho[0], 3)})` : `${pv(I.p)} Ljung–Box Q = ${num(I.Q, 3)} on ${I.L} lags, ${pEq(I.p)}`;
+    case 'normtest': return R.kind === 'sw' ? `${pv(I.sw.p)} W = ${num(I.sw.W, 4)}, ${pEq(I.sw.p)}` : R.kind === 'jb' ? `${pv(I.pJB)} JB = ${num(I.JB, 3)}, ${pEq(I.pJB)}` : `${pv(I.ad.p)} A² = ${num(I.ad.A2, 3)}, ${pEq(I.ad.p)}`;
+    case 'colltest': return R.kind === 'vif' ? I.vif.map(t => `${c.P.names[t.j + 1]} ${num(t.vif, 2)}`).join(', ') : R.kind === 'cond' ? `${I.kappa > 30 ? mark(false) : mark(true)} κ = ${num(I.kappa, 1)}; condition indices ${I.ci.map(t => num(t, 1)).join(', ')}` : `largest |r| ${num(Math.max(...I.R.flatMap((rw, i) => rw.filter((_, j) => j !== i).map(Math.abs))), 3)}`;
+  }
+  return '';
+}
 function infText(c, part){
   const R = c.P.inr; if (!R) return part === 'inf' ? 'not used here (the Inference branch works through SEs, tests, intervals and robust SEs with Monte Carlo checks)' : 'not used here (the Inference branch covers raw, standardised, log–log and log–linear readings, and causation)';
   const I = R.info, j = Math.min(1, R.fit ? R.fit.p - 1 : 1);
@@ -563,7 +585,8 @@ const STEPS = [
       [sy('jb'), 'Normality (Jarque–Bera)', c => c.P.dg ? `${c.P.dg.jb.p >= 0.05 ? mark(true) : mark(false)} ${pEq(c.P.dg.jb.p)}` : noTest(c)],
       [sy('vif'), 'Collinearity (largest VIF)', c => c.P.dg?.vif.length ? (v => `${v <= 5 ? mark(true) : v <= 10 ? mark(false, true) : mark(false)} ${isFinite(v) ? num(v, 1) : '∞'}`)(Math.max(...c.P.dg.vif)) : noTest(c)],
       [sy('cook'), "Influence (largest Cook's distance)", c => c.P.f.cook && !c.P.perfect ? (v => `${v < 1 ? mark(true) : mark(false)} ${num(v, 3)}`)(Math.max(...c.P.f.cook)) : noTest(c)],
-      ['', 'Refit without the most influential row', c => { const r = dropOne(c.P); if (!r) return noTest(c); return `${Math.abs(r.dw) > 2 * r.se ? mark(false, true) : mark(true)} row ${r.row + 1}: slope of ${c.P.names[r.j]} ${num(r.w0, 3)} → ${num(r.w1, 3)} without it (change ${num(r.dw, 3)} = ${num(Math.abs(r.dw) / r.se, 2)} SEs)`; }]
+      ['', 'Refit without the most influential row', c => { const r = dropOne(c.P); if (!r) return noTest(c); return `${Math.abs(r.dw) > 2 * r.se ? mark(false, true) : mark(true)} row ${r.row + 1}: slope of ${c.P.names[r.j]} ${num(r.w0, 3)} → ${num(r.w1, 3)} without it (change ${num(r.dw, 3)} = ${num(Math.abs(r.dw) / r.se, 2)} SEs)`; }],
+      ['', "This variant's diagnostic", c => dgText(c)]
     ]},
   { id: 11, title: 'Inference', goal: 'How uncertain is each coefficient, and which standard error is right for this data?',
     attrs: ['coefinf', 'ftest', 'robustse', 'intervals'],

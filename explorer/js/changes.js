@@ -99,6 +99,13 @@ const CHG = (() => {
     lcbias: { x: 'x = 1 + 9u, N = 100', y: 'y = 2 + 1.5x + 0.45(x − 5)² + σz; degree 1' }, lcvar: { y: 'same y; degree 10' }, lcgood: { y: 'same y; degree 2' },
     vcdeg: { x: 'x = 1 + 9u, N = 60', y: 'y = 2 + 1.5x + 0.45(x − 5)² + σz; degree 1–10' }, vclam: { y: 'same y; degree 10, ridge λ' },
     bvdecomp: { x: 'x = 1 + 9u, N = 30, 200 fresh datasets', y: 'y = 2 + 1.5x + 0.45(x − 5)² + σz; degrees 1, 2, 6' },
+    rpfit: { x: 'x = 10u sorted; last row at x = 10 + 4s', e: 'ε = σ(1 + s(0.12x − 0.6))z', y: 'y = 2 + 1.5x + 0.12s(x − 5)² + ε; residuals vs fitted' }, rpqq: { y: 'same data; Q–Q plot' }, rpscale: { y: 'same data; scale–location' }, rplev: { y: 'same data; residuals vs leverage' },
+    inlev: { x: 'x = 10u sorted; last row at x = 10 + 6s', y: 'y = 2 + 1.5x + σz; middle row +6σs, last row −8σs; leverage' }, instud: { y: 'same data; studentised residuals' }, incook: { y: "same data; Cook's distance" }, indffits: { y: 'same data; DFFITS' }, indfbetas: { y: 'same data; DFBETAS' },
+    ltreset: { x: 'x = 10u sorted', y: 'y = 2 + 1.5x + 0.25s(x − 5)² + σz; RESET' }, ltcpr: { y: 'same data; component-plus-residual' },
+    vtbp: { x: 'x = 10u sorted', e: 'ε = σ((1 − s) + s(0.15 + 0.3x))z', y: 'y = 2 + 1.5x + ε; Breusch–Pagan' }, vtwhite: { y: 'same data; White' }, vtgq: { y: 'same data; Goldfeld–Quandt' },
+    itdw: { x: 'x = 10u sorted (time order)', e: 'εₜ = 0.7s·εₜ₋₁ + √(1 − ρ²)σz', y: 'y = 2 + 1.5x + ε; Durbin–Watson' }, itlb: { y: 'same data; Ljung–Box' },
+    ntsw: { x: 'x = 10u sorted', e: 'ε = σ((1 − s)z + s(exponential − 1))', y: 'y = 2 + 1.5x + ε; Shapiro–Wilk' }, ntjb: { y: 'same data; Jarque–Bera' }, ntad: { y: 'same data; Anderson–Darling' },
+    ctvif: { x: 'x₁ = 10u₁; x₂ = 5 + 0.95(x₁ − 5) + (0.15 + 2(1 − s))z₂; x₃ = 10u₂', y: 'y = 2 + 1.5x₁ + 1.0x₂ + 0.5x₃ + σz; VIF' }, ctcond: { y: 'same data; condition number' }, ctcorr: { y: 'same data; correlation matrix' },
     cise: { x: 'x₁, x₂, x₃ = 10u (independent)', y: 'y = 2 + 1.5x₁ + 0.3x₂ + 0·x₃ + σz; SEs' }, citt: { y: 'same y; t-tests' }, cici: { y: 'same y; 95% CIs' },
     ftall: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 2 + 1.5x₁ + 0.3x₂ + 0·x₃ + σz; overall F' }, ftpart: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 2 + 1.5x₁ + 0.3x₂ + 0·x₃ + σz; partial F for x₂, x₃' },
     ivconf: { x: 'x = 10u', y: 'y = 2 + 1.5x + σz; CI for the mean' }, ivpred: { x: 'x = 10u', y: 'y = 2 + 1.5x + σz; PI for a new y' },
@@ -118,7 +125,7 @@ const CHG = (() => {
     sgscaled: { x: 'x₁ = 10u₁ (0–10), x₂ = 1000 + 4000u₂; standardised', y: 'y = 2 + 1.5x₁ + 0.002x₂ + σz; GD' }, sgunscaled: { x: 'x₁ = 10u₁ (0–10), x₂ = 1000 + 4000u₂; raw', y: 'y = 2 + 1.5x₁ + 0.002x₂ + σz; GD' },
     ofpcr: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; PCR, k by CV' }, ofpls: { y: 'same y; PLS, k by CV' }, ofbayes: { y: 'same y; Bayesian, prior N(0, 1)' },
   };
-  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && (MF.has(v.id) || OP.has(v.id) || VP.has(v.id) || EV.has(v.id) || IN.has(v.id)) ? b0 : {}, R[v.id] || {}) }; };
+  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && (MF.has(v.id) || OP.has(v.id) || VP.has(v.id) || EV.has(v.id) || IN.has(v.id) || DG.has(v.id)) ? b0 : {}, R[v.id] || {}) }; };
 
   /* data-driven comparison of columns */
   function columns(d){

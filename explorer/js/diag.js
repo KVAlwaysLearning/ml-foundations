@@ -40,7 +40,7 @@ const DG = (() => {
     if (attr === 'indtest') { const rho = 0.7 * s, e = []; for (let i = 0; i < N; i++) e[i] = i ? rho * e[i - 1] + Math.sqrt(1 - rho * rho) * sg * z[i] : sg * z[i];
       return Object.assign(out, { X: x.map(v => [1, v]), y: x.map((v, i) => lin(v) + e[i]), note: `y = 2 + 1.5x + ε, rows in time order, εₜ = ${rho.toFixed(2)}·εₜ₋₁ + new noise` }); }
     if (attr === 'normtest') return Object.assign(out, { X: x.map(v => [1, v]), y: x.map((v, i) => lin(v) + sg * ((1 - s) * z[i] + s * (P.ex[i] - 1))), note: `y = 2 + 1.5x + ε with ε = σ·(${(1 - s).toFixed(2)}·z + ${s.toFixed(2)}·(exponential − 1)): skewed to the right` });
-    if (attr === 'colltest') { const x2 = x.map((v, i) => 5 + 0.95 * (v - 5) + (0.3 + 2 * (1 - s)) * P.z2[i]), x3 = P.u2.slice(0, N).map(v => 10 * v);
+    if (attr === 'colltest') { const x2 = x.map((v, i) => 5 + 0.95 * (v - 5) + (0.15 + 2 * (1 - s)) * P.z2[i]), x3 = P.u2.slice(0, N).map(v => 10 * v);
       return Object.assign(out, { X: x.map((v, i) => [1, v, x2[i], x3[i]]), names: ['1', 'x₁', 'x₂', 'x₃'], y: x.map((v, i) => 2 + 1.5 * v + 1.0 * x2[i] + 0.5 * x3[i] + sg * z[i]), xName: 'x₁', x2, truth: { coef: { 0: 2, 1: 1.5, 2: 1.0, 3: 0.5 }, fn: null }, note: 'y = 2 + 1.5x₁ + 1.0x₂ + 0.5x₃ + ε, where x₂ is x₁ plus a little noise (r close to 1) and x₃ is independent' }); }
   }
   const apply = (r, id) => { r.dgv = id; return r; };
@@ -107,7 +107,7 @@ const DG = (() => {
       const rho = Array.from({ length: L }, (_, k) => acf(k + 1)), Q = n * (n + 2) * rho.reduce((s, r2, k) => s + r2 * r2 / (n - k - 1), 0);
       out.info = Object.assign(common, { method: kind, ss, dw, num: e.slice(1).reduce((s, v, i) => s + (v - e[i]) ** 2, 0), rho, L, Q, p: ST.chi2SF(Q, L) }); out.label = kind === 'dw' ? 'Durbin–Watson statistic' : `Ljung–Box Q over ${L} lags`; }
     if (attr === 'normtest') { const S = mean(e.map(v => v ** 3)) / mean(e.map(v => v * v)) ** 1.5, K = mean(e.map(v => v ** 4)) / mean(e.map(v => v * v)) ** 2, JB = n / 6 * (S * S + (K - 3) ** 2 / 4);
-      out.info = Object.assign(common, { method: kind, S, K, JB, pJB: ST.chi2SF(JB, 2), sw: kind === 'sw' ? shapiro(e) : null, ad: kind === 'ad' ? anderson(e) : null, m2: mean(e.map(v => v * v)), m3: mean(e.map(v => v ** 3)), m4: mean(e.map(v => v ** 4)) });
+      out.info = Object.assign(common, { method: kind, S, K, JB, pJB: ST.chi2SF(JB, 2), sw: shapiro(e), ad: anderson(e), m2: mean(e.map(v => v * v)), m3: mean(e.map(v => v ** 3)), m4: mean(e.map(v => v ** 4)) });
       out.label = { sw: 'Shapiro–Wilk test', jb: 'Jarque–Bera test', ad: 'Anderson–Darling test' }[kind]; }
     if (attr === 'colltest') { const k = p - 1, cols = Array.from({ length: k }, (_, j) => X.map(rw => rw[j + 1])), mu = cols.map(mean), sd = cols.map((c, j) => Math.sqrt(mean(c.map(v => (v - mu[j]) ** 2))));
       const Rm = cols.map((a, i) => cols.map((b, j) => mean(a.map((v, q) => (v - mu[i]) * (b[q] - mu[j]))) / (sd[i] * sd[j])));

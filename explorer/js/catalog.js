@@ -371,7 +371,7 @@ const CATALOG = [
       { id: 'csconf', name: 'Confounded reading', desc: 'A hidden u drives both x and y: the slope mixes the effect of x with the effect of u.' }
     ]}
   ]},
-  { id: 'diagnostics', name: 'Diagnostics', attrs: [
+  { id: 'diagnostics', name: 'Diagnostics', live: true, attrs: [
     { id: 'residplots', name: 'Residual plots', diag: 'fitted', variants: [
       { id: 'rpfit', name: 'Residuals vs fitted', desc: 'Residuals against ŷ: a curve means a wrong shape, a funnel means unequal spread.' },
       { id: 'rpqq', name: 'Q–Q', strength: 'size of the problems', desc: 'Sorted standardised residuals against the quantiles a normal sample would have.' },

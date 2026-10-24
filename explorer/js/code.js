@@ -520,6 +520,68 @@ print(round(3 * np.cov(train["x"], train["u"], ddof=0)[0, 1] / train["x"].var(dd
     }
     return null;
   }
+  /* Diagnostics: the same plot or test with statsmodels / SciPy */
+  function dgCode(c, { L, n, mark }){
+    const P = c.P, R = P.dgr; if (!R || !R.fit) return null;
+    const F = R.fit, I = R.info, k = R.kind, top = vals => [...vals.keys()].sort((a, b) => Math.abs(vals[b]) - Math.abs(vals[a]))[0];
+    const fit = `fit = sm.OLS(y_tr, sm.add_constant(X_tr)).fit()   # the OLS fit on the training rows, original units
+from statsmodels.stats.outliers_influence import OLSInfluence
+infl = OLSInfluence(fit)
+`;
+    const pick = (expr, vals, lab) => { const i = top(vals); return `i = int(np.argmax(np.abs(${expr})))\nprint(i + 1, round(float(${expr}[i]), 4))${' '.repeat(10)}# ${lab}: app training row ${i + 1}, ${n(vals[i], 4)}`; };
+    switch (R.attr) {
+      case 'residplots': return fit + `r = infl.resid_studentized_internal               # e / (s √(1 − h))
+print(np.round(fit.fittedvalues.to_numpy()[:5], 4), np.round(fit.resid.to_numpy()[:5], 4))   # app ŷ ${L(F.yh.slice(0, 5))}, e ${L(F.e.slice(0, 5))}
+print(np.round(r[:5], 4))                        # app: r ${L(I.r.slice(0, 5))}
+` + ({ fitted: `import matplotlib.pyplot as plt
+plt.scatter(fit.fittedvalues, fit.resid); plt.axhline(0); plt.xlabel("fitted"); plt.ylabel("residual")${mark('residuals vs fitted')}`,
+        qq: `theo = stats.norm.ppf(np.arange(1, len(r) + 1) / (len(r) + 1))   # i/(N + 1) positions, as statsmodels' qqplot (a = 0)
+print(np.round(theo[:5], 4), np.round(np.sort(r)[:5], 4))   # app: ${L(I.qq.slice(0, 5).map(q => q.theo))} ${L(I.qq.slice(0, 5).map(q => q.r))}
+sm.qqplot(r, line="45")${mark('normal Q–Q plot')}`,
+        scale: `s_l = np.sqrt(np.abs(r))
+print(np.round(s_l[:5], 4))                      # app: ${L(I.r.slice(0, 5).map(t => Math.sqrt(Math.abs(t))))}
+# plt.scatter(fit.fittedvalues, s_l)${mark('scale–location')}`,
+        leverage: `print(np.round(infl.hat_matrix_diag[:5], 4))     # leverage: app ${L(I.h.slice(0, 5))}
+print(np.round(infl.cooks_distance[0][:5], 4))   # Cook's D: app ${L(I.cook.slice(0, 5))}
+sm.graphics.influence_plot(fit, criterion="cooks")${mark('residuals vs leverage')}` })[k];
+      case 'influence': return fit + ({ leverage: pick('np.asarray(infl.hat_matrix_diag)', I.h, 'largest leverage') + `\nprint(round(infl.hat_matrix_diag.sum(), 4))   # leverages add up to p = ${F.p}`, student: pick('np.asarray(infl.resid_studentized_external)', I.t, 'largest |t|'), cook: pick('np.asarray(infl.cooks_distance[0])', I.cook, "largest Cook's D"), dffits: pick('np.asarray(infl.dffits[0])', I.dffits, 'largest |DFFITS|'), dfbetas: pick('np.asarray(infl.dfbetas[:, 1])', I.dfbetas.map(rw => rw[1]), 'largest |DFBETAS| for the slope') })[k] + `
+print(int((np.abs(${({ leverage: 'np.asarray(infl.hat_matrix_diag)', student: 'np.asarray(infl.resid_studentized_external)', cook: 'np.asarray(infl.cooks_distance[0])', dffits: 'np.asarray(infl.dffits[0])', dfbetas: 'np.asarray(infl.dfbetas[:, 1])' })[k]}) > ${+I.thr.toFixed(6)}).sum()))   # rows over the threshold: app ${I.flag.length}${mark('influence')}
+refit = sm.OLS(y_tr.drop(y_tr.index[i]), sm.add_constant(X_tr.drop(X_tr.index[i]))).fit()
+print(np.round(refit.params.to_numpy(), 4))      # without that row: app ${I.refit ? L(I.refit) : 'nan'}`;
+      case 'lintest': return k === 'reset' ? fit + `from statsmodels.stats.diagnostic import linear_reset
+res = linear_reset(fit, power=3, test_type="fitted", use_f=True)${mark('adds ŷ² and ŷ³')}
+print(round(res.fvalue, 4), res.pvalue)           # app: F = ${n(I.F, 4)}, p ${n(I.p, 6)}`
+        : fit + `cpr = fit.params.iloc[1] * X_tr.iloc[:, 0] + fit.resid   # component + residual
+print(np.round(cpr.to_numpy()[:5], 4))           # app: ${L(I.cpr.slice(0, 5))}
+sm.graphics.plot_ccpr(fit, X_tr.columns[0])${mark('component-plus-residual plot')}`;
+      case 'vartest': return fit + ({ bp: `lm, lm_p, f, f_p = het_breuschpagan(fit.resid, fit.model.exog)${mark('Breusch–Pagan (Koenker)')}
+print(round(lm, 4), lm_p, round(f, 4), f_p)      # app: LM = ${n(I.LM, 4)}, p ${n(I.p, 6)}; F = ${n(I.Fst, 4)}, p ${n(I.pF, 6)}`,
+        white: `from statsmodels.stats.diagnostic import het_white
+lm, lm_p, f, f_p = het_white(fit.resid, fit.model.exog)${mark('White')}
+print(round(lm, 4), lm_p)                        # app: LM = ${n(I.LM, 4)} on ${I.df} df, p ${n(I.p, 6)}`,
+        gq: `from statsmodels.stats.diagnostic import het_goldfeldquandt
+f, p, _ = het_goldfeldquandt(y_tr.to_numpy(), fit.model.exog, drop=0.2, alternative="increasing")   # rows already in order of x${mark('Goldfeld–Quandt')}
+print(round(f, 4), p)                            # app: F = ${n(I.F, 4)}, p ${n(I.p, 6)}` })[k];
+      case 'indtest': return fit + (k === 'dw' ? `print(round(durbin_watson(fit.resid), 4))       # app: DW = ${n(I.dw, 4)}${mark('Durbin–Watson')}` : `from statsmodels.stats.diagnostic import acorr_ljungbox
+lb = acorr_ljungbox(fit.resid, lags=[${I.L}])${mark('Ljung–Box')}
+print(lb.round(6))                               # app: Q = ${n(I.Q, 4)}, p ${n(I.p, 6)}
+from statsmodels.tsa.stattools import acf
+print(np.round(acf(fit.resid, nlags=${I.L})[1:], 4))   # app: ρ̂ = ${L(I.rho)}`);
+      case 'normtest': return fit + ({ sw: `W, p = stats.shapiro(fit.resid)${mark('Shapiro–Wilk')}
+print(round(W, 5), round(p, 6))                  # app: W = ${n(I.sw.W, 5)}, p ${n(I.sw.p, 6)}`, jb: `jb, jb_p, skew, kurt = jarque_bera(fit.resid)${mark('Jarque–Bera')}
+print(round(jb, 4), jb_p, round(skew, 4), round(kurt, 4))   # app: JB = ${n(I.JB, 4)}, p ${n(I.pJB, 6)}, S = ${n(I.S, 4)}, K = ${n(I.K, 4)}`, ad: `from statsmodels.stats.diagnostic import normal_ad
+a2, p = normal_ad(fit.resid.to_numpy())${mark('Anderson–Darling')}
+print(round(a2, 4), p)                           # app: A² = ${n(I.ad.A2, 4)}, p ${n(I.ad.p, 6)}` })[k];
+      case 'colltest': return fit + ({ vif: `ex = fit.model.exog
+print([round(variance_inflation_factor(ex, j), 4) for j in range(1, ex.shape[1])])   # app: ${L(I.vif.map(t => t.vif))}${mark('VIF')}`,
+        cond: `R = np.corrcoef(X_tr.to_numpy().T)
+ev = np.linalg.eigvalsh(R)[::-1]
+print(np.round(ev, 5), round(ev[0] / ev[-1], 4))   # app: ${L(I.eig)}, κ = ${n(I.kappa, 4)}${mark('condition number')}
+print(np.round(np.sqrt(ev[0] / ev), 4))          # condition indices: app ${L(I.ci)}`,
+        corr: `print(X_tr.corr().round(4))                     # app: ${'[' + I.R.map(rw => L(rw)).join(', ') + ']'}${mark('correlation matrix')}` })[k];
+    }
+    return null;
+  }
   function cells(c){
     const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss, num, cat, nCols } = csv(c);
     const F = cat ? `num + cat` : `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra.find(e => e === 'group' || e === 'cluster');
@@ -741,7 +803,8 @@ features = [f for f in features if f != "leak"]        # drop every column not k
     if (VP.has(vid)) FIX = valCode(c, { L, n, mark });
     if (EV.has(vid)) FIX = evCode(c, { L, n, mark });
     if (IN.has(vid)) FIX = inCode(c, { L, n, mark });
-    out.push({ id: 'fix', t: IN.has(vid) ? `This variant's inference in code` : EV.has(vid) ? `This variant's evaluation in code` : VP.has(vid) ? `This variant's validation in code` : OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) || VP.has(vid) || EV.has(vid) || IN.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
+    if (DG.has(vid)) FIX = dgCode(c, { L, n, mark });
+    out.push({ id: 'fix', t: DG.has(vid) ? `This variant's diagnostic in code` : IN.has(vid) ? `This variant's inference in code` : EV.has(vid) ? `This variant's evaluation in code` : VP.has(vid) ? `This variant's validation in code` : OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) || VP.has(vid) || EV.has(vid) || IN.has(vid) || DG.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
     return out;
   }
 
