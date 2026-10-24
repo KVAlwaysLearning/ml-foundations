@@ -241,7 +241,7 @@ const GEN = (() => {
   const SUBS2 = k => String(k).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch]).join('');
   const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3, nlarge: 5, nmod: 5, nsmall: 5, nap: 5, nlp: 5, irfew: 4, irmany: 9, ircopy: 2, interaction: 2, dummytrap: 2, cbin: 2, cmulti: 2, chigh: 2, lktarget: 2, lkprep: 2,
     scnone: 2, scstd: 2, scminmax: 2, scrobust: 2, intnone: 2, intx: 2, encoh: 2, encall: 2, encord: 2, enctarget: 2, selall: 10, selfwd: 10, selbwd: 10, selstep: 10, sellasso: 10, selvif: 10, selp: 10,
-    mtsimple: 2, mtmultiple: 2, mtpoly: 2, mtwls: 2, mtgls: 2, rgnone: 8, rgridge: 8, rglasso: 8, rgenet: 8, lam0: 8, lamsmall: 8, lamcv: 8, lamlarge: 8, lamhuge: 8, alridge: 8, albal: 8, allasso: 8, pbno: 3, pbyes: 3, ofpcr: 8, ofpls: 8, ofbayes: 8 };
+    mtsimple: 2, mtmultiple: 2, mtpoly: 2, mtwls: 2, mtgls: 2, rgnone: 8, rgridge: 8, rglasso: 8, rgenet: 8, lam0: 8, lamsmall: 8, lamcv: 8, lamlarge: 8, lamhuge: 8, alridge: 8, albal: 8, allasso: 8, pbno: 3, pbyes: 3, ofpcr: 8, ofpls: 8, ofbayes: 8, pnnone: 8, pnl2: 8, pnl1: 8, pnl1l2: 8 };
   /* 0/1 columns made from a categorical feature (named "feature_level") */
   const CAT_NAMES = ['customer', 'colour', 'segment', 'region', 'branch'];
   const isCat = nm => typeof nm === 'string' && CAT_NAMES.some(c => nm.startsWith(c + '_'));

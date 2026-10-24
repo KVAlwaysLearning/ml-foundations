@@ -114,6 +114,16 @@ print(int((rlm.weights < 0.999).sum()))          # rows down-weighted: app ${I.h
 ${chkW('qr.params', A.w)}
 print(round(float(np.mean(yv > D @ qr.params)), 3))   # about half the rows above the line
 # scikit-learn: QuantileRegressor(quantile=0.5, alpha=0, solver="highs").fit(Xs_tr, y_tr)`;
+      case 'pinball': return head + `qr = sm.QuantReg(yv, D).fit(q=${I.q})${mark('pinball loss, q = 0.9: the 90th-percentile line')}
+${chkW('qr.params', A.w)}
+print(round(float(np.mean(yv > D @ qr.params)), 3))   # share of rows above the line: app ${n(A.yhat.filter((t, k) => P.ytr[k] - t > 1e-9).length / A.yhat.length, 3)}
+# scikit-learn: QuantileRegressor(quantile=0.9, alpha=0, solver="highs").fit(Xs_tr, y_tr)`;
+      case 'logcosh': return head + `from scipy.optimize import minimize
+loss = lambda w: np.sum(np.log(np.cosh(yv - D @ w)))      # Σ ln cosh(e)
+grad = lambda w: -D.T @ np.tanh(yv - D @ w)               # its gradient: -X̃ᵀ tanh(e)
+lc = minimize(loss, w_std, jac=grad, method="BFGS", options={"gtol": 1e-10})${mark('log-cosh loss, minimised numerically')}
+${chkW('lc.x', A.w)}
+print(round(lc.fun, 4))                          # total loss at the minimum: app ${n(P.ytr.reduce((t, v, k) => t + Math.log(Math.cosh(v - A.yhat[k])), 0), 4)}`;
       case 'theil': return head + `res = stats.theilslopes(yv, Xs_tr[:, 0], method="joint")   # median of the slopes of all pairs; intercept = median(y - slope·x̃)${mark('Theil–Sen')}
 print(round(res.slope, 4), round(res.intercept, 4))   # app: ${n(I.s, 4)} ${n(I.b, 4)}
 print(round(res.slope / scaler.scale_[0], 4))    # per unit of x: app ${n(A.wOrig[1], 4)}

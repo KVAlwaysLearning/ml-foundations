@@ -470,7 +470,7 @@ const SIG = (() => {
     const means = F.X[0].map((_, j) => mean(tr.map(i => F.X[i][j])));
     const rowAt = xv => { const r = [...means]; r[1] = xv; if (F.derive) F.derive.f(xv).forEach((t, q) => { r[F.derive.cols[q]] = t; }); return r; };
     const curve = (wO, xr) => Array.from({ length: 101 }, (_, k) => { const xv = xr[0] + (xr[1] - xr[0]) * k / 100; return [xv, LA.dot(rowAt(xv), wO)]; });
-    const xs = tr.map(i => F.X[i][1]), xr = range([xs]), flag = new Set(F.flagRows || []), many = ['regularisation', 'lambda', 'alpha', 'otherforms', 'penalisebias'].includes(a.id);
+    const xs = tr.map(i => F.X[i][1]), xr = range([xs]), flag = new Set(F.flagRows || []), many = ['regularisation', 'lambda', 'alpha', 'otherforms', 'penalisebias', 'penalty'].includes(a.id);
     const e = y.map((t, k) => t - M.yhat[k]);
     const coefRows = P.names.map((nm, j) => [nm === '1' ? 'b (intercept)' : nm, F.truth.coef[j] ?? '—', P.wOrig[j], M.wOrig[j]]);
     const gen = `${esc(v.desc)} The data are the same for every variant of ${esc(a.name.toLowerCase())}; only the model, or the rule that picks its weights, changes.${F.note ? ' ' + esc(F.note) + '.' : ''}`;
@@ -479,6 +479,7 @@ const SIG = (() => {
       `The model: <b>${esc(M.label)}</b>.`,
       `Test RMSE ${vs(M.rmseTe, BM.rmseTe, 3)}${A ? `; OLS on the same rows: ${n(P.rmseTe, 3)}` : ''}. Train RMSE ${n(M.rmseTr, 3)}${A ? ` (OLS ${n(P.rmseTr, 3)}, always the lowest possible training error for these columns)` : ''}.`,
       a.id === 'intercept' ? `Slope ${vs(M.wOrig[1], BM.wOrig[1], 3)} (true 1.0); intercept ${n(M.wOrig[0], 3)} (true 6). Mean training residual ${n(mean(e), 3)}${m === 'origin' ? `: not 0 any more. The uncentred R² = ${n(I.r2u, 3)} vs the usual R² of OLS ${n(P.f.R2, 3)}` : ''}.` : '',
+      a.id === 'lossfn' ? `Slope ${vs(M.wOrig[1], BM.wOrig[1], 3)}, intercept ${n(M.wOrig[0], 3)} (the bulk of the data follows 2 + 1.5x). Share of training rows above the line: <b>${n(e.filter(t => t > 1e-9).length / e.length, 3)}</b>${m === 'pinball' ? ' (the target is 0.10)' : m === 'quantile' ? ' (the median line: about 0.5)' : ''}. Mean residual ${n(mean(e), 3)}${m === 'ols' || !A ? ' (exactly 0 for squared loss: the line goes through the mean)' : ''}.` : '',
       a.id === 'robust' ? `Slope ${vs(M.wOrig[1], BM.wOrig[1], 3)} (true 1.5), intercept ${n(M.wOrig[0], 3)} (true 2). ${flag.size} contaminated rows are ringed in the chart.${I.hist ? ` After the last iteration ${I.hist[I.hist.length - 1].down} rows have a weight below 1.` : ''}${I.best ? ` RANSAC left out ${I.outl} rows.` : ''}` : '',
       a.id === 'modeltype' ? `Columns: <b>${P.names.slice(1).join(', ')}</b>. ${m === 'wls' ? `Weights ω range from ${n(Math.min(...I.wt), 3)} (noisy rows, large x₁) to ${n(Math.max(...I.wt), 3)}.` : m === 'gls' ? `Estimated ρ̂ = ${n(I.rho, 3)} (true 0.6); lag-1 correlation of the transformed residuals ${n(lag1(I.ys.map((t, k) => t - LA.dot(I.Xs[k], M.w))), 3)} vs ${n(lag1(P.f.e), 3)} for OLS.` : `RESET p ${pfmt(ctx.cur.dg?.reset?.p)}, Breusch–Pagan p ${pfmt(ctx.cur.dg?.bp?.p)}, Durbin–Watson ${n(ctx.cur.dg?.dw, 2)}.`}` : '',
       many ? `Weights exactly 0: ${zeros.join(', ') || 'none'}. Size of the weights Σ|w̃| = ${n((M.w || []).slice(1).reduce((s2, t) => s2 + Math.abs(t), 0), 3)} (OLS ${n(P.f.w.slice(1).reduce((s2, t) => s2 + Math.abs(t), 0), 3)}). ${a.id === 'penalisebias' ? '' : 'Truth: only x₁, x₂, x₅, x₈ matter.'}${I.lam != null ? ` λ = ${n(I.lam, 4)}.` : ''}${I.K ? ` ${I.K} component${I.K > 1 ? 's' : ''} chosen by CV.` : ''}` : '',
@@ -514,7 +515,7 @@ const SIG = (() => {
       + table(['row', F.xName || 'x', 'y (true)', 'ŷ OLS', 'ŷ this variant', 'e this variant'], y.map((t, k) => [k + 1, xs[k], t, P.f.yhat[k], M.yhat[k], e[k]]), { hi: k => flag.has(tr[k]) ? 'hl' : '', max: 10, foot: flag.size ? 'Highlighted: contaminated rows.' : '' });
     return { gen, see, draw, table: tbl };
   }
-  ['intercept', 'modeltype', 'robust', 'regularisation', 'lambda', 'alpha', 'penalisebias', 'otherforms'].forEach(k => { A[k] = mfSig; });
+  ['intercept', 'modeltype', 'robust', 'regularisation', 'lambda', 'alpha', 'penalisebias', 'otherforms', 'lossfn', 'penalty'].forEach(k => { A[k] = mfSig; });
 
   function howFit(v){
     const d = v.d, f = v.f;

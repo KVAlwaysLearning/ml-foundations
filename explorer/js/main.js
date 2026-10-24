@@ -212,7 +212,9 @@
       lambda: { _: 'A slice through x₁. Solid: OLS; dashed orange: ridge with this λ. A large λ flattens the slice toward the mean.' },
       alpha: { _: 'A slice through x₁. Solid: OLS; dashed orange: the elastic net with this α.' },
       penalisebias: { _: 'A slice through x₁. Solid: OLS; dashed orange: ridge. With the intercept penalised the whole line drops toward 0.' },
-      otherforms: { _: 'A slice through x₁. Solid: OLS; dashed orange: this variant’s model.' }
+      otherforms: { _: 'A slice through x₁. Solid: OLS; dashed orange: this variant’s model.' },
+      lossfn: { lfmse: 'Pink points carry the extra upward error. The squared loss pulls the line up toward them: it estimates the mean, not the bulk.', lfquant: 'Solid: the mean line (MSE). Dashed orange: the 90th-percentile line, which about 10% of the points lie above.', _: 'Pink points carry the extra upward error. Solid: the MSE line, pulled up by them. Dashed orange: the line this loss chooses.' },
+      penalty: { _: 'A slice through x₁ with the other 7 features at their means. Solid: no penalty; dashed orange: the penalised model.' }
     }[a.id] || {};
     return C2[v.id] || C2._ || 'The variant (filled) against the baseline built from the same random numbers (small grey dots), with the fitted line and the true mean (dashed).';
   }

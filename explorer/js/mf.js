@@ -33,7 +33,11 @@ const MF = (() => {
       const k = N - 1; x[k] = 10 + 4 * s; y[k] = lin(10) - 10 * s; bad.push(k);
       return { X: x.map(v => [1, v]), names: ['1', 'x'], y, px: x, xName: 'x', truth: { coef: { 0: 2, 1: 1.5 }, fn: v => lin(v), fnRaw: lin }, focus: [1], flagRows: bad, forceTrain: bad,
         note: `${bad.length} contaminated rows: ${bad.length - 1} pushed far above the line and one far out in x and far below it` }; },
-    regularisation: corrFeatures, lambda: corrFeatures, alpha: corrFeatures, otherforms: corrFeatures,
+    regularisation: corrFeatures, lambda: corrFeatures, alpha: corrFeatures, otherforms: corrFeatures, penalty: corrFeatures,
+    lossfn: (P, N, sg, s) => { const x = P.u1.slice(0, N).map(v => 10 * v).sort((a, b) => a - b), bad = [];
+      const y = x.map((v, i) => { let e = sg * P.z1[i]; if (P.u2[i] < 0.12) { e += s * (8 + 4 * Math.abs(P.z2[i])); bad.push(i); } return lin(v) + e; });
+      return { X: x.map(v => [1, v]), names: ['1', 'x'], y, px: x, xName: 'x', truth: { coef: { 0: 2, 1: 1.5 }, fn: v => lin(v), fnRaw: lin }, focus: [1], flagRows: bad,
+        note: `y = 2 + 1.5x + ε; about 12% of the rows (${bad.length} here) get an extra error of +${num(8 * s, 1)} or more, all upward, so the error distribution is skewed with a long right tail` }; },
     penalisebias: (P, N, sg) => { const x1 = P.u1.slice(0, N).map(v => 10 * v), x2 = P.u2.slice(0, N).map(v => 10 * v), rng = P.rng2(), x3 = x1.map(() => 10 * rng());
       const y = x1.map((v, i) => 50 + 1.5 * v + 1.0 * x2[i] - 0.5 * x3[i] + sg * P.z1[i]);
       return { X: x1.map((v, i) => [1, v, x2[i], x3[i]]), names: ['1', 'x₁', 'x₂', 'x₃'], y, px: x1, xName: 'x₁', x2, truth: { coef: { 0: 50, 1: 1.5, 2: 1.0, 3: -0.5 }, fn: null }, focus: [1], note: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε: a large intercept' }; }
@@ -45,6 +49,8 @@ const MF = (() => {
     lam0: ['lambda', 0], lamsmall: ['lambda', 'small'], lamcv: ['lambda', 'cv'], lamlarge: ['lambda', 'large'], lamhuge: ['lambda', 'huge'],
     alridge: ['alpha', 0], albal: ['alpha', 0.5], allasso: ['alpha', 1],
     pbno: ['penalisebias', 'no'], pbyes: ['penalisebias', 'yes'],
+    lfmse: ['lossfn', 'ols'], lfmae: ['lossfn', 'mae'], lfhuber: ['lossfn', 'huber'], lfquant: ['lossfn', 'pinball'], lflogcosh: ['lossfn', 'logcosh'],
+    pnnone: ['penalty', 'ols'], pnl2: ['penalty', 'ridge'], pnl1: ['penalty', 'lasso'], pnl1l2: ['penalty', 'enet'],
     ofpcr: ['otherforms', 'pcr'], ofpls: ['otherforms', 'pls'], ofbayes: ['otherforms', 'bayes'] };
   const has = id => !!V[id], attrOf = id => V[id] && V[id][0], kindOf = id => V[id] && V[id][1];
   const data = (id, P, N, sg, s) => DATA[V[id][0]](P, N, sg, s);
@@ -110,7 +116,7 @@ const MF = (() => {
 
   /* ---------- the alternative fit for a variant ---------- */
   function fit(id, P, d){
-    const [attr, kind] = V[id], X = P.Xtr, y = P.ytr, Xte = P.Xte, yte = P.yte, n = X.length, p = X[0].length;
+    const [attr, kind] = V[id], X = P.Xtr, y = P.ytr, Xte = P.Xte, yte = P.yte, n = X.length, p = X[0].length; let attr2 = attr;
     const out = { id, attr, kind, info: {} };
     const back = w => w.map((v, j) => j === 0 ? w[0] - w.slice(1).reduce((s, wj, k) => s + wj * P.mu[k + 1] / P.sd[k + 1], 0) : v / P.sd[j]);
     let w;
@@ -145,19 +151,26 @@ const MF = (() => {
         const I = best.inl; w = solve(mul(T(I.map(i => X[i])), I.map(i => X[i])), mv(T(I.map(i => X[i])), I.map(i => y[i]))); out.label = 'RANSAC (100 random pairs, refit on the inliers)'; out.info = { thr, trials, best, outl: n - I.length }; }
       if (kind === 'ols') w = P.f.w, out.label = 'ordinary least squares';
     }
-    if (['regularisation', 'lambda', 'alpha', 'penalisebias'].includes(attr)) {
+    if (attr === 'lossfn') {
+      if (kind === 'mae') { const R = irls(X, y, (r) => 1 / Math.max(Math.abs(r), 1e-6), () => 1, 500); w = R.w; out.label = 'MAE loss (least absolute deviations)'; out.info = { hist: R.hist, method: 'quantile' }; }
+      if (kind === 'huber') { const c = 1.345, R = irls(X, y, (r, s) => Math.abs(r / s) <= c ? 1 : c / Math.abs(r / s), madScale); w = R.w; out.label = 'Huber loss (c = 1.345, IRLS)'; out.info = { hist: R.hist, c, method: 'huber' }; }
+      if (kind === 'pinball') { const q = 0.9, R = irls(X, y, (r) => (r >= 0 ? q : 1 - q) / Math.max(Math.abs(r), 1e-6), () => 1, 500); w = R.w; out.label = 'quantile (pinball) loss, q = 0.9'; out.info = { hist: R.hist, q, method: 'pinball' }; }
+      if (kind === 'logcosh') { const R = irls(X, y, (r) => Math.abs(r) < 1e-8 ? 1 : Math.tanh(r) / r, () => 1, 500); w = R.w; out.label = 'log-cosh loss (IRLS)'; out.info = { hist: R.hist, method: 'logcosh' }; }
+    }
+    if (attr === 'penalty') attr2 = { ridge: 'regularisation', lasso: 'regularisation', enet: 'regularisation' }[kind];
+    if (['regularisation', 'lambda', 'alpha', 'penalisebias'].includes(attr2)) {
       const grid = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000];
       const lgrid = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2];
       const ridgeW = (Xa, ya, l) => ridgeSolve(Xa, ya, l).w;
-      if (attr === 'regularisation' && kind === 'ols') { w = P.f.w; out.label = 'ordinary least squares (no penalty)'; }
-      if ((attr === 'regularisation' && kind === 'ridge') || attr === 'lambda' || attr === 'penalisebias') {
+      if (attr2 === 'regularisation' && kind === 'ols') { w = P.f.w; out.label = 'ordinary least squares (no penalty)'; }
+      if ((attr2 === 'regularisation' && kind === 'ridge') || attr === 'lambda' || attr === 'penalisebias') {
         const tab = cv(X, y, ridgeW, grid), best = pick(tab).g;
         const lam = attr === 'lambda' ? { 0: 0, small: 0.1, cv: best, large: 300, huge: 30000 }[kind] : attr === 'penalisebias' ? 10 : best;
         const R = ridgeSolve(X, y, lam, attr === 'penalisebias' && kind === 'yes'); w = R.w;
-        out.label = attr === 'penalisebias' ? `ridge, λ = 10, ${kind === 'yes' ? 'intercept penalised too' : 'intercept not penalised'}` : `ridge, λ = ${num(lam, 4)}${kind === 'cv' || attr === 'regularisation' ? ' (chosen by 5-fold CV)' : ''}`;
+        out.label = attr === 'penalisebias' ? `ridge, λ = 10, ${kind === 'yes' ? 'intercept penalised too' : 'intercept not penalised'}` : `ridge, λ = ${num(lam, 4)}${kind === 'cv' || attr2 === 'regularisation' ? ' (chosen by 5-fold CV)' : ''}`;
         out.info = { lam, A: R.A, b: R.b, cv: tab, best, path: grid.map(g => ({ g, w: ridgeSolve(X, y, g).w })), method: 'ridge', penB: attr === 'penalisebias' && kind === 'yes' };
       }
-      if ((attr === 'regularisation' && (kind === 'lasso' || kind === 'enet')) || attr === 'alpha') {
+      if ((attr2 === 'regularisation' && (kind === 'lasso' || kind === 'enet')) || attr === 'alpha') {
         const al = attr === 'alpha' ? kind : kind === 'lasso' ? 1 : 0.5;
         if (al === 0) { const tab = cv(X, y, ridgeW, grid), best = pick(tab).g, R = ridgeSolve(X, y, best); w = R.w; out.label = `α = 0 (pure ridge), λ = ${num(best, 4)} by CV`; out.info = { lam: best, cv: tab, best, method: 'ridge', A: R.A, b: R.b, path: grid.map(g => ({ g, w: ridgeSolve(X, y, g).w })) }; }
         else { const fn = (Xa, ya, l) => enet(Xa, ya, l, al).w, tab = cv(X, y, fn, lgrid), best = pick(tab).g, R = enet(X, y, best, al, true); w = R.w;

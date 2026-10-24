@@ -228,9 +228,20 @@ const CATALOG = [
       { id: 'ofbayes', name: 'Bayesian', desc: 'A normal prior N(0, 1) on each standardised weight: the posterior mean and its spread.' }
     ]}
   ]},
-  { id: 'loss', name: 'Loss function', attrs: [
-    { id: 'lossfn', name: 'Loss', variants: ['MSE', 'MAE', 'Huber', 'Quantile', 'Log-cosh'] },
-    { id: 'penalty', name: 'Penalty term', variants: ['None', 'L2', 'L1', 'L1 + L2'] }
+  { id: 'loss', name: 'Loss function', live: true, attrs: [
+    { id: 'lossfn', name: 'Loss', diag: 'fitted', variants: [
+      { id: 'lfmse', name: 'MSE', desc: 'Mean squared error on data whose errors have a long upward tail (about 12% of rows pushed up).' },
+      { id: 'lfmae', name: 'MAE', strength: 'size of the upward tail', desc: 'Mean absolute error: every unit of error costs the same, so the line goes through the median.' },
+      { id: 'lfhuber', name: 'Huber', strength: 'size of the upward tail', desc: 'Squared for small errors, absolute for large ones (c = 1.345 robust standard deviations).' },
+      { id: 'lfquant', name: 'Quantile', strength: 'size of the upward tail', desc: 'Pinball loss with q = 0.9: errors above the line cost 9 times more, so the line estimates the 90th percentile.' },
+      { id: 'lflogcosh', name: 'Log-cosh', strength: 'size of the upward tail', desc: 'ln(cosh e): squared near 0, absolute far away, smooth everywhere.' }
+    ]},
+    { id: 'penalty', name: 'Penalty term', diag: 'fitted', variants: [
+      { id: 'pnnone', name: 'None', desc: 'Loss = squared error only, on 8 correlated features (4 matter).' },
+      { id: 'pnl2', name: 'L2', desc: 'Loss = squared error + λ·Σw̃² (ridge), λ by 5-fold CV.' },
+      { id: 'pnl1', name: 'L1', desc: 'Loss = (1/2N)·squared error + λ·Σ|w̃| (lasso), λ by 5-fold CV.' },
+      { id: 'pnl1l2', name: 'L1 + L2', desc: 'Loss = (1/2N)·squared error + λ(½Σ|w̃| + ¼Σw̃²) (elastic net, α = 0.5), λ by CV.' }
+    ]}
   ]},
   { id: 'optimisation', name: 'Optimisation', attrs: [
     { id: 'solver', name: 'Solver', variants: ['Normal equations', 'Pseudo-inverse (SVD)', 'QR', 'Cholesky', 'Gradient descent', 'Coordinate descent'] },
