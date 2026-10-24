@@ -311,29 +311,103 @@ const CATALOG = [
       { id: 'sdvaried', name: 'Varied', desc: 'The same 80/20 split repeated with 200 seeds: a distribution of test scores.' }
     ]}
   ]},
-  { id: 'evaluation', name: 'Evaluation', attrs: [
-    { id: 'metric', name: 'Metric', variants: ['MSE', 'RMSE', 'MAE', 'MAPE', 'R²', 'Adjusted R²', 'AIC', 'BIC'] },
-    { id: 'traintest', name: 'Train vs test', variants: ['Both good', 'Overfit', 'Underfit'] },
-    { id: 'learningcurve', name: 'Learning curves', variants: ['High bias', 'High variance', 'Good fit'] },
-    { id: 'validationcurve', name: 'Validation curves', variants: ['vs degree', 'vs λ'] },
-    { id: 'biasvariance', name: 'Bias–variance', variants: ['Decomposition'] }
+  { id: 'evaluation', name: 'Evaluation', live: true, attrs: [
+    { id: 'metric', name: 'Metric', diag: 'fitted', variants: [
+      { id: 'mtmse', name: 'MSE', desc: 'Mean squared error on the test rows, for polynomial models of degree 1–5 on a gently curved truth.' },
+      { id: 'mtrmse', name: 'RMSE', desc: '√MSE: a typical error in the units of y.' },
+      { id: 'mtmae', name: 'MAE', desc: 'Mean absolute error: every unit of error counts the same.' },
+      { id: 'mtmape', name: 'MAPE', desc: 'Mean absolute percentage error: |e/y| averaged, in %.' },
+      { id: 'mtr2', name: 'R²', desc: '1 − SSE/SST on the test rows: the share of the variation explained.' },
+      { id: 'mtadjr2', name: 'Adjusted R²', desc: 'R² on the training rows, penalised for the number of coefficients.' },
+      { id: 'mtaic', name: 'AIC', desc: '−2 log-likelihood + 2p on the training rows: lower is better.' },
+      { id: 'mtbic', name: 'BIC', desc: '−2 log-likelihood + ln(n)·p: a stronger penalty than AIC.' }
+    ]},
+    { id: 'traintest', name: 'Train vs test', diag: 'fitted', variants: [
+      { id: 'ttgood', name: 'Both good', desc: 'A degree-2 polynomial on 16 training rows: the right flexibility, train and test errors close.' },
+      { id: 'ttover', name: 'Overfit', desc: 'A degree-10 polynomial on the same rows: tiny training error, large test error.' },
+      { id: 'ttunder', name: 'Underfit', desc: 'A straight line on the curve: both errors high and close.' }
+    ]},
+    { id: 'learningcurve', name: 'Learning curves', diag: 'fitted', variants: [
+      { id: 'lcbias', name: 'High bias', desc: 'A straight line: training and validation errors meet early, high above the noise level.' },
+      { id: 'lcvar', name: 'High variance', desc: 'A degree-10 polynomial: a wide gap between training and validation error that closes slowly.' },
+      { id: 'lcgood', name: 'Good fit', desc: 'A degree-2 polynomial: both errors converge to the noise level.' }
+    ]},
+    { id: 'validationcurve', name: 'Validation curves', diag: 'fitted', variants: [
+      { id: 'vcdeg', name: 'vs degree', desc: 'Training and 5-fold CV error for degree 1 to 10.' },
+      { id: 'vclam', name: 'vs λ', desc: 'Training and CV error of a degree-10 polynomial with ridge λ from 10⁻⁴ to 1000.' }
+    ]},
+    { id: 'biasvariance', name: 'Bias–variance', diag: 'fitted', variants: [
+      { id: 'bvdecomp', name: 'Decomposition', desc: 'Degrees 1, 2 and 6, each fitted to 200 fresh datasets: expected error = bias² + variance + noise.' }
+    ]}
   ]},
-  { id: 'inference', name: 'Inference', attrs: [
-    { id: 'coefinf', name: 'Coefficient inference', variants: ['Standard error', 't-test, p-value', 'Confidence interval'] },
-    { id: 'ftest', name: 'Model-level test', variants: ['Overall F-test', 'Partial F-test'] },
-    { id: 'intervals', name: 'Intervals', variants: ['Confidence (mean)', 'Prediction (new point)'] },
-    { id: 'robustse', name: 'Standard errors', variants: ['Classical', 'Robust (HC)', 'Clustered', 'Newey–West'] },
-    { id: 'reading', name: 'Coefficient reading', variants: ['Raw units', 'Standardised', 'Log–log', 'Log–linear'] },
-    { id: 'causal', name: 'Causation vs correlation', variants: ['Correct reading', 'Confounded reading'] }
+  { id: 'inference', name: 'Inference', live: true, attrs: [
+    { id: 'coefinf', name: 'Coefficient inference', diag: 'fitted', variants: [
+      { id: 'cise', name: 'Standard error', desc: 'How far each coefficient would move between samples: √(s²·[(XᵀX)⁻¹]ⱼⱼ). Data: one strong, one weak and one useless feature.' },
+      { id: 'citt', name: 't-test, p-value', desc: 't = coefficient / SE, compared with the t distribution: is the coefficient different from 0?' },
+      { id: 'cici', name: 'Confidence interval', desc: 'Coefficient ± t-critical × SE: a range that covers the true value in 95% of samples.' }
+    ]},
+    { id: 'ftest', name: 'Model-level test', diag: 'fitted', variants: [
+      { id: 'ftall', name: 'Overall F-test', desc: 'Are all the slopes zero at once?' },
+      { id: 'ftpart', name: 'Partial F-test', desc: 'Are the coefficients of x₂ and x₃ zero, given x₁ is in the model?' }
+    ]},
+    { id: 'intervals', name: 'Intervals', diag: 'fitted', variants: [
+      { id: 'ivconf', name: 'Confidence (mean)', desc: 'Where the average y at a given x lies: it shrinks as N grows.' },
+      { id: 'ivpred', name: 'Prediction (new point)', desc: 'Where one new y at a given x lies: it never shrinks below the noise.' }
+    ]},
+    { id: 'robustse', name: 'Standard errors', diag: 'fitted', variants: [
+      { id: 'rsclass', name: 'Classical', desc: 'Independent errors with equal spread: the classical SE is right.' },
+      { id: 'rshc', name: 'Robust (HC)', desc: 'Errors whose spread grows with x: the heteroscedasticity-robust SE is right.' },
+      { id: 'rscl', name: 'Clustered', desc: 'Rows in 10 groups sharing a shock: the cluster-robust SE is right.' },
+      { id: 'rsnw', name: 'Newey–West', desc: 'Errors carried over from row to row: the HAC (Newey–West) SE is right.' }
+    ]},
+    { id: 'reading', name: 'Coefficient reading', diag: 'fitted', variants: [
+      { id: 'rdraw', name: 'Raw units', desc: 'One more unit of x changes ŷ by w units of y.' },
+      { id: 'rdstd', name: 'Standardised', desc: 'One more standard deviation of x changes ŷ by w̃; dividing by sd(y) gives the β coefficient.' },
+      { id: 'rdloglog', name: 'Log–log', desc: 'ln y on ln x: the slope is an elasticity, % change in y per 1% change in x.' },
+      { id: 'rdloglin', name: 'Log–linear', desc: 'ln y on x: each unit of x multiplies y by e^w (about 100·w % when w is small).' }
+    ]},
+    { id: 'causal', name: 'Causation vs correlation', diag: 'fitted', variants: [
+      { id: 'cscorrect', name: 'Correct reading', desc: 'x is assigned at random (an experiment): the slope is the causal effect 1.0.' },
+      { id: 'csconf', name: 'Confounded reading', desc: 'A hidden u drives both x and y: the slope mixes the effect of x with the effect of u.' }
+    ]}
   ]},
   { id: 'diagnostics', name: 'Diagnostics', attrs: [
-    { id: 'residplots', name: 'Residual plots', variants: ['Residuals vs fitted', 'Q–Q', 'Scale–location', 'Residuals vs leverage'] },
-    { id: 'influence', name: 'Influence measures', variants: ['Leverage', 'Studentised residuals', "Cook's distance", 'DFFITS', 'DFBETAS'] },
-    { id: 'lintest', name: 'Linearity test', variants: ['Ramsey RESET', 'Component-plus-residual'] },
-    { id: 'vartest', name: 'Variance test', variants: ['Breusch–Pagan', 'White', 'Goldfeld–Quandt'] },
-    { id: 'indtest', name: 'Independence test', variants: ['Durbin–Watson', 'Ljung–Box'] },
-    { id: 'normtest', name: 'Normality test', variants: ['Shapiro–Wilk', 'Jarque–Bera', 'Anderson–Darling'] },
-    { id: 'colltest', name: 'Collinearity check', variants: ['VIF', 'Condition number', 'Correlation matrix'] }
+    { id: 'residplots', name: 'Residual plots', diag: 'fitted', variants: [
+      { id: 'rpfit', name: 'Residuals vs fitted', desc: 'Residuals against ŷ: a curve means a wrong shape, a funnel means unequal spread.' },
+      { id: 'rpqq', name: 'Q–Q', strength: 'size of the problems', desc: 'Sorted standardised residuals against the quantiles a normal sample would have.' },
+      { id: 'rpscale', name: 'Scale–location', strength: 'size of the problems', desc: '√|standardised residual| against ŷ: a rising trend means the spread grows.' },
+      { id: 'rplev', name: 'Residuals vs leverage', strength: 'size of the problems', desc: 'Standardised residuals against leverage, with Cook\u2019s distance contours: points beyond them are influential.' }
+    ]},
+    { id: 'influence', name: 'Influence measures', diag: 'leverage', variants: [
+      { id: 'inlev', name: 'Leverage', desc: 'hᵢᵢ, the diagonal of the hat matrix: how unusual a row\u2019s x is. Flag above 2p/N.' },
+      { id: 'instud', name: 'Studentised residuals', strength: 'size of the bad rows', desc: 'Each residual divided by its own standard error, with the row left out. Flag |t| > 2.' },
+      { id: 'incook', name: "Cook's distance", strength: 'size of the bad rows', desc: 'How much all the predictions move when the row is dropped. Flag above 4/N.' },
+      { id: 'indffits', name: 'DFFITS', strength: 'size of the bad rows', desc: 'How much the row\u2019s own prediction moves when it is dropped, in SEs. Flag above 2√(p/N).' },
+      { id: 'indfbetas', name: 'DFBETAS', strength: 'size of the bad rows', desc: 'How much each coefficient moves when the row is dropped, in SEs. Flag above 2/√N.' }
+    ]},
+    { id: 'lintest', name: 'Linearity test', diag: 'fitted', variants: [
+      { id: 'ltreset', name: 'Ramsey RESET', strength: 'curvature', desc: 'Add ŷ² and ŷ³ to the model; an F-test asks whether they help.' },
+      { id: 'ltcpr', name: 'Component-plus-residual', strength: 'curvature', desc: 'Plot w·x + e against x: a bend away from the straight line shows the missing shape.' }
+    ]},
+    { id: 'vartest', name: 'Variance test', diag: 'fitted', variants: [
+      { id: 'vtbp', name: 'Breusch–Pagan', strength: 'how fast the spread grows', desc: 'Regress e² on the features: N·R² ~ χ² if the spread is constant.' },
+      { id: 'vtwhite', name: 'White', strength: 'how fast the spread grows', desc: 'Regress e² on the features, their squares and products.' },
+      { id: 'vtgq', name: 'Goldfeld–Quandt', strength: 'how fast the spread grows', desc: 'Compare the error variance of the high-x rows with the low-x rows (middle 20% dropped).' }
+    ]},
+    { id: 'indtest', name: 'Independence test', diag: 'order', variants: [
+      { id: 'itdw', name: 'Durbin–Watson', strength: 'correlation of neighbouring errors', desc: 'Σ(eₜ − eₜ₋₁)² / Σeₜ²: about 2(1 − ρ), so 2 means no lag-1 correlation.' },
+      { id: 'itlb', name: 'Ljung–Box', strength: 'correlation of neighbouring errors', desc: 'Adds up the squared residual autocorrelations over 10 lags.' }
+    ]},
+    { id: 'normtest', name: 'Normality test', diag: 'qq', variants: [
+      { id: 'ntsw', name: 'Shapiro–Wilk', strength: 'skewness of the errors', desc: 'How well the sorted residuals line up with normal quantiles (W close to 1 is normal).' },
+      { id: 'ntjb', name: 'Jarque–Bera', strength: 'skewness of the errors', desc: 'Skewness and kurtosis of the residuals against 0 and 3.' },
+      { id: 'ntad', name: 'Anderson–Darling', strength: 'skewness of the errors', desc: 'Distance between the residuals\u2019 distribution and a normal one, weighted toward the tails.' }
+    ]},
+    { id: 'colltest', name: 'Collinearity check', diag: 'x1x2', variants: [
+      { id: 'ctvif', name: 'VIF', strength: 'how closely x₂ follows x₁', desc: 'VIFⱼ = 1/(1 − R²ⱼ) from regressing each feature on the others. Above 10 is serious.' },
+      { id: 'ctcond', name: 'Condition number', strength: 'how closely x₂ follows x₁', desc: 'Ratio of the largest to the smallest eigenvalue of the correlation matrix; condition indices above 30 are serious.' },
+      { id: 'ctcorr', name: 'Correlation matrix', strength: 'how closely x₂ follows x₁', desc: 'Pairwise correlations of the features: catches pairs, misses combinations.' }
+    ]}
   ]}
 ];
 CATALOG.forEach(b => b.attrs.forEach(a => { a.variants = a.variants.map((v, i) => typeof v === 'string' ? { id: a.id + '-' + i, name: v } : v); a.branch = b.id; a.live = !!b.live; }));

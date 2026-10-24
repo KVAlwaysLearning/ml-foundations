@@ -94,6 +94,17 @@ const CHG = (() => {
     pbno: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε; ridge λ = 10, intercept free' }, pbyes: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε; ridge λ = 10, intercept penalised' },
     lfmse: { x: 'x = 10u sorted', e: 'ε = σz, plus s(8 + 4|z₂|) on rows with u₂ < 0.12', y: 'y = 2 + 1.5x + ε; loss: MSE' }, lfmae: { y: 'same y; loss: MAE' }, lfhuber: { y: 'same y; loss: Huber (c = 1.345)' }, lfquant: { y: 'same y; loss: pinball, q = 0.9' }, lflogcosh: { y: 'same y; loss: log-cosh' },
     pnnone: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; loss: SSE' }, pnl2: { y: 'same y; loss: SSE + λΣw̃²' }, pnl1: { y: 'same y; loss: SSE/2N + λΣ|w̃|' }, pnl1l2: { y: 'same y; loss: SSE/2N + λ(½Σ|w̃| + ¼Σw̃²)' },
+    mtmse: { x: 'x = 1 + 9u', y: 'y = 2 + 1.5x + 0.45(x − 5)² + σz; scored by MSE' }, mtrmse: { y: 'same y; RMSE' }, mtmae: { y: 'same y; MAE' }, mtmape: { y: 'same y; MAPE' }, mtr2: { y: 'same y; R²' }, mtadjr2: { y: 'same y; adjusted R²' }, mtaic: { y: 'same y; AIC' }, mtbic: { y: 'same y; BIC' },
+    ttgood: { x: 'x = 1 + 9u, N = 20', y: 'y = 2 + 1.5x + 0.45(x − 5)² + σz; degree 2' }, ttover: { y: 'same y; degree 10' }, ttunder: { y: 'same y; degree 1' },
+    lcbias: { x: 'x = 1 + 9u, N = 100', y: 'y = 2 + 1.5x + 0.45(x − 5)² + σz; degree 1' }, lcvar: { y: 'same y; degree 10' }, lcgood: { y: 'same y; degree 2' },
+    vcdeg: { x: 'x = 1 + 9u, N = 60', y: 'y = 2 + 1.5x + 0.45(x − 5)² + σz; degree 1–10' }, vclam: { y: 'same y; degree 10, ridge λ' },
+    bvdecomp: { x: 'x = 1 + 9u, N = 30, 200 fresh datasets', y: 'y = 2 + 1.5x + 0.45(x − 5)² + σz; degrees 1, 2, 6' },
+    cise: { x: 'x₁, x₂, x₃ = 10u (independent)', y: 'y = 2 + 1.5x₁ + 0.3x₂ + 0·x₃ + σz; SEs' }, citt: { y: 'same y; t-tests' }, cici: { y: 'same y; 95% CIs' },
+    ftall: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 2 + 1.5x₁ + 0.3x₂ + 0·x₃ + σz; overall F' }, ftpart: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 2 + 1.5x₁ + 0.3x₂ + 0·x₃ + σz; partial F for x₂, x₃' },
+    ivconf: { x: 'x = 10u', y: 'y = 2 + 1.5x + σz; CI for the mean' }, ivpred: { x: 'x = 10u', y: 'y = 2 + 1.5x + σz; PI for a new y' },
+    rsclass: { x: 'x = 10u sorted', e: 'ε = σz (independent, equal spread)', y: 'y = 2 + 1.5x + ε' }, rshc: { x: 'x = 10u sorted', e: 'ε = σ(0.15 + 0.3x)z', y: 'y = 2 + 1.5x + ε' }, rscl: { x: 'x = 10u sorted, 10 groups', e: 'ε = σ(√0.7·u_g + √0.3·z)', y: 'y = 2 + 1.5x + ε' }, rsnw: { x: 'x = 10u sorted', e: 'εₜ = 0.8εₜ₋₁ + 0.6σz', y: 'y = 2 + 1.5x + ε' },
+    rdraw: { x: 'x = 1 + 9u', y: 'y = 2 + 1.5x + σz' }, rdstd: { x: 'x = 1 + 9u', y: 'y = 2 + 1.5x + σz; standardised reading' }, rdloglog: { x: 'x = 1 + 9u; model uses ln x', y: 'y = e^0.5·x^0.8·e^ε; model uses ln y' }, rdloglin: { x: 'x = 1 + 9u', y: 'y = e^(0.5 + 0.2x + ε); model uses ln y' },
+    cscorrect: { x: 'x = 10u, set at random (independent of u)', e: 'u = z₂ (hidden), ε = σz', y: 'y = 2 + 1.0x + 3u + ε' }, csconf: { x: 'x = 5 + 2u + 1.2z₃ (driven by the hidden u)', e: 'u = z₂ (hidden), ε = σz', y: 'y = 2 + 1.0x + 3u + ε' },
     sp8020: { x: 'x = 10u', y: 'y = 2 + 1.5x + σz; 80/20 split' }, sp7030: { y: 'same y; 70/30 split' }, sp5050: { y: 'same y; 50/50 split' }, sptiny: { y: 'same y; 5 test rows' },
     cvnone: { x: 'x = 10u sorted (time order)', y: 'y = 2 + 1.5x + 0.25(x − 5)² + σz; one split' }, cvkfold: { y: 'same y; 5-fold CV' }, cvloo: { y: 'same y; leave-one-out' }, cvts: { y: 'same y; time-series split' }, cvnested: { y: 'same y; nested CV over degree' },
     sdfixed: { x: 'x = 10u', y: 'y = 2 + 1.5x + σz; one seed' }, sdvaried: { y: 'same y; 200 seeds' },
@@ -107,7 +118,7 @@ const CHG = (() => {
     sgscaled: { x: 'x₁ = 10u₁ (0–10), x₂ = 1000 + 4000u₂; standardised', y: 'y = 2 + 1.5x₁ + 0.002x₂ + σz; GD' }, sgunscaled: { x: 'x₁ = 10u₁ (0–10), x₂ = 1000 + 4000u₂; raw', y: 'y = 2 + 1.5x₁ + 0.002x₂ + σz; GD' },
     ofpcr: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; PCR, k by CV' }, ofpls: { y: 'same y; PLS, k by CV' }, ofbayes: { y: 'same y; Bayesian, prior N(0, 1)' },
   };
-  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && (MF.has(v.id) || OP.has(v.id) || VP.has(v.id)) ? b0 : {}, R[v.id] || {}) }; };
+  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && (MF.has(v.id) || OP.has(v.id) || VP.has(v.id) || EV.has(v.id) || IN.has(v.id)) ? b0 : {}, R[v.id] || {}) }; };
 
   /* data-driven comparison of columns */
   function columns(d){
@@ -138,7 +149,7 @@ const CHG = (() => {
     const vif = x => x.vif?.length ? Math.max(...x.vif) : NaN, fmtI = t => isFinite(t) ? n(t, 1) : '∞';
     const M = [
       ['Slope of ' + cur.d.names[j], jb > 0 ? fb.w[jb] : NaN, f.w[j], t => isFinite(t) ? n(t, 3) : '—', (x, y) => Math.abs(x - y) > 0.1 * Math.abs(x) + 0.05],
-      ['Classical SE of that slope', jb > 0 ? fb.se[jb] : NaN, f.se[j], t => isFinite(t) ? n(t, 4) : 'undefined', (x, y) => !isFinite(y) || Math.abs(y / x - 1) > 0.25],
+      ['Classical SE of that slope', jb > 0 ? fb.se[jb] : '—', f.se[j], t => typeof t === 'string' ? t : isFinite(t) ? n(t, 4) : 'undefined', (x, y) => !isFinite(y) || Math.abs(y / x - 1) > 0.25],
       ['R²', fb.R2, f.R2, t => n(t, 3), (x, y) => Math.abs(x - y) > 0.05],
       ['RESET p (shape)', base.dg.reset?.p, cur.dg.reset?.p, pf, (x, y) => (x < 0.05) !== (y < 0.05)],
       ['Breusch–Pagan p (spread)', base.dg.bp?.p, cur.dg.bp?.p, pf, (x, y) => (x < 0.05) !== (y < 0.05)],

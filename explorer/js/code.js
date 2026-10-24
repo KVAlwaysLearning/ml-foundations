@@ -21,11 +21,12 @@ const CODE = (() => {
     const numJ = d.names.map((nm, j) => j).filter(j => j > 0 && !GEN.isCat(d.names[j])), num = numJ.map(j => py(d.names[j]));
     if (d.group && !d.cat) extra.push(c.v.id === 'cluster' ? 'cluster' : 'group');
     if (d.prep) extra.push('level');
+    if (d.confounder) extra.push('u');
     if (txt) extra.push(txt.name);
     // Feature engineering: the raw columns as collected, next to the columns step 5 built (raw_ prefix when the name differs)
     const rawJ = d.raw ? d.raw.names.map((nm, j) => j).filter(j => j > 0 && !d.names.includes(d.raw.names[j])) : [], rawN = rawJ.map(j => 'raw_' + py(d.raw.names[j]));
     const head = ['row', ...num, ...(rc ? [rc.name] : []), ...extra, ...rawN, ...(d.yRaw ? ['raw_y'] : []), 'y', 'set'];
-    const rows = d.y.map((y, i) => [d.orig ? d.orig[i] + 1 : i + 1, ...numJ.map(j => +d.X[i][j].toFixed(8)), ...(rc ? [rc.vals[i]] : []), ...extra.map(e => e === 'level' ? d.prep.lev[i] + 1 : txt && e === txt.name ? txt.vals[i] : d.group[i]), ...rawJ.map(j => +d.raw.X[i][j].toFixed(8)), ...(d.yRaw ? [+d.yRaw[i].toFixed(8)] : []), +y.toFixed(8), P.isTrain[i] ? 'train' : 'test']);
+    const rows = d.y.map((y, i) => [d.orig ? d.orig[i] + 1 : i + 1, ...numJ.map(j => +d.X[i][j].toFixed(8)), ...(rc ? [rc.vals[i]] : []), ...extra.map(e => e === 'u' ? +d.confounder[i].toFixed(8) : e === 'level' ? d.prep.lev[i] + 1 : txt && e === txt.name ? txt.vals[i] : d.group[i]), ...rawJ.map(j => +d.raw.X[i][j].toFixed(8)), ...(d.yRaw ? [+d.yRaw[i].toFixed(8)] : []), +y.toFixed(8), P.isTrain[i] ? 'train' : 'test']);
     // rows whose y was never recorded (Missing data): kept in the file with an empty y, as they would arrive
     if (d.dropped) d.dropped.idx.forEach((i, k) => rows.push([i + 1, ...numJ.map(j => +d.dropped.X[k][j].toFixed(8)), ...(rc ? [''] : []), ...extra.map(() => ''), '', 'missing']));
     if (d.dropped) rows.sort((a, b) => a[0] - b[0]);
@@ -377,6 +378,148 @@ flat = inner.fit(x1, yt)                         # tuning on all training rows (
 print(flat.best_params_, (-flat.best_score_).round(4))   # app: degree ${I.bestFlat}, ${n(I.flatBest, 4)} (optimistic)` + truth + ` The chosen degree-${I.bestFlat} model scores ${n(V.trueSel, 4)} there.`;
     return null;
   }
+  /* Evaluation: scikit-learn / statsmodels code reproducing the app's numbers */
+  function evCode(c, { L, n, mark }){
+    const P = c.P, E = P.evr; if (!E) return null; const I = E.info;
+    const head = `from sklearn.preprocessing import PolynomialFeatures
+from sklearn.model_selection import KFold, learning_curve, validation_curve
+from sklearn.linear_model import Ridge
+from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
+xt, xs = X_tr[["x"]].to_numpy(), X_te[["x"]].to_numpy()
+yt, ys = y_tr.to_numpy(), y_te.to_numpy()
+poly = lambda deg: make_pipeline(StandardScaler(), PolynomialFeatures(deg), LinearRegression())   # standardise x, then 1, z, z², …
+`;
+    if (E.attr === 'metric') return head + `for deg in range(1, 6):
+    m = poly(deg).fit(xt, yt); p_te, p_tr = m.predict(xs), m.predict(xt)
+    Z = m[:-1].transform(xt)                          # the design 1, z, …, z^deg (statsmodels for adjusted R², AIC, BIC)
+    o = sm.OLS(yt, Z).fit()
+    print(deg, round(mean_squared_error(ys, p_te), 4), round(np.sqrt(mean_squared_error(ys, p_te)), 4), round(mean_absolute_error(ys, p_te), 4),
+          round(100 * mean_absolute_percentage_error(ys, p_te), 4), round(r2_score(ys, p_te), 4), round(o.rsquared_adj, 4), round(o.aic, 4), round(o.bic, 4))
+# app, degree by degree (MSE, RMSE, MAE, MAPE %, R² on test; adjusted R², AIC, BIC on train):
+${I.rows.map(r => `# app: ${r.dg} ${[r.te.mse, r.te.rmse, r.te.mae, r.te.mape, r.te.r2, r.tr.adjr2, r.tr.aic, r.tr.bic].map(t => n(t, 4)).join(' ')}`).join('\n')}
+# this variant's metric (${E.kind}) picks degree ${I.pick}${mark('the metric decides the model')}`;
+    if (E.attr === 'traintest') return head + `for deg in ${'[' + I.all.map(t => t.dg).join(', ') + ']'}:
+    m = poly(deg).fit(xt, yt)
+    print(deg, round(np.sqrt(mean_squared_error(yt, m.predict(xt))), 4), round(np.sqrt(mean_squared_error(ys, m.predict(xs))), 4))
+${I.all.map(r => `# app: ${r.dg} ${n(r.tr, 4)} ${n(r.te, 4)}`).join('\n')}
+# this variant: degree ${I.dg}${mark(E.kind === 'over' ? 'overfit' : E.kind === 'under' ? 'underfit' : 'about right')}`;
+    if (E.attr === 'learningcurve') return head + `sizes, tr, va = learning_curve(poly(${I.dg}), xt, yt, train_sizes=${'[' + I.pts.map(t => t.sz).join(', ') + ']'}, cv=KFold(5), scoring="neg_mean_squared_error")${mark(`degree ${I.dg}`)}
+print(sizes, (-tr.mean(axis=1)).round(4), (-va.mean(axis=1)).round(4))
+# app: training MSE ${L(I.pts.map(t => t.tr))}
+# app: validation MSE ${L(I.pts.map(t => t.va))}`;
+    if (E.attr === 'validationcurve') return head + (E.kind === 'deg' ? `tr, va = validation_curve(poly(1), xt, yt, param_name="polynomialfeatures__degree", param_range=list(range(1, 11)), cv=KFold(5), scoring="neg_mean_squared_error")`
+      : `ridge10 = make_pipeline(StandardScaler(), PolynomialFeatures(10, include_bias=False), Ridge())   # the intercept is not penalised
+tr, va = validation_curve(ridge10, xt, yt, param_name="ridge__alpha", param_range=${'[' + I.grid.join(', ') + ']'}, cv=KFold(5), scoring="neg_mean_squared_error")`) + `${mark('one setting at a time, 5-fold CV')}
+print((-tr.mean(axis=1)).round(4), (-va.mean(axis=1)).round(4))
+# app: training MSE ${L(I.pts.map(t => t.tr))}
+# app: validation MSE ${L(I.pts.map(t => t.va))}  (lowest at ${I.best.g})`;
+    if (E.attr === 'biasvariance') return head + `
+def mulberry32(a):                               # the app's random-number generator, bit for bit
+    st = [a & 0xFFFFFFFF]
+    imul = lambda x, y: (x * y) & 0xFFFFFFFF
+    def r():
+        a = (st[0] + 0x6D2B79F5) & 0xFFFFFFFF; st[0] = a
+        t = imul(a ^ (a >> 15), 1 | a)
+        t = ((t + imul(t ^ (t >> 7), 61 | t)) & 0xFFFFFFFF) ^ t
+        return ((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296
+    return r
+def app_dataset(seed, N, sigma):                 # the app's generator for this variant: the same draws in the same order
+    rng = mulberry32(seed * 7919 + 13); K = max(N, 16)
+    def gauss():
+        u = 0
+        while u == 0: u = rng()
+        return np.sqrt(-2 * np.log(u)) * np.cos(2 * np.pi * rng())
+    u1 = [rng() for _ in range(K)]; [rng() for _ in range(2 * K)]   # u1, then u2 and the group draws (unused here)
+    z1 = [gauss() for _ in range(K)]
+    x = 1 + 9 * np.array(u1[:N]); f = 2 + 1.5 * x + 0.45 * (x - 5) ** 2
+    return x[:, None], f + sigma * np.array(z1[:N])
+truth = lambda x: 2 + 1.5 * x + 0.45 * (x - 5) ** 2
+grid = np.arange(1, 10.01, 0.5)[:, None]; sigma = ${I.sigma}
+for deg in ${'[' + I.degs.join(', ') + ']'}:
+    preds = np.array([poly(deg).fit(*app_dataset(1000 + r, ${I.N}, sigma)).predict(grid) for r in range(1, ${I.R + 1})])${mark('200 fresh training sets')}
+    bias2 = ((preds.mean(axis=0) - truth(grid.ravel())) ** 2).mean(); var = preds.var(axis=0).mean()
+    print(deg, round(bias2, 4), round(var, 4), round(sigma**2, 4), round(bias2 + var + sigma**2, 4))
+${I.rows.map(r => `# app: ${r.dg} ${n(r.bias2, 4)} ${n(r.variance, 4)} ${n(r.noise, 4)} ${n(r.total, 4)}`).join('\n')}`;
+    return null;
+  }
+  /* Inference: the same numbers from statsmodels, and the Monte Carlo check with numpy */
+  function inCode(c, { L, n, mark }){
+    const P = c.P, R = P.inr, d = c.d; if (!R || !R.fit) return null;
+    const I = R.info, F = R.fit, k = R.kind, sg = +(d.sigmaUsed ?? c.S.sigma ?? 1).toFixed(4), N = P.nTr, py = s => String(s).replace(/[₀-₉]/g, ch => '0123456789'['₀₁₂₃₄₅₆₇₈₉'.indexOf(ch)]);
+    const fit = `fit = sm.OLS(y_tr, sm.add_constant(X_tr)).fit()   # OLS in original units (as in step 11)\n`;
+    const mcHead = `rng = np.random.default_rng(0)                   # Monte Carlo: same recipe, numpy's own random draws,
+R, N, sigma = 300, ${N}, ${sg}                    # so the shares agree with the app's only approximately (Monte Carlo noise of a few points, more with correlated errors)
+`;
+    switch (R.attr) {
+      case 'coefinf': return fit + `s2 = fit.ssr / fit.df_resid                      # s² = SSE / (N − p): app ${n(F.s2, 5)}
+D = sm.add_constant(X_tr).to_numpy(); inv = np.linalg.inv(D.T @ D)
+print(np.round(np.sqrt(s2 * np.diag(inv)), 4))   # SE = √(s² diag (XᵀX)⁻¹): app ${L(F.se)}
+print(fit.bse.round(4).to_dict())                # the same from statsmodels
+print(fit.tvalues.round(3).to_dict())            # t = estimate / SE: app ${L(I.rows.map(r => r.t))}
+print(fit.pvalues.round(4).to_dict())            # two-sided p: app ${L(I.rows.map(r => r.p))}
+print(fit.conf_int(alpha=0.05).round(4))         # 95% CIs: app ${I.rows.map(r => `[${n(r.lo, 4)}, ${n(r.hi, 4)}]`).join(' ')}
+` + mcHead + `est, rej, cov = [], np.zeros(4), np.zeros(4)
+beta = np.array([2, 1.5, 0.3, 0.0])
+for r in range(R):
+    Xs = np.column_stack([np.ones(N), 10 * rng.random((N, 3))]); ys = Xs @ beta + sigma * rng.standard_normal(N)
+    g = sm.OLS(ys, Xs).fit(); est.append(g.params); rej += g.pvalues < 0.05
+    lo, hi = g.conf_int().T; cov += (lo <= beta) & (beta <= hi)
+print(np.round(np.std(est, axis=0, ddof=1), 4))  # actual spread of the estimates: app ${L(I.mc.map(m => m.sd))}
+print(rej / R)                                   # share significant: app ${L(I.mc.map(m => m.rej))}   (x3 ≈ 0.05 = Type I error)
+print(cov / R)                                   # CI coverage: app ${L(I.mc.map(m => m.cov))}`;
+      case 'ftest': return fit + (k === 'overall' ? `print(round(fit.fvalue, 4), fit.f_pvalue)        # overall F: app F = ${n(I.F, 4)}, p ${n(I.p, 6)}
+sst = ((y_tr - y_tr.mean())**2).sum()
+print(round(((sst - fit.ssr) / ${I.q}) / (fit.ssr / fit.df_resid), 4))   # by hand: ((SST − SSE)/q) / (SSE/(N − p))` : `restricted = sm.OLS(y_tr, sm.add_constant(X_tr[["${py(P.names[1])}"]])).fit()   # drop ${I.tested.join(' and ')}
+print(fit.compare_f_test(restricted))           # (F, p, q): app F = ${n(I.F, 4)}, p ${n(I.p, 6)}, q = ${I.q}
+print(round(((restricted.ssr - fit.ssr) / ${I.q}) / (fit.ssr / fit.df_resid), 4))   # by hand: SSE_R = ${n(I.sseR, 4)}, SSE_U = ${n(I.sseU, 4)}`) + `
+` + mcHead + `rej = 0
+for r in range(R):
+    Xs = np.column_stack([np.ones(N), 10 * rng.random((N, 3))]); ys = Xs @ np.array([2, 1.5, 0.3, 0.0]) + sigma * rng.standard_normal(N)
+    g = sm.OLS(ys, Xs).fit()
+    p = g.f_pvalue if ${k === 'overall' ? 'True' : 'False'} else g.compare_f_test(sm.OLS(ys, Xs[:, :2]).fit())[1]
+    rej += p < 0.05
+print(rej / R)                                   # share rejected: app ${n(I.rej, 3)}`;
+      case 'intervals': return fit + `x0 = np.array(${L(I.pts.map(q => q.x0))})
+pred = fit.get_prediction(sm.add_constant(x0, has_constant="add")).summary_frame(alpha=0.05)
+print(pred[["mean", "mean_ci_lower", "mean_ci_upper"]].round(4))   # CI for the mean: app ${I.pts.map(q => `[${n(q.ciLo, 3)}, ${n(q.ciHi, 3)}]`).join(' ')}
+print(pred[["obs_ci_lower", "obs_ci_upper"]].round(4))            # PI for a new y:  app ${I.pts.map(q => `[${n(q.piLo, 3)}, ${n(q.piHi, 3)}]`).join(' ')}${mark(k === 'conf' ? 'confidence interval' : 'prediction interval')}
+` + mcHead + `cm, cp = np.zeros(len(x0)), np.zeros(len(x0)); X0 = sm.add_constant(x0, has_constant="add")
+for r in range(R):
+    xs = 10 * rng.random(N); ys = 2 + 1.5 * xs + sigma * rng.standard_normal(N)
+    sf = sm.OLS(ys, sm.add_constant(xs)).fit().get_prediction(X0).summary_frame(alpha=0.05)
+    truth = 2 + 1.5 * x0; ynew = truth + sigma * rng.standard_normal(len(x0))
+    cm += (sf.mean_ci_lower <= truth) & (truth <= sf.mean_ci_upper); cp += (sf.obs_ci_lower <= ynew) & (ynew <= sf.obs_ci_upper)
+print(cm / R, cp / R)                            # coverage: app CI ${L(I.cov.map(q => q.m))}, PI ${L(I.cov.map(q => q.p))}`;
+      case 'robustse': return `X1 = sm.add_constant(X_tr)
+for name, kw in [("classical", {}), ("HC1", {"cov_type": "HC1"}), ("Newey–West", {"cov_type": "HAC", "cov_kwds": {"maxlags": ${I.lag}, "use_correction": True}})${I.groups ? `, ("clustered", {"cov_type": "cluster", "cov_kwds": {"groups": train["group"]}})` : ''}]:
+    print(name, round(sm.OLS(y_tr, X1).fit(**kw).bse.iloc[1], 4))   # app: ${I.list.map(L2 => `${L2.k} ${n(L2.here, 4)}`).join(', ')}
+` + mcHead + `est, ses = [], {"classical": [], "HC1": [], "HAC": []${I.groups ? ', "cluster": []' : ''}}; cov = {k: 0 for k in ses}
+for r in range(R):
+    xs = np.sort(10 * rng.random(N)); z = rng.standard_normal(N)
+    ${{ classical: 'e = sigma * z', hc: 'e = sigma * (0.15 + 0.3 * xs) * z', cluster: 'g = np.minimum(9, (np.arange(N) * 10) // N); u = rng.standard_normal(10); e = sigma * (np.sqrt(0.7) * u[g] + np.sqrt(0.3) * z)', nw: 'e = np.zeros(N); e[0] = sigma * z[0]\n    for t in range(1, N): e[t] = 0.8 * e[t - 1] + 0.6 * sigma * z[t]' }[k]}
+    ys = 2 + 1.5 * xs + e; Xs = sm.add_constant(xs); est.append(sm.OLS(ys, Xs).fit().params[1])
+    for key in ses:
+        kw = {} if key == "classical" else {"cov_type": key} if key == "HC1" else {"cov_type": "HAC", "cov_kwds": {"maxlags": ${I.lag}, "use_correction": True}} if key == "HAC" else {"cov_type": "cluster", "cov_kwds": {"groups": g}}
+        s = sm.OLS(ys, Xs).fit(**kw).bse[1]; ses[key].append(s); cov[key] += abs(est[-1] - 1.5) <= stats.t.ppf(0.975, N - 2) * s
+print(round(np.std(est, ddof=1), 4))             # true spread of the slope: app ${n(I.sdTrue, 4)}
+print({k: (round(np.mean(v), 4), cov[k] / R) for k, v in ses.items()})   # app: ${I.list.map(L2 => `${L2.k} ${n(L2.mean, 4)} / ${n(L2.cov, 3)}`).join(', ')}`;
+      case 'reading': return k === 'raw' ? fit + `print(fit.params.round(4).to_dict())             # one unit more of x → ŷ changes by the slope: app ${L(I.w)}`
+        : k === 'std' ? fit + `sx, sy = X_tr.iloc[:, 0].std(ddof=0), y_tr.std(ddof=0)   # app: ${n(I.sx, 4)} ${n(I.sy, 4)}
+print(round(fit.params.iloc[1] * sx, 4), round(fit.params.iloc[1] * sx / sy, 4))   # per SD of x, and β in SDs of y: app ${n(I.wStd, 4)} ${n(I.beta, 4)}
+print(round(np.corrcoef(X_tr.iloc[:, 0], y_tr)[0, 1], 4))   # with one feature β = r`
+        : k === 'loglog' ? `ll = smf.ols("np.log(raw_y) ~ np.log(raw_x)", data=train).fit()${mark('log–log model')}
+print(ll.params.round(4).to_dict())              # app: a = ${n(I.w[0], 4)}, b (elasticity) = ${n(I.w[1], 4)}
+b = ll.params.iloc[1]; print(round(100 * (1.01**b - 1), 4), round(2**b, 4))   # % change of y for 1% more x; factor for double x`
+        : `lg = smf.ols("np.log(raw_y) ~ x", data=train).fit()${mark('log–linear model')}
+print(lg.params.round(4).to_dict())              # app: a = ${n(I.w[0], 4)}, b = ${n(I.w[1], 4)}
+b = lg.params.iloc[1]; print(round(np.exp(b), 5), round(100 * (np.exp(b) - 1), 4))   # factor and % change per unit of x`;
+      case 'causal': return `naive = sm.OLS(y_tr, sm.add_constant(X_tr)).fit()
+ctrl = sm.OLS(y_tr, sm.add_constant(train[["x", "u"]])).fit()   # u is only known because this is a simulation${mark('control for the confounder')}
+print(round(naive.params.iloc[1], 4), round(ctrl.params.iloc[1], 4))   # app: naive ${n(I.naive, 4)}, controlled ${n(I.ctrl, 4)} (true 1.0)
+print(round(3 * np.cov(train["x"], train["u"], ddof=0)[0, 1] / train["x"].var(ddof=0), 4))   # omitted-variable bias β_u·cov(x,u)/var(x): app ${n(I.ovb, 4)}`;
+    }
+    return null;
+  }
   function cells(c){
     const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss, num, cat, nCols } = csv(c);
     const F = cat ? `num + cat` : `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra.find(e => e === 'group' || e === 'cluster');
@@ -529,7 +672,7 @@ print(nw.bse)                                                           # app: S
 print(np.sqrt(mean_squared_error(y_te, yhat_te)))  # test RMSE: app ${n(P.rmseTe, 3)} (train ${n(P.rmseTr, 3)})
 print(r2_score(y_te, yhat_te))                     # test R²: app ${n(P.r2Te, 3)}` + (P.orig ? `
 # y was transformed in step 5: turn the predictions back before scoring in the units of y
-back = ${d.fe.kind === 'log' ? 'np.exp' : `lambda z: np.maximum(0, ${n(d.fe.lam, 6)} * z + 1) ** (1 / ${n(d.fe.lam, 6)})`}
+back = ${!d.fe || d.fe.kind === 'log' ? 'np.exp' : `lambda z: np.maximum(0, ${n(d.fe.lam, 6)} * z + 1) ** (1 / ${n(d.fe.lam, 6)})`}
 print(np.sqrt(mean_squared_error(test["raw_y"], back(yhat_te))))   # app: test RMSE in the units of y ${n(P.orig.rmseTe, 3)}` : '') });
 
     out.push({ id: 13, t: 'Step 13: interpret', code:
@@ -596,7 +739,9 @@ features = [f for f in features if f != "leak"]        # drop every column not k
     if (MF.has(vid)) FIX = MFC;
     if (OP.has(vid)) FIX = optCode(c, { L, n, mark });
     if (VP.has(vid)) FIX = valCode(c, { L, n, mark });
-    out.push({ id: 'fix', t: VP.has(vid) ? `This variant's validation in code` : OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) || VP.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
+    if (EV.has(vid)) FIX = evCode(c, { L, n, mark });
+    if (IN.has(vid)) FIX = inCode(c, { L, n, mark });
+    out.push({ id: 'fix', t: IN.has(vid) ? `This variant's inference in code` : EV.has(vid) ? `This variant's evaluation in code` : VP.has(vid) ? `This variant's validation in code` : OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) || VP.has(vid) || EV.has(vid) || IN.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
     return out;
   }
 

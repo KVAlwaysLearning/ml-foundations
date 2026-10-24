@@ -290,6 +290,11 @@ const INF = {
   penalisebias: { 8: ['origin', 'Whether the intercept is part of the penalty.'], '9a': ['major', 'A penalised intercept is pulled toward 0, away from the mean of y.'], 12: ['major', 'Every prediction is shifted toward 0.'], 13: ['major', 'The intercept is wrong; the slopes are barely affected.'] },
   lossfn: { 8: ['origin', 'The loss decides how much each residual costs: squared, absolute, Huber, pinball or log-cosh.'], '9a': ['major', 'Only squared loss has the normal equations; the others are solved by iteratively reweighted least squares.'], 10: ['major', 'Residuals of a non-squared loss need not average 0.'], 11: ['major', 'Classical SEs belong to OLS; other losses need their own (sandwich or bootstrap) SEs.'], 12: ['major', 'The best loss for the test score depends on the metric: MSE is scored best by the squared loss, MAE by the absolute loss.'], 13: ['major', 'Each loss estimates a different line: mean, median, a quantile, or a robust centre.'] },
   penalty: { 5: ['major', 'Features must be standardised so the penalty treats them alike.'], 8: ['origin', 'A penalty term on the weights is added to the loss.'], '9a': ['major', 'L2 keeps a closed form (λ on the diagonal); L1 needs coordinate descent.'], 11: ['major', 'Classical SEs do not apply to penalised estimates.'], 12: ['major', 'With correlated features a penalty usually lowers the test error.'], 13: ['major', 'Coefficients are shrunk; L1 sets some exactly to 0.'] },
+  metric: { 12: ['origin', 'Which number summarises the errors: squared, absolute, percentage, explained share, or a likelihood with a complexity penalty.'], 13: ['minor', 'Different metrics can prefer different models.'] },
+  traintest: { 7: ['origin', 'The model\u2019s flexibility: the polynomial degree.'], '9a': ['major', 'More coefficients fit the training rows more closely.'], 12: ['major', 'The gap between training and test error shows over- or underfitting.'], 13: ['major', 'An overfit model\u2019s coefficients are wild and meaningless.'] },
+  learningcurve: { 4: ['major', 'The model is refitted on growing subsets of the training rows, with 5-fold CV.'], 12: ['origin', 'How the training and validation errors change as data grow.'] },
+  validationcurve: { 4: ['major', '5-fold CV on the training rows scores every setting.'], 12: ['origin', 'Training and validation error against one setting (degree or λ).'], 8: ['minor', 'For the λ curve, the ridge penalty is part of the loss.'] },
+  biasvariance: { 1: ['major', '200 fresh datasets are drawn from the same process.'], 12: ['origin', 'The expected test error split into bias², variance and noise.'] },
   split: { 4: ['origin', 'The share of rows held out for testing.'], '9a': ['minor', 'Fewer training rows: slightly less precise weights.'], 11: ['minor', 'Standard errors grow as the training set shrinks.'], 12: ['major', 'A small test set gives a noisy test score.'] },
   cv: { 4: ['origin', 'How the error on new rows is estimated: one split, k folds, leave-one-out, forward-in-time folds, or nested.'], 12: ['major', 'Cross-validation averages several held-out scores, so the estimate is steadier than one split.'], 13: ['minor', 'Choosing a model on the same CV that reports its score is optimistic: nested CV fixes that.'] },
   seed: { 4: ['origin', 'Which rows land in the test set.'], 12: ['major', 'A different split gives a different test score: one number hides that spread.'], 13: ['minor', 'The coefficients move a little from split to split.'] },
@@ -301,6 +306,12 @@ const INF = {
   init: { '9b': ['origin', 'Where the weights start.'], 13: ['minor', 'The loss is a convex bowl: every start reaches the same minimum.'] },
   stopping: { '9b': ['origin', 'When to stop iterating.'], 4: ['major', 'Early stopping holds out part of the training rows as a validation set.'], 12: ['minor', 'Stopping early leaves the weights short of the minimum (sometimes on purpose).'], 13: ['minor', 'The weights depend on where the run stopped.'] },
   scalegd: { 5: ['origin', 'Whether the features are standardised before gradient descent.'], 6: ['major', 'Unscaled features make κ huge: the bowl is a very long, narrow valley.'], '9b': ['major', 'The safe step is set by the steep direction, so the flat direction barely moves.'], 12: ['major', 'An unconverged run predicts badly.'] },
+  coefinf: { 11: ['origin', 'Standard errors, t-tests and confidence intervals, from s²(XᵀX)⁻¹.'], 13: ['major', 'A coefficient is reported with its uncertainty, not alone.'] },
+  ftest: { 11: ['origin', 'An F-test compares the model with a smaller one: all slopes zero, or a chosen group zero.'] },
+  intervals: { 11: ['origin', 'Uncertainty of a prediction: for the mean of y, or for one new y.'], 13: ['major', 'The prediction interval is always wider: it adds the noise of a single new row.'] },
+  robustse: { 11: ['origin', 'Which standard-error formula matches how the errors behave.'], 10: ['major', 'The residual checks decide which SE is needed.'], 13: ['major', 'The coefficients do not change; only their uncertainty does.'] },
+  reading: { 5: ['major', 'The scale of x and y (raw, standardised, logs) sets what a coefficient means.'], 13: ['origin', 'How to say what the slope means: per unit, per SD, in %, as an elasticity.'] },
+  causal: { 1: ['origin', 'Whether x was assigned at random or merely observed decides whether the slope is causal.'], 13: ['origin', 'A slope is an association; it is a causal effect only without confounders.'], 11: ['major', 'Confidence intervals are tight around the wrong value when x is confounded.'] },
   otherforms: { 6: ['major', 'PCA and PLS replace the correlated columns by a few uncorrelated components.'], 7: ['origin', 'A different model built on the same features.'], '9a': ['major', 'The solution is found in component space (PCA, PLS) or as a posterior (Bayesian).'], 11: ['major', 'Bayesian credible intervals replace confidence intervals.'], 12: ['major', 'Fewer effective parameters: less variance on correlated data.'], 13: ['major', 'Coefficients are mapped back from the components, or come with posterior spreads.'] }
 };
 const INF_V = {
@@ -362,6 +373,30 @@ const INF_V = {
 };
 /* Model formulation: what the variant's own model is, minimises, finds and scores (next to the OLS backbone) */
 const ALT_MODEL = { origin: 'ŷ = w·x (no intercept: the line must pass through 0)', wls: 'ŷ = X̃w̃, the same columns as OLS', gls: 'ŷ = X̃w̃, with errors εₜ = ρεₜ₋₁ + uₜ', huber: 'ŷ = X̃w̃, the same line shape as OLS', ransac: 'ŷ = X̃w̃, fitted on the inliers only', theil: 'ŷ = b + w·x', quantile: 'ŷ = X̃w̃ estimates the median of y, not its mean', ridge: 'ŷ = X̃w̃, the same columns as OLS', lasso: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', enet: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', pcr: 'ŷ = b + Σ γₖ·(component k); each component is a fixed mix of the features', pls: 'ŷ = b + Σ qₖ·(PLS component k)', bayes: 'w̃ has a prior N(0, τ²); ŷ uses its posterior mean' };
+function infText(c, part){
+  const R = c.P.inr; if (!R) return part === 'inf' ? 'not used here (the Inference branch works through SEs, tests, intervals and robust SEs with Monte Carlo checks)' : 'not used here (the Inference branch covers raw, standardised, log–log and log–linear readings, and causation)';
+  const I = R.info, j = Math.min(1, R.fit ? R.fit.p - 1 : 1);
+  if (!R.fit) return `${mark(false)} ${esc(R.label)}`;
+  if (part === 'read') { if (R.attr === 'reading') return R.kind === 'raw' ? `one unit more of x → ŷ changes by ${num(I.w[1], 3)}` : R.kind === 'std' ? `one SD of x (${num(I.sx, 3)}) → ŷ changes by ${num(I.wStd, 3)}, i.e. ${num(I.beta, 3)} SDs of y` : R.kind === 'loglog' ? `elasticity ${num(I.w[1], 3)}: 1% more x → about ${num(I.w[1], 3)}% more y` : `each unit of x multiplies y by e^${num(I.w[1], 4)} = ${num(Math.exp(I.w[1]), 4)} (${num(100 * (Math.exp(I.w[1]) - 1), 2)}% per unit)`;
+    if (R.attr === 'causal') return `${R.kind === 'confounded' ? mark(false) : mark(true)} naive slope ${num(I.naive, 3)}; controlling for u: ${num(I.ctrl, 3)}; true causal effect 1.0`;
+    if (R.attr === 'intervals') return `at x = ${num(I.pts[2].x0, 1)}: mean ${num(I.pts[2].yh, 3)} ± ${num(I.tc * I.pts[2].seM, 3)}, new point ± ${num(I.tc * I.pts[2].seP, 3)}`;
+    return 'see step 11'; }
+  if (R.attr === 'coefinf') return I.rows.slice(1).map(r => `${r.nm}: ${num(r.w, 3)}, SE ${num(r.se, 4)}, t ${num(r.t, 2)}, p ${r.p < 0.001 ? '< 0.001' : num(r.p, 3)}, CI [${num(r.lo, 3)}, ${num(r.hi, 3)}]`).join('; ');
+  if (R.attr === 'ftest') return `${I.p < 0.05 ? mark(true) : mark(false, true)} F = ${num(I.F, 3)} on (${I.q}, ${I.df2}) df, ${pEq(I.p)}; in ${I.R} fresh datasets rejected ${num(100 * I.rej, 1)}%`;
+  if (R.attr === 'intervals') return `${esc(R.label)}: coverage in ${I.R} fresh datasets ${I.cov.map((cv, k) => `x = ${I.pts[k].x0}: ${num(100 * (R.kind === 'conf' ? cv.m : cv.p), 0)}%`).join(', ')}`;
+  if (R.attr === 'robustse') return I.list.map(L => `${{ classical: 'classical', hc: 'HC1', nw: 'Newey–West', cl: 'clustered' }[L.k]} ${num(L.here, 4)} (covers ${num(100 * L.cov, 0)}%)`).join('; ') + `; true SD of the slope ${num(I.sdTrue, 4)}`;
+  return 'see step 13';
+}
+function evText(c){
+  const E = c.P.evr; if (!E) return 'not used here (the Evaluation branch compares metrics, train vs test, learning and validation curves, and bias–variance)';
+  const I = E.info;
+  if (E.attr === 'metric') return `${esc(E.label)}: ${I.degs.map((dg, k) => `degree ${dg} ${num(I.vals[k], 3)}`).join(', ')}. ${I.better === 'max' ? 'Highest' : 'Lowest'}: <b>degree ${I.pick}</b>`;
+  if (E.attr === 'traintest') return `${I.te > 1.5 * I.tr ? mark(false) : I.tr > 1.3 * (c.d.sigmaUsed || 1) ? mark(false, true) : mark(true)} degree ${I.dg}: train RMSE ${num(I.tr, 3)}, test RMSE ${num(I.te, 3)}`;
+  if (E.attr === 'learningcurve') { const L = I.pts[I.pts.length - 1]; return `degree ${I.dg}: at ${L.sz} rows, training MSE ${num(L.tr, 3)}, validation MSE ${num(L.va, 3)} (noise level σ² = ${num(I.sigma2, 3)})`; }
+  if (E.attr === 'validationcurve') return `lowest CV error at ${E.kind === 'deg' ? 'degree' : 'λ ='} ${I.best.g} (CV MSE ${num(I.best.va, 3)}); refitted, test RMSE ${num(I.testRmse, 3)}`;
+  if (E.attr === 'biasvariance') return I.rows.map(r => `degree ${r.dg}: bias² ${num(r.bias2, 3)} + variance ${num(r.variance, 3)} + noise ${num(r.noise, 3)} = ${num(r.total, 3)}`).join('; ');
+  return '';
+}
 function valText(c, part){
   const V = c.P.val; if (!V) return part === 'cv' ? 'not used here (covered in the Validation branch)' : part === 'truth' ? 'not computed here (the Validation branch scores each protocol against 2 000 fresh rows)' : 'the single random split above';
   const I = V.info;
@@ -552,7 +587,8 @@ const STEPS = [
         c.variant.id === 'dupes' ? 'none needed: remove the duplicate rows in step 2, then classical SEs are fine' : c.attr.id === 'independence' ? `${c.variant.id === 'cluster' ? 'clustered' : 'Newey–West'} (highlighted above)` : c.attr.id === 'homoscedasticity' ? 'heteroscedasticity-robust HC1 (highlighted above)' :
         c.attr.id === 'exogeneity' ? `${mark(false)} none: the estimate itself is biased, so no standard error can rescue the interval` :
         c.attr.id === 'multicollinearity' ? 'none: the SEs are correct but large (or undefined); the fix is in the features or ridge' :
-        c.attr.id === 'normality' ? 'classical is fine in large samples; bootstrap if N is small' : 'none: the model itself is misspecified, so fix the features first']
+        c.attr.id === 'normality' ? 'classical is fine in large samples; bootstrap if N is small' : 'none: the model itself is misspecified, so fix the features first'],
+      ['', "This variant's inference", c => infText(c, 'inf')]
     ]},
   { id: 12, title: 'Evaluation on test data', goal: 'Score the model on rows it never saw, transformed with the training μ and s.',
     attrs: ['metric', 'traintest', 'learningcurve', 'validationcurve', 'biasvariance', 'shift'],
@@ -560,8 +596,9 @@ const STEPS = [
       [sy('rmse'), 'Train vs test error', c => `train ${num(c.P.rmseTr, 3)}, test ${num(c.P.rmseTe, 3)}${c.P.rmseTe > 1.3 * c.P.rmseTr ? ` ${mark(false, true)} test noticeably worse` : ''}`],
       [sy('r2'), 'Test R²', c => num(c.P.r2Te, 3)],
       ['', 'This variant on the test rows', c => altText(c, 'test')],
-      ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y'],
-      ['', "This variant's error estimate vs the truth", c => valText(c, 'truth')]
+      ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${!c.d.fe || c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y'],
+      ['', "This variant's error estimate vs the truth", c => valText(c, 'truth')],
+      ['', "This variant's evaluation", c => evText(c)]
     ]},
   { id: 13, title: 'Interpretation', goal: 'Undo the scaling and say what the coefficients mean.',
     attrs: ['reading', 'causal', 'intervals'],
@@ -570,6 +607,7 @@ const STEPS = [
       ['', 'Reading the slope', c => { const j = c.focus; return `one unit more of ${c.P.names[j]} changes ${sy('yhat')} by ${num(c.P.wOrig[j], 3)}, holding the other features fixed`; }],
       ['', "This variant's coefficients, next to OLS", c => altText(c, 'coef')],
       ['', 'Confidence and prediction intervals at a new x', c => { const b = band(c.P, c.focus); if (!b) return `${mark(false)} not available: ${c.P.noDg || 'X̃ᵀX̃ has no inverse'}`;
-        return b.pts.filter((_, k) => k % 2 === 0).map(q => `${c.P.names[c.focus]} = ${num(q.x, 1)}: ŷ ${num(q.yh, 2)}, mean ± ${num(q.ci, 2)}, new point ± ${num(q.pi, 2)}`).join('; '); }]
+        return b.pts.filter((_, k) => k % 2 === 0).map(q => `${c.P.names[c.focus]} = ${num(q.x, 1)}: ŷ ${num(q.yh, 2)}, mean ± ${num(q.ci, 2)}, new point ± ${num(q.pi, 2)}`).join('; '); }],
+      ['', "This variant's reading", c => infText(c, 'read')]
     ]}
 ];

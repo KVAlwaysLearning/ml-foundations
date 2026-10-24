@@ -594,6 +594,110 @@ const SIG = (() => {
   }
   ['split', 'cv', 'seed'].forEach(k => { A[k] = vpSig; });
 
+  /* ================= Evaluation ================= */
+  function evSig(ctx){ const { v, P, Pb, a } = ctx, F = ctx.full ? ctx.full.cur : ctx.cur.d, E = P.evr, I = E ? E.info : {};
+    const gen = `${esc(v.desc)}${F.note ? ' ' + esc(F.note) + '.' : ''}`;
+    const xtr = P.tr.map(i => F.X[i][1]), xte = P.te.map(i => F.X[i][1]), xr = range([[...xtr, ...xte]]), grid = Array.from({ length: 121 }, (_, k) => xr[0] + (xr[1] - xr[0]) * k / 120);
+    const dataPlot = (c, curves, title) => { const ys = [...P.ytr, ...P.yte, ...curves.flatMap(([f]) => grid.map(f))].filter(t => isFinite(t) && Math.abs(t) < 1e4), lo = Math.min(...P.ytr, ...P.yte), hi = Math.max(...P.ytr, ...P.yte), pad = (hi - lo) * 0.25;
+      c.begin(xr, [lo - pad, hi + pad], 'x', 'y'); xtr.forEach((t, k) => c.dot([t, P.ytr[k]], C('--floor'), 3, false, 0.8)); xte.forEach((t, k) => c.dot([t, P.yte[k]], C('--residual'), 3.5, true, 0.9));
+      c.line(grid.map(t => [t, EV.truthF(t)]), C('--ink'), 1.2, [3, 3]); curves.forEach(([f, col, w, dash]) => c.line(grid.map(t => [t, Math.max(lo - pad, Math.min(hi + pad, f(t)))]), col, w, dash)); c.end();
+      c.legend([[C('--floor'), 'training rows'], [C('--residual'), 'test rows (hollow)'], [C('--ink'), 'truth', true], ...curves.map(([, col, , dash, lab]) => [col, lab, !!dash])]); };
+    const see = li(!E ? ['—'] : [
+      `What is evaluated: <b>${esc(E.label)}</b>.`,
+      E.attr === 'metric' ? `This metric picks <b>degree ${I.pick}</b> (${I.degs.map((dg, k) => `${dg}: ${n(I.vals[k], 3)}`).join(', ')}).` : '',
+      E.attr === 'traintest' ? `Train RMSE <b>${n(I.tr, 3)}</b>, test RMSE <b>${n(I.te, 3)}</b>, noise σ = ${n(F.sigmaUsed ?? 1, 3)}: ${I.te > 1.5 * I.tr ? 'a big gap, the mark of overfitting' : I.tr > 1.3 * (F.sigmaUsed ?? 1) ? 'both high, the mark of underfitting' : 'both close to the noise level'}.` : '',
+      E.attr === 'learningcurve' ? `With all ${I.pts[I.pts.length - 1].sz} rows: training MSE ${n(I.pts[I.pts.length - 1].tr, 3)}, validation MSE ${n(I.pts[I.pts.length - 1].va, 3)}; noise σ² = ${n(I.sigma2, 3)}.` : '',
+      E.attr === 'validationcurve' ? `The validation error is lowest at ${E.kind === 'deg' ? 'degree' : 'λ ='} <b>${I.best.g}</b>.` : '',
+      E.attr === 'biasvariance' ? I.rows.map(r => `Degree ${r.dg}: bias² ${n(r.bias2, 3)}, variance ${n(r.variance, 3)}, total ${n(r.total, 3)}.`).join(' ') : '']);
+    const draw = el => { const r1 = row(el), out = []; if (!E) return out;
+      if (E.attr === 'metric') { out.push(chart(r1, `${esc(E.label.split(' on ')[0])} by degree (${I.better === 'max' ? 'higher' : 'lower'} is better)`, 250, c => { c.begin([0.4, 5.6], range([I.vals, I.better === 'max' ? [] : []]), 'degree', 'metric'); I.vals.forEach((t, k) => c.dot([k + 1, t], k + 1 === I.pick ? C('--normal') : CUR(), k + 1 === I.pick ? 6 : 4)); c.line(I.vals.map((t, k) => [k + 1, t]), CUR(), 1.6); c.end(); }));
+        out.push(chart(r1, 'Data, with degree 1 and this metric’s choice', 250, c => dataPlot(c, [[I.rows[0].f.pred, BASEC(), 2, [5, 4], 'degree 1'], [I.rows[I.pick - 1].f.pred, CUR(), 2.4, null, `degree ${I.pick}`]]))); }
+      if (E.attr === 'traintest') { out.push(chart(r1, 'Train and test RMSE by degree', 250, c => { c.begin([0.5, 10.5], [0, Math.min(Math.max(...I.all.map(t => t.te)), 6 * (F.sigmaUsed ?? 1) + 2) * 1.05], 'degree', 'RMSE'); c.line(I.all.map(t => [t.dg, t.tr]), C('--floor'), 2.2); c.line(I.all.map(t => [t.dg, Math.min(t.te, 1e3)]), C('--residual'), 2.2); c.vline(I.dg, C('--normal'), [4, 3]); c.end(); c.legend([[C('--floor'), 'training'], [C('--residual'), 'test'], [C('--normal'), 'this variant', true]]); }));
+        out.push(chart(r1, `The degree-${I.dg} fit`, 250, c => dataPlot(c, [[I.f.pred, CUR(), 2.4, null, `degree ${I.dg}`]]))); }
+      if (E.attr === 'learningcurve') { out.push(chart(r1, 'Learning curve: MSE against the number of training rows', 250, c => { const vals = I.pts.flatMap(t => [t.tr, t.va]).filter(t => t < 1e4); c.begin([0, I.nMax], [0, Math.min(Math.max(...vals), 20 * I.sigma2 + 5) * 1.05], 'training rows', 'MSE');
+          c.line(I.pts.map(t => [t.sz, t.tr]), C('--floor'), 2.2); c.line(I.pts.map(t => [t.sz, Math.min(t.va, 1e4)]), C('--residual'), 2.2); c.hline(I.sigma2, C('--ink'), [5, 4]); c.end(); c.legend([[C('--floor'), 'training'], [C('--residual'), 'validation (5-fold)'], [C('--ink'), 'noise σ²', true]]); }));
+        out.push(chart(r1, `The degree-${I.dg} fit on all training rows`, 250, c => dataPlot(c, [[E.curve, CUR(), 2.4, null, `degree ${I.dg}`]]))); }
+      if (E.attr === 'validationcurve') { const gx = t => E.kind === 'deg' ? t : Math.log10(t);
+        out.push(chart(r1, `Validation curve: MSE against ${E.kind === 'deg' ? 'the degree' : 'log₁₀ λ'}`, 250, c => { const vals = I.pts.flatMap(t => [t.tr, t.va]).filter(t => t < 1e4); c.begin([gx(I.grid[0]), gx(I.grid[I.grid.length - 1])], [0, Math.min(Math.max(...vals), 50) * 1.05], E.kind === 'deg' ? 'degree' : 'log₁₀ λ', 'MSE');
+          c.line(I.pts.map(t => [gx(t.g), t.tr]), C('--floor'), 2.2); c.line(I.pts.map(t => [gx(t.g), Math.min(t.va, 1e4)]), C('--residual'), 2.2); c.vline(gx(I.best.g), C('--normal'), [4, 3]); c.end(); c.legend([[C('--floor'), 'training'], [C('--residual'), 'validation (5-fold)'], [C('--normal'), 'lowest validation error', true]]); }));
+        out.push(chart(r1, 'The chosen model', 250, c => dataPlot(c, [[E.curve, CUR(), 2.4, null, esc(E.curveLabel)]]))); }
+      if (E.attr === 'biasvariance') { const r2 = row(el);
+        I.rows.forEach((r, q) => out.push(chart(q < 2 ? r1 : r2, `Degree ${r.dg}: 20 of the ${I.R} fits`, 230, c => { const lo = 0, hi = Math.max(...I.grid.map(EV.truthF)) * 1.4; c.begin([1, 10], [lo, hi], 'x', 'ŷ');
+          I.sample[q].forEach(f => c.line(I.grid.map(t => [t, Math.max(lo, Math.min(hi, f.pred(t)))]), CUR(), 1, null, 0.35)); c.line(r.at.map(t => [t.x0, t.mean]), C('--normal'), 2.4); c.line(I.grid.map(t => [t, EV.truthF(t)]), C('--ink'), 1.6, [5, 4]); c.end();
+          c.legend([[CUR(), 'single fits'], [C('--normal'), 'average fit'], [C('--ink'), 'truth', true]]); })));
+        out.push(chart(r2, 'Expected test MSE = bias² + variance + noise', 230, c => { const top = Math.max(...I.rows.map(r => r.total)) * 1.1; c.begin([0.4, I.rows.length + 0.6], [0, top], 'model', 'MSE');
+          I.rows.forEach((r, q) => { const x0 = q + 0.65, x1 = q + 1.35; c.rect(x0, 0, x1, r.noise, C('--muted'), 0.6); c.rect(x0, r.noise, x1, r.noise + r.bias2, C('--normal'), 0.75); c.rect(x0, r.noise + r.bias2, x1, r.total, CUR(), 0.75); c.text(`deg ${r.dg}`, [x0, r.total], C('--ink')); }); c.end();
+          c.legend([[C('--muted'), 'noise σ²'], [C('--normal'), 'bias²'], [CUR(), 'variance']]); })); }
+      return out; };
+    const tbl = !E ? '' : E.attr === 'metric' ? table(['degree', 'MSE', 'RMSE', 'MAE', 'MAPE %', 'R²', 'adj. R² (train)', 'AIC (train)', 'BIC (train)'], I.rows.map(r => [r.dg, r.te.mse, r.te.rmse, r.te.mae, r.te.mape, r.te.r2, r.tr.adjr2, r.tr.aic, r.tr.bic]), { max: 6, hi: k => k + 1 === I.pick ? 'hl' : '' })
+      : E.attr === 'traintest' ? table(['degree', 'train RMSE', 'test RMSE'], I.all.map(r => [r.dg, r.tr, r.te]), { max: 8, hi: k => I.all[k].dg === I.dg ? 'hl' : '' })
+      : E.attr === 'learningcurve' ? table(['training rows', 'training MSE', 'validation MSE'], I.pts.map(t => [t.sz, t.tr, t.va]), { max: 10 })
+      : E.attr === 'validationcurve' ? table([E.kind === 'deg' ? 'degree' : 'λ', 'training MSE', 'validation MSE'], I.pts.map(t => [t.g, t.tr, t.va]), { max: 12, hi: k => I.pts[k] === I.best ? 'hl' : '' })
+      : table(['degree', 'bias²', 'variance', 'noise', 'total'], I.rows.map(r => [r.dg, r.bias2, r.variance, r.noise, r.total]), { max: 4 });
+    return { gen, see, draw, table: tbl };
+  }
+  ['metric', 'traintest', 'learningcurve', 'validationcurve', 'biasvariance'].forEach(k => { A[k] = evSig; });
+
+  /* ================= Inference: what the numbers mean and how sure we can be ================= */
+  function inSig(ctx){ const { v, P, Pb, a } = ctx, F = ctx.full ? ctx.full.cur : ctx.cur.d, R = P.inr, B = Pb.inr, I = R ? R.info : {}, G = R && R.fit;
+    const gen = `${esc(v.desc)}${F.note ? ' ' + esc(F.note) + '.' : ''} Every Monte Carlo check re-draws 300 fresh datasets of the training size from the same recipe.`;
+    const pf = p => p < 0.001 ? '< 0.001' : n(p, 3);
+    const hist = (c, vals, xr, B2, col, lab) => { const w = (xr[1] - xr[0]) / B2, k = new Array(B2).fill(0); vals.forEach(t => { const b = Math.floor((t - xr[0]) / w); if (b >= 0 && b < B2) k[b]++; }); return { k, w }; };
+    let see = [], draw = () => [], tbl = '';
+    if (!R || !G) return { gen, see: li([R ? esc(R.label) : '—']), draw, table: '' };
+    if (R.attr === 'coefinf') { const mc = I.mc;
+      see = [`Estimates with their SEs: ${I.rows.slice(1).map(r => `${r.nm} ${n(r.w, 3)} ± ${n(r.se, 3)}`).join(', ')}.`, R.kind === 'ttest' ? `p-values: ${I.rows.slice(1).map(r => `${r.nm} ${pf(r.p)}`).join(', ')}. x₃ truly has no effect; x₂ has a small one.` : R.kind === 'ci' ? `95% CIs: ${I.rows.slice(1).map(r => `${r.nm} [${n(r.lo, 3)}, ${n(r.hi, 3)}]`).join(', ')}.` : `The reported SE of x₁, ${n(I.rows[1].se, 4)}, against the actual spread of x₁’s estimate across ${I.R} fresh datasets, ${n(mc[1].sd, 4)}.`,
+        `Across the fresh datasets: ${mc.slice(1).map(m => `${m.nm} ${R.kind === 'ttest' ? `significant in ${n(100 * m.rej, 1)}%` : `CI covers the truth in ${n(100 * m.cov, 1)}%`}`).join(', ')}.`];
+      draw = el => { const r1 = row(el), out = [], m1 = mc[1];
+        out.push(chart(r1, `x₁’s estimate in ${I.R} fresh datasets, with the normal curve its SE implies`, 250, c => { const xr = range([m1.est]), B2 = 24, H = hist(c, m1.est, xr, B2), mx = Math.max(...H.k); c.begin(xr, [0, mx * 1.15], 'estimate of the x₁ coefficient', 'datasets');
+          H.k.forEach((q, i) => q && c.rect(xr[0] + i * H.w, 0, xr[0] + (i + 1) * H.w, q, CUR(), 0.6)); const mu = mean(m1.est), s = m1.meanSE; c.line(Array.from({ length: 81 }, (_, k) => { const t = xr[0] + (xr[1] - xr[0]) * k / 80; return [t, I.R * H.w * Math.exp(-0.5 * ((t - mu) / s) ** 2) / (s * Math.sqrt(2 * Math.PI))]; }), C('--ink'), 2); c.vline(1.5, C('--normal'), [4, 3]); c.end();
+          c.legend([[CUR(), 'estimates'], [C('--ink'), 'normal curve with the average SE'], [C('--normal'), 'true 1.5', true]]); }));
+        out.push(chart(r1, R.kind === 'ttest' ? 'Share of datasets with p < 0.05 (5% line = false-alarm rate)' : 'Share of 95% intervals that cover the truth', 250, c => { const vals = mc.map(m => R.kind === 'ttest' ? m.rej : m.cov); c.begin([0.4, mc.length + 0.6], [0, 1.05], 'coefficient (1 = b, 2 = x₁, …)', 'share');
+          vals.forEach((t, k) => c.rect(k + 0.65, 0, k + 1.35, t, k === 3 && R.kind === 'ttest' ? C('--normal') : CUR(), 0.75)); c.hline(R.kind === 'ttest' ? 0.05 : 0.95, C('--ink'), [4, 3]); c.end(); }));
+        return out; };
+      tbl = table(['coefficient', 'estimate', 'SE', 't', 'p', '95% CI', 'true'], I.rows.map(r => [r.nm === '1' ? 'b' : r.nm, r.w, r.se, r.t, pf(r.p), `[${n(r.lo, 3)}, ${n(r.hi, 3)}]`, r.truth ?? '—']), { max: 8 }); }
+    if (R.attr === 'ftest') {
+      see = [`F = <b>${n(I.F, 3)}</b> on (${I.q}, ${I.df2}) df, p ${pf(I.p)}.`, `SSE of the restricted model ${n(I.sseR, 3)} → full model ${n(I.sseU, 3)}.`, `Rejected in ${n(100 * I.rej, 1)}% of ${I.R} fresh datasets.`];
+      draw = el => { const r1 = row(el); return [chart(r1, `F statistic in ${I.R} fresh datasets; dashed: the 5% critical value`, 250, c => { const xr = [0, Math.max(...I.Fs, I.F) * 1.05], B2 = 30, H = hist(c, I.Fs, xr, B2), crit = (() => { let lo = 0, hi = 1e4; for (let k = 0; k < 90; k++) { const m = (lo + hi) / 2; if (ST.fSF(m, I.q, I.df2) > 0.05) lo = m; else hi = m; } return lo; })();
+        c.begin(xr, [0, Math.max(...H.k) * 1.15], 'F', 'datasets'); H.k.forEach((q, i) => q && c.rect(xr[0] + i * H.w, 0, xr[0] + (i + 1) * H.w, q, CUR(), 0.6)); c.vline(crit, C('--ink'), [4, 3]); c.vline(I.F, C('--normal'), null, 2.4); c.end(); c.legend([[CUR(), 'fresh datasets'], [C('--ink'), 'critical value', true], [C('--normal'), 'this sample']]); })]; };
+      tbl = table(['model', 'columns', 'SSE', 'df'], [['restricted', I.keep.map(j => P.names[j]).join(', '), I.sseR, P.nTr - I.keep.length], ['full', P.names.join(', '), I.sseU, I.df2]], { max: 4 }); }
+    if (R.attr === 'intervals') { const pc = R.kind === 'conf';
+      see = [`At x = ${I.pts[2].x0}: ${pc ? `mean ${n(I.pts[2].yh, 3)} ± ${n(I.tc * I.pts[2].seM, 3)}` : `new y ${n(I.pts[2].yh, 3)} ± ${n(I.tc * I.pts[2].seP, 3)}`} (the other interval: ± ${n(I.tc * (pc ? I.pts[2].seP : I.pts[2].seM), 3)}).`, `Coverage in ${I.R} fresh datasets: ${I.cov.map((cv, k) => `${I.pts[k].x0}: ${n(100 * (pc ? cv.m : cv.p), 0)}%`).join(', ')}.`];
+      draw = el => { const r1 = row(el), xs = P.tr.map(i => F.X[i][1]), out = [];
+        out.push(chart(r1, 'Training rows, the fitted line, the confidence band (dark) and the prediction band (light)', 260, c => { const gx = Array.from({ length: 61 }, (_, k) => -0.5 + 13 * k / 60), band = gx.map(x0 => { const r = [1, x0], yh = LA.dot(r, G.w), q = LA.dot(r, LA.mv(G.inv, r)); return [x0, yh, I.tc * Math.sqrt(G.s2 * q), I.tc * Math.sqrt(G.s2 * (1 + q))]; });
+          c.begin([gx[0], gx[gx.length - 1]], range([band.map(b => b[1] + b[3]), band.map(b => b[1] - b[3]), P.ytr]), 'x', 'y');
+          band.slice(1).forEach((b, k) => { const a0 = band[k]; c.rect(a0[0], Math.min(a0[1] - a0[3], b[1] - b[3]), b[0], Math.max(a0[1] + a0[3], b[1] + b[3]), C('--floor'), pc ? 0.12 : 0.25); c.rect(a0[0], Math.min(a0[1] - a0[2], b[1] - b[2]), b[0], Math.max(a0[1] + a0[2], b[1] + b[2]), C('--surface'), pc ? 0.45 : 0.25); });
+          xs.forEach((t, k) => c.dot([t, P.ytr[k]], C('--floor'), 3, false, 0.8)); c.line(band.map(b => [b[0], b[1]]), C('--ink'), 2); c.vline(10, C('--muted'), [3, 3]); c.end(); c.legend([[C('--surface'), 'confidence (mean)'], [C('--floor'), 'prediction (new y)'], [C('--muted'), 'edge of the data', true]]); }));
+        out.push(chart(r1, `Coverage of the ${pc ? 'confidence' : 'prediction'} interval in ${I.R} fresh datasets`, 260, c => { c.begin([-1, 13], [0, 1.05], 'x₀', 'share covered'); I.pts.forEach((q, k) => c.rect(q.x0 - 0.5, 0, q.x0 + 0.5, pc ? I.cov[k].m : I.cov[k].p, CUR(), 0.75)); c.hline(0.95, C('--ink'), [4, 3]); c.end(); }));
+        return out; };
+      tbl = table(['x₀', 'ŷ₀', 'CI (mean)', 'PI (new y)', 'true mean'], I.pts.map(q => [q.x0, q.yh, `[${n(q.ciLo, 3)}, ${n(q.ciHi, 3)}]`, `[${n(q.piLo, 3)}, ${n(q.piHi, 3)}]`, q.truth]), { max: 8 }); }
+    if (R.attr === 'robustse') { const nm = { classical: 'classical', hc: 'HC1', nw: 'Newey–West', cl: 'clustered' };
+      see = [`Slope ${n(G.w[1], 4)} (true 1.5): the same under every SE.`, `SEs here: ${I.list.map(L => `${nm[L.k]} ${n(L.here, 4)}`).join(', ')}; the true spread across fresh datasets is ${n(I.sdTrue, 4)}.`, `Coverage of the 95% interval: ${I.list.map(L => `${nm[L.k]} ${n(100 * L.cov, 0)}%`).join(', ')}.`];
+      draw = el => { const r1 = row(el), xs = P.tr.map(i => F.X[i][1]), out = [];
+        out.push(chart(r1, 'Average SE of the slope over fresh datasets; dashed: its true spread', 250, c => { c.begin([0.4, I.list.length + 0.6], [0, Math.max(I.sdTrue, ...I.list.map(L => L.mean)) * 1.25], '', 'SE of the slope'); I.list.forEach((L, k) => { c.rect(k + 0.65, 0, k + 1.35, L.mean, L.k === I.right ? C('--surface') : C('--muted'), 0.8); c.text(nm[L.k], [k + 0.65, L.mean], C('--ink')); }); c.hline(I.sdTrue, C('--ink'), [4, 3]); c.end(); }));
+        out.push(chart(r1, 'Training residuals in row order', 250, c => { const e = G.e, yr = sym(range([e])); c.begin([1, e.length], yr, 'training row (in order of x)', 'residual'); c.hline(0, C('--ink')); e.forEach((t, k) => c.dot([k + 1, t], F.group ? gColor(F.group[P.tr[k]] % 4, 4) : C('--floor'), 3)); c.end(); }));
+        return out; };
+      tbl = table(['standard error', 'this sample', 'average over datasets', 'coverage'], I.list.map(L => [nm[L.k] + (L.k === I.right ? ' (right one)' : ''), L.here, L.mean, L.cov]), { max: 6, foot: `True SD of the slope over ${I.R} datasets: ${n(I.sdTrue, 4)}.` }); }
+    if (R.attr === 'reading') { const w = I.w, lg = R.kind === 'loglog' || R.kind === 'loglin';
+      see = [R.kind === 'raw' ? `Slope ${n(w[1], 4)} per unit of x; intercept ${n(w[0], 4)}.` : R.kind === 'std' ? `Standardised slope β = ${n(I.beta, 4)}: one SD of x moves ŷ by ${n(I.beta, 3)} SDs of y.` : R.kind === 'loglog' ? `Elasticity ${n(w[1], 4)}: 1% more x → ${n(100 * (1.01 ** w[1] - 1), 3)}% more y.` : `Growth ${n(100 * (Math.exp(w[1]) - 1), 3)}% per unit of x.`, lg ? 'On the log scale the points lie on a straight line; on the raw scale they curve.' : 'Rescaling x changes the raw slope but not β.'];
+      draw = el => { const r1 = row(el), out = [], raw = F.raw ? P.tr.map(i => F.raw.X[i][1]) : P.tr.map(i => F.X[i][1]), yR = F.yRaw ? P.tr.map(i => F.yRaw[i]) : P.ytr;
+        out.push(chart(r1, lg ? 'Raw scale: y against x, with the fitted curve' : 'y against x with the fitted line', 250, c => { const xr = range([raw]); c.begin(xr, range([yR]), 'x', 'y'); raw.forEach((t, k) => c.dot([t, yR[k]], C('--floor'), 3, false, 0.8)); c.line(Array.from({ length: 81 }, (_, k) => { const t = xr[0] + (xr[1] - xr[0]) * k / 80; return [t, R.kind === 'loglog' ? Math.exp(w[0]) * t ** w[1] : R.kind === 'loglin' ? Math.exp(w[0] + w[1] * t) : w[0] + w[1] * t]; }), CUR(), 2.4); c.end(); }));
+        if (lg) out.push(chart(r1, `Log scale: ln y against ${R.kind === 'loglog' ? 'ln x' : 'x'}: a straight line`, 250, c => { const xx = P.tr.map(i => F.X[i][1]), xr = range([xx]); c.begin(xr, range([P.ytr]), R.kind === 'loglog' ? 'ln x' : 'x', 'ln y'); xx.forEach((t, k) => c.dot([t, P.ytr[k]], C('--floor'), 3, false, 0.8)); c.line([[xr[0], w[0] + w[1] * xr[0]], [xr[1], w[0] + w[1] * xr[1]]], CUR(), 2.4); c.end(); }));
+        else out.push(chart(r1, 'Standardised: (y − ȳ)/s_y against (x − x̄)/s_x; slope = β', 250, c => { const xx = P.tr.map(i => F.X[i][1]), mx = mean(xx), my = mean(P.ytr), zx = xx.map(t => (t - mx) / I.sx), zy = P.ytr.map(t => (t - my) / I.sy); c.begin(range([zx]), range([zy]), 'z of x', 'z of y'); zx.forEach((t, k) => c.dot([t, zy[k]], C('--floor'), 3, false, 0.8)); const r0 = range([zx]); c.line([[r0[0], I.beta * r0[0]], [r0[1], I.beta * r0[1]]], CUR(), 2.4); c.end(); }));
+        return out; };
+      tbl = table(['quantity', 'value'], R.kind === 'raw' ? [['intercept b', w[0]], ['slope w (per unit of x)', w[1]]] : R.kind === 'std' ? [['raw slope w', I.w[1]], ['s_x', I.sx], ['s_y', I.sy], ['w·s_x (per SD of x)', I.wStd], ['β = w·s_x/s_y', I.beta]] : R.kind === 'loglog' ? [['a', w[0]], ['b (elasticity)', w[1]], ['e^a', Math.exp(w[0])], ['y × for 1% more x', 1.01 ** w[1]], ['y × for double x', 2 ** w[1]]] : [['a', w[0]], ['b', w[1]], ['e^b (multiplier per unit)', Math.exp(w[1])], ['% change per unit', 100 * (Math.exp(w[1]) - 1)]], { max: 8 }); }
+    if (R.attr === 'causal') { const conf = R.kind === 'confounded';
+      see = [`Naive slope ${n(I.naive, 3)} ± ${n(I.naiveSE, 3)}; with u controlled ${n(I.ctrl, 3)} ± ${n(I.ctrlSE, 3)}; true effect 1.0.`, `corr(x, u) = ${n(I.corrXU, 3)}; omitted-variable bias 3·cov(x,u)/var(x) = ${n(I.ovb, 3)}.`, conf ? 'The residual plots look perfect: confounding is invisible in the data alone.' : 'With x randomised, the naive slope is already unbiased.'];
+      draw = el => { const r1 = row(el), out = [], xs = P.tr.map(i => F.X[i][1]), u = P.tr.map(i => F.confounder[i]), ur = range([u]);
+        out.push(chart(r1, 'y against x, coloured by the hidden u (dark = high u)', 250, c => { c.begin(range([xs]), range([P.ytr]), 'x', 'y'); xs.forEach((t, k) => c.dot([t, P.ytr[k]], `hsl(170 50% ${70 - 45 * (u[k] - ur[0]) / (ur[1] - ur[0] || 1)}%)`, 3.4)); const xr = range([xs]); c.line(xr.map(t => [t, G.w[0] + G.w[1] * t]), CUR(), 2.4); c.line(xr.map(t => [t, 2 + t + 3 * mean(u)]), C('--ink'), 1.6, [5, 4]); c.end(); c.legend([[CUR(), `naive slope ${n(G.w[1], 2)}`], [C('--ink'), 'causal effect 1.0', true]]); }));
+        out.push(chart(r1, `Slope estimates in ${I.mcNaive.length} fresh datasets: naive vs controlling for u`, 250, c => { const all = [...I.mcNaive, ...I.mcCtrl, 1], xr = range([all]), B2 = 30, A2 = hist(c, I.mcNaive, xr, B2), C2 = hist(c, I.mcCtrl, xr, B2), mx = Math.max(...A2.k, ...C2.k);
+          c.begin(xr, [0, mx * 1.15], 'slope of x', 'datasets'); A2.k.forEach((q, i) => q && c.rect(xr[0] + i * A2.w, 0, xr[0] + (i + 1) * A2.w, q, C('--normal'), 0.5)); C2.k.forEach((q, i) => q && c.rect(xr[0] + i * C2.w, 0, xr[0] + (i + 1) * C2.w, q, CUR(), 0.5)); c.vline(1, C('--ink'), [4, 3]); c.end(); c.legend([[C('--normal'), 'naive'], [CUR(), 'with u'], [C('--ink'), 'truth 1.0', true]]); }));
+        return out; };
+      tbl = table(['regression', 'slope of x', 'SE', 'true'], [['y on x', I.naive, I.naiveSE, 1], ['y on x and u', I.ctrl, I.ctrlSE, 1]], { max: 4 }); }
+    return { gen, see: li(see), draw, table: tbl };
+  }
+  ['coefinf', 'ftest', 'intervals', 'robustse', 'reading', 'causal'].forEach(k => { A[k] = inSig; });
+
   function howFit(v){
     const d = v.d, f = v.f;
     if (d.X[0].length !== 2) return `the weights solve the normal equations X̃ᵀX̃ w̃ = X̃ᵀy, exactly as in <a href="#step-9a" data-goto="step-9a">step 9a</a>`;
