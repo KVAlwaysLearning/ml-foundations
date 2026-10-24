@@ -25,7 +25,7 @@ const FS = (() => {
   let S = null, onGlobal = () => {};
   const CAT = ['group', 'A', 'B', 'C'];
   const init = (state, cb) => { S = state; S.ov = S.ov || {}; onGlobal = cb || onGlobal; };
-  const isC = nm => GEN.isCat(nm);
+  const isC = nm => !GEN.isFeat(nm);
   const cols = names => names.map((_, j) => j).filter(j => j > 0 && !isC(names[j]));
   const idx = (names, nm) => { const j = nm == null ? -1 : names.indexOf(nm); return j > 0 && !isC(nm) ? j : -1; };
   const other = (names, j) => cols(names).find(q => q !== j) ?? -1;
@@ -93,6 +93,6 @@ const FS = (() => {
     return { c0, w: w[j], line: x => c0 + w[j] * x, y: ya, others, means: m };
   }
   /* the categorical columns (kept per group in slice lines) */
-  const catCols = names => names.map((n, j) => j).filter(j => j > 0 && isC(names[j]));
+  const catCols = names => names.map((n, j) => j).filter(j => j > 0 && GEN.isCat(names[j]));
   return { init, cols, catCols, global, pick, pickW, adj, sel, adjBtn, slice, setGlobal: (k, v) => { S[k] = v; onGlobal(); } };
 })();

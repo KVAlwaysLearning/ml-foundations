@@ -16,19 +16,62 @@ const CODE = (() => {
   const openSet = new Set(); let bound = false;
 
   function csv(c){
-    const d = c.d, P = c.P, feats = d.names.slice(1).map(py), extra = [], rc = d.rawCat;
+    const d = c.d, P = c.P, feats = d.names.slice(1).map(py), extra = [], rc = d.cat ? d.rawCat : null, txt = !rc && d.rawCat ? d.rawCat : null;
     // a categorical feature is written as it was recorded (text); the 0/1 columns are made in step 5
     const numJ = d.names.map((nm, j) => j).filter(j => j > 0 && !GEN.isCat(d.names[j])), num = numJ.map(j => py(d.names[j]));
     if (d.group && !d.cat) extra.push(c.v.id === 'cluster' ? 'cluster' : 'group');
     if (d.prep) extra.push('level');
-    const head = ['row', ...num, ...(rc ? [rc.name] : []), ...extra, 'y', 'set'];
-    const rows = d.y.map((y, i) => [d.orig ? d.orig[i] + 1 : i + 1, ...numJ.map(j => +d.X[i][j].toFixed(8)), ...(rc ? [rc.vals[i]] : []), ...extra.map(e => e === 'level' ? d.prep.lev[i] + 1 : d.group[i]), +y.toFixed(8), P.isTrain[i] ? 'train' : 'test']);
+    if (txt) extra.push(txt.name);
+    // Feature engineering: the raw columns as collected, next to the columns step 5 built (raw_ prefix when the name differs)
+    const rawJ = d.raw ? d.raw.names.map((nm, j) => j).filter(j => j > 0 && !d.names.includes(d.raw.names[j])) : [], rawN = rawJ.map(j => 'raw_' + py(d.raw.names[j]));
+    const head = ['row', ...num, ...(rc ? [rc.name] : []), ...extra, ...rawN, ...(d.yRaw ? ['raw_y'] : []), 'y', 'set'];
+    const rows = d.y.map((y, i) => [d.orig ? d.orig[i] + 1 : i + 1, ...numJ.map(j => +d.X[i][j].toFixed(8)), ...(rc ? [rc.vals[i]] : []), ...extra.map(e => e === 'level' ? d.prep.lev[i] + 1 : txt && e === txt.name ? txt.vals[i] : d.group[i]), ...rawJ.map(j => +d.raw.X[i][j].toFixed(8)), ...(d.yRaw ? [+d.yRaw[i].toFixed(8)] : []), +y.toFixed(8), P.isTrain[i] ? 'train' : 'test']);
     // rows whose y was never recorded (Missing data): kept in the file with an empty y, as they would arrive
     if (d.dropped) d.dropped.idx.forEach((i, k) => rows.push([i + 1, ...numJ.map(j => +d.dropped.X[k][j].toFixed(8)), ...(rc ? [''] : []), ...extra.map(() => ''), '', 'missing']));
     if (d.dropped) rows.sort((a, b) => a[0] - b[0]);
-    return { text: [head.join(','), ...rows.map(r => r.join(','))].join('\n'), feats, extra, nMiss: d.dropped ? d.dropped.idx.length : 0, num, cat: rc ? rc.name : null, nCols: head.length };
+    return { text: [head.join(','), ...rows.map(r => r.join(','))].join('\n'), feats, extra, nMiss: d.dropped ? d.dropped.idx.length : 0, num, cat: rc ? rc.name : null, nCols: head.length, rawN };
   }
 
+  /* step 5 for a Feature engineering variant: rebuild the app's columns from the raw ones with standard tools, and check they match */
+  function feCode(c, { feats, py, n, L, mark }){
+    const d = c.d, fe = d.fe, P = c.P, rx = d.raw ? 'raw_' + py(d.raw.names[1]) : null;
+    const chk = (expr, col) => `print(np.allclose(${expr}, train["${col}"]))   # True: the same column the app built`;
+    switch (fe.attr) {
+      case 'xtransform': return fe.kind === 'none' ? '# Transform of x: none (x is used raw).' : fe.kind === 'log' ? `# Step 5 builds ln x from the raw x\n${chk(`np.log(train["${rx}"])`, py(fe.nm))}` : fe.kind === 'sqrt' ? `${chk(`np.sqrt(train["${rx}"])`, py(fe.nm))}` :
+        `from sklearn.preprocessing import PowerTransformer\npt = PowerTransformer(method="${fe.kind === 'boxcox' ? 'box-cox' : 'yeo-johnson'}", standardize=False).fit(train[["${rx}"]])   # λ by maximum likelihood on the TRAINING rows\nprint(pt.lambdas_)                      # app: λ = ${n(fe.lam, 4)}${mark('the power is learned, like a mean')}\n${chk(`pt.transform(train[["${rx}"]]).ravel()`, py(fe.nm))}`;
+      case 'ytransform': return fe.kind === 'none' ? '# Transform of y: none.' : fe.kind === 'log' ? `# The model is fitted to ln y (the column y in the file); raw_y is the original\n${chk('np.log(train["raw_y"])', 'y')}\n# In a pipeline: from sklearn.compose import TransformedTargetRegressor\n# TransformedTargetRegressor(regressor=LinearRegression(), func=np.log, inverse_func=np.exp)` :
+        `from scipy import stats\nz, lam = stats.boxcox(train["raw_y"])   # λ by maximum likelihood on the TRAINING y\nprint(lam)                              # app: λ = ${n(fe.lam, 4)}\n${chk('z', 'y')}`;
+      case 'degree': return `from sklearn.preprocessing import PolynomialFeatures
+zs = StandardScaler().fit(train[["${rx}"]])            # z = (x - mean) / sd from the TRAINING rows: app mean ${n(fe.zm, 4)}, sd ${n(fe.zs, 4)}
+poly = PolynomialFeatures(degree=${fe.kind}, include_bias=False)
+print(np.allclose(poly.fit_transform(zs.transform(train[["${rx}"]])), train[${'[' + feats.slice(0, fe.kind).map(x => `"${x}"`).join(', ') + ']'}]))   # True: z, z², … as in the app
+# in a pipeline: make_pipeline(StandardScaler(), PolynomialFeatures(${fe.kind}, include_bias=False), StandardScaler(), LinearRegression())`;
+      case 'interactions': return fe.kind === 'none' ? '# No interaction column.' : `${chk('train["x1"] * train["x2"]', 'x1·x2')}\n# or PolynomialFeatures(degree=2, interaction_only=True, include_bias=False)`;
+      case 'splines': return !fe.knots.length ? '# No knots: x only.' : fe.knots.map((k, q) => chk(`np.maximum(0, train["x"] - ${k})`, 'h' + (q + 1))).join('\n') + '\n# smooth version: from sklearn.preprocessing import SplineTransformer';
+      case 'binning': return !fe.edges ? '# x used as a number.' : `from sklearn.preprocessing import KBinsDiscretizer\nkb = KBinsDiscretizer(n_bins=5, encode="onehot-dense", strategy="${fe.kind === 'width' ? 'uniform' : 'quantile", quantile_method="linear'}").fit(train[["${rx}"]])\nprint(kb.bin_edges_[0])                 # app: ${L(fe.edges)}\nprint(np.allclose(kb.transform(train[["${rx}"]])[:, 1:], train[${'[' + P.names.filter(nm => nm.startsWith('bin_')).map(x => `"${x}"`).join(', ') + ']'}]))   # first bin dropped (reference)`;
+      case 'encoding': return fe.kind === 'ordinal' ? `from sklearn.preprocessing import OrdinalEncoder\noe = OrdinalEncoder(categories=[["East", "North", "South", "West"]]).fit(train[["region"]])\n${chk('oe.transform(train[["region"]]).ravel()', 'code(region)')}${mark('codes invent an order and equal steps')}` :
+        fe.kind === 'target' ? `means = train.groupby("region")["y"].mean()   # learned on the TRAINING rows\nprint(means.round(4).to_dict())        # app: ${d.rawCat.levels.map((l, q) => `${l} ${n(fe.means[q], 4)}`).join(', ')}\n${chk('train["region"].map(means)', 'te(region)')}\n# test rows: test["region"].map(means); in a pipeline, sklearn.preprocessing.TargetEncoder cross-fits for you` : '# One-hot encoding: see below.';
+      case 'centering': return fe.kind === 'centred' ? `xbar = train["${rx}"].mean()               # app: ${n(fe.c, 4)}\n${chk(`train["${rx}"] - xbar`, 'xc')}\n${chk(`(train["${rx}"] - xbar) ** 2`, 'xc²')}` : '# Raw x and x² (no centring, no scaling).';
+      case 'selection': return `# Step 5 kept: ${P.names.slice(1).map(py).join(', ')} (${fe.kind} selection on the training rows; the other candidates are the raw_ columns)` + ({
+        forward: '\n# scikit-learn: SequentialFeatureSelector(LinearRegression(), direction="forward", tol=...) chooses by cross-validated score, not p-values', backward: '\n# scikit-learn: SequentialFeatureSelector(LinearRegression(), direction="backward")',
+        lasso: '\nfrom sklearn.linear_model import LassoCV\n# LassoCV(cv=5).fit(StandardScaler().fit_transform(Xall_tr), y_tr): keep the columns with coef_ != 0', vif: '\n# loop: compute variance_inflation_factor for every column, drop the largest while > 5', pvalue: '\n# sm.OLS(y_tr, sm.add_constant(Xall_tr)).fit().pvalues < 0.05', stepwise: '', all: '' }[fe.kind] || '');
+    }
+    return '';
+  }
+  /* scaling other than plain standardisation, and columns that are never scaled (0/1 bins) */
+  function scaleCode(c, { py, L, mark }){
+    const P = c.P, names = c.d.names, sc = names.slice(1).filter(nm => !GEN.noScale(nm)).map(py), kind = P.scale || 'std';
+    const make = { std: 'StandardScaler()', minmax: 'MinMaxScaler()', robust: 'RobustScaler()', none: 'FunctionTransformer()   # identity: no scaling' }[kind];
+    const st = names.map((nm, k) => k && !GEN.noScale(nm)), loc = P.mu.filter((_, k) => st[k]), scl = P.sd.filter((_, k) => st[k]);
+    if (!sc.length) return `# Every column is a 0/1 column (bins or categories): nothing to scale
+Xs_tr, Xs_te = X_tr.copy(), X_te.copy()`;
+    return `from sklearn.preprocessing import MinMaxScaler, RobustScaler, FunctionTransformer
+sc = ${'[' + sc.map(x => `"${x}"`).join(', ') + ']'}            # the columns that get scaled${names.some(GEN.noScale) ? ' (0/1 columns stay as they are)' : ''}
+scaler = ${make}.fit(X_tr[sc])${mark(kind === 'std' ? 'standardisation' : kind === 'none' ? 'no scaling' : kind + ' scaling')}
+${kind === 'minmax' ? `print(scaler.data_min_, scaler.data_range_)   # app: min ${L(loc)}, range ${L(scl)}` : kind === 'robust' ? `print(scaler.center_, scaler.scale_)          # app: median ${L(loc)}, IQR ${L(scl)}` : kind === 'std' ? `print(scaler.mean_, scaler.scale_)            # app: μ ${L(loc)}, s ${L(scl)}` : '# nothing to learn'}
+Xs_tr, Xs_te = X_tr.copy(), X_te.copy()
+Xs_tr[sc], Xs_te[sc] = scaler.transform(X_tr[sc]), scaler.transform(X_te[sc])`;
+  }
   function cells(c){
     const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss, num, cat, nCols } = csv(c);
     const F = cat ? `num + cat` : `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra.find(e => e === 'group' || e === 'cluster');
@@ -112,11 +155,11 @@ print(scaler.mean_)                     # app: μ = ${L(P.mu.filter((_, k) => k 
 print(scaler.scale_)                    # app: s = ${L(P.sd.filter((_, k) => k && !GEN.isCat(names[k])))}
 Xs_tr, Xs_te = X_tr.copy(), X_te.copy()
 Xs_tr[num], Xs_te[num] = scaler.transform(X_tr[num]), scaler.transform(X_te[num])   # the 0/1 columns stay 0/1` } : { id: 5, t: 'Step 5: scale with the training mean and SD', code:
-`scaler = StandardScaler().fit(X_tr)     # learns μ and s from the TRAINING rows only (s uses ddof=0, as in the app)
+(d.fe ? feCode(c, { feats, py, n, L, mark }) + '\n\n' : '') + ((P.scale && P.scale !== 'std') || names.some(GEN.noScale) ? scaleCode(c, { py, L, mark }) : `scaler = StandardScaler().fit(X_tr)     # learns μ and s from the TRAINING rows only (s uses ddof=0, as in the app)
 print(scaler.mean_)                     # app: μ = ${L(P.mu.slice(1))}
 print(scaler.scale_)                    # app: s = ${L(P.sd.slice(1))}
 Xs_tr = scaler.transform(X_tr)          # x̃ = (x - μ) / s
-Xs_te = scaler.transform(X_te)          # test rows use the TRAINING μ and s` +
+Xs_te = scaler.transform(X_te)          # test rows use the TRAINING μ and s`) +
 (dummy ? `\n\n# This variant: all three dummies A, B, C are kept with an intercept (the dummy-variable trap).\n# The fix is to drop one level:  pd.get_dummies(df["category"], drop_first=True)${mark('k - 1 dummies')}` : '') });
 
     out.push({ id: 6, t: 'Step 6: design matrix, Gram matrix, eigenvalues, rank, κ', code:
@@ -179,7 +222,10 @@ print(nw.bse)                                                           # app: S
     out.push({ id: 12, t: 'Step 12: evaluate on the test rows', code:
 `yhat_te = model.predict(X_te)                     # scaled with the training μ, s inside the pipeline
 print(np.sqrt(mean_squared_error(y_te, yhat_te)))  # test RMSE: app ${n(P.rmseTe, 3)} (train ${n(P.rmseTr, 3)})
-print(r2_score(y_te, yhat_te))                     # test R²: app ${n(P.r2Te, 3)}` });
+print(r2_score(y_te, yhat_te))                     # test R²: app ${n(P.r2Te, 3)}` + (P.orig ? `
+# y was transformed in step 5: turn the predictions back before scoring in the units of y
+back = ${d.fe.kind === 'log' ? 'np.exp' : `lambda z: np.maximum(0, ${n(d.fe.lam, 6)} * z + 1) ** (1 / ${n(d.fe.lam, 6)})`}
+print(np.sqrt(mean_squared_error(test["raw_y"], back(yhat_te))))   # app: test RMSE in the units of y ${n(P.orig.rmseTe, 3)}` : '') });
 
     out.push({ id: 13, t: 'Step 13: interpret', code:
 `print(ols.params)          # original units: app ${names.map((nm, k) => `${k ? py(nm) : 'const'} ${n(P.wOrig[k], 4)}`).join(', ')}

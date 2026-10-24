@@ -79,11 +79,11 @@
   function view(d, tr){
     tr = tr.filter(i => i < d.y.length);
     const X = tr.map(i => d.X[i]), y = tr.map(i => d.y[i]);
-    const dd = Object.assign({}, d, { X, y, px: tr.map(i => d.px[i]), x2: d.x2 ? tr.map(i => d.x2[i]) : undefined, group: d.group ? tr.map(i => d.group[i]) : undefined, N: tr.length,
+    const dd = Object.assign({}, d, { X, y, px: tr.map(i => d.px[i]), derive: d.derive ? Object.assign({}, d.derive, { raw: tr.map(i => d.derive.raw[i]) }) : undefined, x2: d.x2 ? tr.map(i => d.x2[i]) : undefined, group: d.group ? tr.map(i => d.group[i]) : undefined, N: tr.length,
       truth: Object.assign({}, d.truth, { fn: d.truth.fn ? (v, k) => d.truth.fn(v, tr[k]) : null }) });
     const f = ST.ols(X, y); let dg = null; try { dg = ST.diagnostics(X, y, f); } catch (err) {}
     // the standardised design and its Gram matrix, exactly as in steps 5 and 6
-    const isC = j => GEN.isCat(d.names[j]), mu = X[0].map((_, j) => j && !isC(j) ? ST.mean(X.map(r => r[j])) : 0), sd = X[0].map((_, j) => { if (!j || isC(j)) return 1; const s = Math.sqrt(ST.mean(X.map(r => (r[j] - mu[j]) ** 2))); return s > 1e-12 ? s : 1; });
+    const ms = X[0].map((_, j) => !j || GEN.noScale(d.names[j]) ? [0, 1] : FE.scaleStats(X.map(r => r[j]), d.scale || 'std')), mu = ms.map(t => t[0]), sd = ms.map(t => t[1]);
     const Z = X.map(r => r.map((v, j) => j ? (v - mu[j]) / sd[j] : 1)), A = LA.mul(LA.T(Z), Z), ev = LA.eigSym(A).values;
     const gram = { A, eig: ev, kappa: ev[ev.length - 1] > 1e-12 * ev[0] ? ev[0] / ev[ev.length - 1] : Infinity };
     return { d: dd, f, dg: dg || { vif: [], jb: {}, dw: NaN }, gram };
@@ -133,7 +133,7 @@
     sK.el.style.display = v.strength ? '' : 'none';
     sK.el.querySelector('label').firstChild.textContent = 'Strength: ' + (v.strength || '');
     { // the slider counts input features (a text category is one feature, however many 0/1 columns it becomes); the variant's own features are a frozen minimum
-      const base = GEN.baseCount(v.id), dd = cur.d, rc = dd.rawCat, featNames = [...dd.names.slice(1).filter(nm => !GEN.isCat(nm)), ...(rc ? [rc.name] : [])], nCols = dd.names.length - 1;
+      const base = GEN.baseCount(v.id), dd = cur.d, rc = dd.rawCat, featNames = [...(dd.raw ? dd.raw.names : dd.names).slice(1).filter(nm => GEN.isFeat(nm)), ...(rc ? [rc.name] : [])], nCols = dd.names.length - 1;
       sF.set(kEff(v.id));
       sF.el.querySelector('label').firstChild.textContent = base > 1 ? `Number of features k (this variant has ${base} built in${rc ? `: ${featNames.slice(0, base).join(', ')} → ${nCols} column${nCols > 1 ? 's' : ''} after encoding` : ''})` : 'Number of features k';
       let lock = sF.el.querySelector('.lock'), note = sF.el.querySelector('.lock-note'); const inp = sF.el.querySelector('input');
@@ -192,11 +192,22 @@
       shift: { _: 'Hollow points are the test rows: compare where they sit with the training rows.' },
       subgroups: { _: 'Coloured by the hidden group (which the model never sees). The single fitted line is compared with each group\u2019s true line (dashed).' },
       categorical: { _: 'Coloured by level, one fitted line per level (the 0/1 columns from step 5 shift the line up or down).' },
-      leakage: { _: 'Nothing unusual in y against x: the leak is in another column. See the fingerprint below and step 2.' }
+      leakage: { _: 'Nothing unusual in y against x: the leak is in another column. See the fingerprint below and step 2.' },
+      scaling: { _: 'Scaling never changes this picture: the fitted plane is the same. The difference is in step 6 (κ) and step 9b (gradient descent), and in the fingerprint below.' },
+      xtransform: { _: 'Drawn against the raw x: with a transform, the straight-line model becomes a curve on this axis.' },
+      ytransform: { _: 'y here is on the scale the model is fitted on. Step 12 scores the predictions back in the units of y.' },
+      degree: { _: 'Each extra power lets the fitted curve bend once more; watch the edges for overfitting at high degrees.' },
+      interactions: { _: 'A slice through x₁ with x₂ at its mean; with the product term, the slope of x₁ changes with x₂.' },
+      splines: { _: 'The fitted line is made of straight pieces joined at the knots.' },
+      binning: { _: 'Drawn against the raw x: a binned model is a staircase, one level per bin.' },
+      encoding: { _: 'Coloured by region. Compare how each encoding places the four groups.' },
+      centering: { _: 'The fitted curve is identical with or without centring; only the columns (and their VIF and SEs) differ.' },
+      selection: { _: 'A slice through the first kept feature. The selection itself is shown in step 5 and in the fingerprint below.' }
     }[a.id] || {};
     return C2[v.id] || C2._ || 'The variant (filled) against the baseline built from the same random numbers (small grey dots), with the fitted line and the true mean (dashed).';
   }
   function drawTop(Pc, a, v, isBase){
+    if (useDer(cur.d, FS.pick(cur.d.names, 'top').j)) return drawDerived(Pc, cur.d, cur.tv.f, { adj: FS.adj('top'), base: base.d, baseF: base.tv.f, showBase: !isBase && S.ov.top?.base !== false, title: `${v.name}${isBase ? ' (baseline)' : ''}: y against the raw ${cur.d.derive.axisName || 'x'}, with the fitted model` });
     const d = cur.d, P = cur.P, f = cur.tv.f, names = d.names, { j } = FS.pick(names, 'top'), multi = FS.cols(names).length > 1, adj = FS.adj('top') && multi;
     const xs = d.X.map(r => r[j]), groups = d.group ? d.groupNames.length : 0, grouped = !!d.cat && groups <= 6;
     const sl = FS.slice(d.X, d.y, f.w, j, { keep: FS.catCols(names) }), yp = adj ? sl.y : d.y;
@@ -248,7 +259,28 @@
   }
 
   // ---- step 9a: the data and the fitted line (a slice through the chosen feature) ----
+  /* feature engineering: the fitted model drawn as a curve against the raw x (e.g. a polynomial, a log, splines, bins) */
+  const useDer = (d, j) => !!d.derive && (d.derive.cols.includes(j) || !FS.cols(d.names).some(q => !d.derive.cols.includes(q)));
+  function drawDerived(Pc, d, f, o = {}){
+    const dv = d.derive, xs = dv.raw, m = colMeans(d.X), cat = new Set(FS.catCols(d.names)), others = d.X[0].map((_, q) => q).filter(q => q > 0 && !dv.cols.includes(q) && !cat.has(q));
+    const yp = o.adj && others.length ? d.y.map((v, i) => v - others.reduce((s2, q) => s2 + f.w[q] * (d.X[i][q] - m[q]), 0)) : d.y;
+    const rowOf = (xv, g) => { const r = [...m]; dv.f(xv).forEach((t, k) => { r[dv.cols[k]] = t; }); if (d.cat && g != null) Object.entries(d.cat).forEach(([c, lev]) => { r[+c] = +(lev === g); }); return r; };
+    const bxs = o.base ? (o.base.derive ? o.base.derive.raw : o.base.X.map(r => r[1])) : [], all = [...xs, ...bxs], lo = Math.min(...all), hi = Math.max(...all), gx = grid(lo, hi, 160);
+    const curve = gx.map(xv => [xv, LA.dot(rowOf(xv), f.w)]), tf = d.truth.fnRaw;
+    const bcurve = o.base && o.baseF ? gx.map(xv => [xv, o.base.derive ? LA.dot((() => { const mb = colMeans(o.base.X), r = [...mb]; o.base.derive.f(xv).forEach((t, k) => { r[o.base.derive.cols[k]] = t; }); return r; })(), o.baseF.w) : LA.dot(colMeans(o.base.X).map((t, q) => q === 1 ? xv : t), o.baseF.w)]) : null;
+    const ys = [...yp, ...curve.map(p => p[1]), ...(o.showBase ? o.base.y : [])].filter(isFinite), an = dv.axisName || (d.raw ? d.raw.names[1] : 'x');
+    Pc.title(o.title || `y against ${an}, with the fitted curve`);
+    Pc.begin([lo, hi], [Math.min(...ys), Math.max(...ys)], `${an} (raw)`, o.adj && others.length ? `${d.yName || 'y'} adjusted for the other features` : (d.yName || 'y'));
+    if (o.showBase) bxs.forEach((x, i) => Pc.dot([x, o.base.y[i]], css('--muted'), 2.2, false, 0.45));
+    if (tf) Pc.line(gx.map(xv => [xv, tf(xv)]), css('--ink'), 1.6, [6, 5], 0.85);
+    if (bcurve) Pc.line(bcurve, css('--muted'), 2, [3, 4]);
+    xs.forEach((x, i) => Pc.dot([x, yp[i]], d.group ? groupColor(d.group[i], d.groupNames.length) : css('--floor'), 3.4, false, 0.85));
+    if (o.res) xs.forEach((x, i) => Pc.line([[x, yp[i]], [x, yp[i] - f.e[i]]], css('--residual'), 1, null, 0.7));
+    Pc.line(curve, css('--surface'), 2.8); Pc.end();
+    Pc.legend([[css('--surface'), `fitted model (columns ${d.names.slice(1).filter((_, k) => dv.cols.includes(k + 1)).join(', ')} all move with ${an})`], ...(tf ? [[css('--ink'), 'true mean', true]] : []), ...(bcurve ? [[css('--muted'), 'baseline fit', true]] : []), ...(o.showBase ? [[css('--muted'), 'baseline data']] : [])]);
+  }
   function drawFit(P, isBase, id = 'fit'){
+    if (useDer(cur.tv.d, FS.pick(cur.tv.d.names, id).j)) return drawDerived(P, cur.tv.d, cur.tv.f, { adj: FS.adj(id), res: S.res, base: S.cmp && !isBase ? base.tv.d : null, baseF: base.tv.f, title: `The training data and the fitted ${cur.tv.d.derive.cols.length > 1 ? 'curve' : 'line'} (step 9a), against the raw ${cur.tv.d.derive.axisName || 'x'}` });
     const { d, f } = cur.tv, { j } = FS.pick(d.names, id), adj = FS.adj(id), xs = d.X.map(r => r[j]), groups = d.group ? d.groupNames.length : 0;
     const lo = Math.min(...xs), hi = Math.max(...xs), gx = grid(lo, hi), multi = FS.cols(d.names).length > 1 || FS.catCols(d.names).length > 0, adjN = FS.cols(d.names).length > 1;
     const grouped = !!d.cat && groups <= 6;
@@ -374,6 +406,7 @@
     if (!mcCur) { P.begin([0, 1], [0, 1], '', ''); P.end(); P.legend([]); if (mcRO) mcRO.innerHTML = '<span class="muted">Running 200 fresh datasets…</span>'; return; }
     const names = cur.d.names, pk = FS.pick(names, 'mc', { second: cur.d.focus0.length > 1 ? 'auto' : 'none' }), want = [pk.j, ...(pk.j2 > 0 ? [pk.j2] : [])];
     const choose = arr => { const out = want.map(j => arr.find(m => m.j === j)).filter(Boolean); return out.length ? out : arr.slice(0, 1); };
+    if (!mcCur.length) { P.title('Sampling distribution'); P.begin([0, 1], [0, 1], '', ''); P.text('No single numeric feature to follow here (the columns are bins or categories).', [0.03, 0.5], css('--muted'), 0, 0, true); P.end(); P.legend([]); if (mcRO) mcRO.innerHTML = ''; return; }
     const c = choose(mcCur), bn = S.cmp && mcBase !== mcCur ? mcBase : null, b = bn ? want.map(j => bn.find(m => m.j === GEN.colIn(base.d.names, names[j]))).filter(Boolean) : null;
     const bb = b && b.length === c.length ? b : null;
     P.title(c.length > 1 ? `Is the standard error honest? The ${names[c[0].j]} and ${names[c[1].j]} coefficients across 200 fresh datasets` : `Is the standard error honest? The ${names[c[0].j]} slope across 200 fresh datasets`);
@@ -494,7 +527,7 @@
     procEl.querySelectorAll('.sviz').forEach(el => { const fn = PVIZ[el.dataset.step]; if (!fn) return;
       try { procCharts.push(...(fn(el, ctx) || [])); } catch (err) { console.error(err); el.innerHTML = `<p class="pv-note">This picture could not be drawn: ${esc(err.message)}</p>`; } });
     const sv = id => procEl.querySelector(`.sviz[data-step="${id}"]`);
-    const feats = d.names.slice(1), numeric = feats.filter(nm => !GEN.isCat(nm)), kNum = numeric.length, cat = feats.length > kNum;
+    const feats = d.names.slice(1), numeric = feats.filter(nm => GEN.isFeat(nm)), kNum = numeric.length, cat = feats.length > kNum;
     const gsel = FS.global(d.names), gj = d.names[gsel.j], gj2 = gsel.j2 > 0 ? d.names[gsel.j2] : '';
     const dimNote = kNum <= 1 ? '' : kNum === 2 && !cat ? `With 2 features the fitted model is a <b>plane</b> in 3 dimensions (${d.names[1]}, ${d.names[2]}, y), drawn below and rotatable. The flat chart is a slice: y against ${gj} with the other feature held at its mean. Pick the feature in the chart header (or for every chart in the Controls box); "points: adjusted" moves each point by the other feature's share of its prediction, so the vertical gap to the line is exactly the residual.`
       : `With ${kNum} features${cat ? ' plus categorical columns' : ''} the fitted model is a hyperplane in ${feats.length + 1} dimensions, so it <b>cannot be drawn</b> whole (a picture is possible only up to 3 dimensions: two features and y). The flat chart is a slice: y against ${gj}, with every other feature held at its mean; the 3D view is a slice through two features, ${gj} and ${gj2}. Pick the features in each chart header (or for every chart in the Controls box). With "points: adjusted", each point is y − Σ w·(x − mean) over the other features (a <b>partial residual</b>), so it sits exactly its residual away from the slice; with raw y the other features add vertical scatter. The residual charts of step 10 work in any number of dimensions, because residuals are one number per row.`;

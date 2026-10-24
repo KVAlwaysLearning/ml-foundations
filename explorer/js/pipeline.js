@@ -46,7 +46,8 @@ const PIPE = (() => {
     // ---- 5. standardise with train statistics ----
     const mu = [0], sd = [1];
     // 0/1 columns from a categorical feature are left as they are (μ = 0, s = 1), so a coefficient stays "the gap from the reference level"
-    for (let j = 1; j < P; j++) { if (GEN.isCat(names[j])) { mu.push(0); sd.push(1); continue; } const c = tr.map(i => d.X[i][j]); mu.push(ST.mean(c)); const s = Math.sqrt(ST.mean(c.map(v => (v - mu[j]) ** 2))); sd.push(s > 1e-12 ? s : 1); }
+    // the scaling method: standardisation unless the data say otherwise (Feature engineering › Scaling, Centering)
+    for (let j = 1; j < P; j++) { if (GEN.noScale(names[j])) { mu.push(0); sd.push(1); continue; } const [m, s] = FE.scaleStats(tr.map(i => d.X[i][j]), d.scale || 'std'); mu.push(m); sd.push(s); }
     const z = r => r.map((v, j) => j === 0 ? 1 : (v - mu[j]) / sd[j]);
     const Xtr = tr.map(i => z(d.X[i])), ytr = tr.map(i => d.y[i]), Xte = te.map(i => z(d.X[i])), yte = te.map(i => d.y[i]);
     // ---- 6–9. fit ----
@@ -88,13 +89,17 @@ const PIPE = (() => {
     const rmseTe = te.length ? Math.sqrt(LA.dot(ete, ete) / te.length) : NaN;
     const myTe = te.length ? ST.mean(yte) : NaN, sstTe = yte.reduce((s, v) => s + (v - myTe) ** 2, 0);
     const r2Te = te.length > 1 && sstTe > 0 ? 1 - LA.dot(ete, ete) / sstTe : NaN;
+    // a transformed target (Feature engineering › Transform of y): also score the predictions back on the original scale
+    let orig = null;
+    if (d.yBack && d.yRaw) { const bt = a => a.map(d.yBack), yT = te.map(i => d.yRaw[i]), pT = bt(yhte), yR = tr.map(i => d.yRaw[i]), pR = bt(LA.mv(Xtr, f.w));
+      const rm = (a, b) => Math.sqrt(a.reduce((s, v, i) => s + (v - b[i]) ** 2, 0) / Math.max(1, a.length)); orig = { rmseTe: rm(yT, pT), rmseTr: rm(yR, pR), yte: yT, pte: pT }; }
     // ---- 13. back to the original scale ----
     const wOrig = f.w.map((v, j) => j === 0 ? f.w[0] - f.w.slice(1).reduce((s, wj, k) => s + wj * mu[k + 1] / sd[k + 1], 0) : v / sd[j]);
     const seOrig = f.se.map((v, j) => j === 0 ? NaN : v / sd[j]), unscale = a => a ? a.map((v, j) => j === 0 ? NaN : v / sd[j]) : null;
     const isTrain = new Array(N).fill(false); tr.forEach(i => isTrain[i] = true);
     return { N, P, names, dupes, outY, outX, eda, nTr, nTe: te.length, mu, sd, Xtr, ytr, Xte, yte, yhte, ete, tr, te, isTrain, dupFlag, outFlag, lossHist, wHist, f, dg, eigH, lim, eta, frac: lr, T, iters, diverged: !isFinite(lossHist[lossHist.length - 1]) || lossHist[lossHist.length - 1] > 1e12,
       hc: unscale(hc), nw: nw && { se: unscale(nw.se), lag: nw.lag }, cl: cl && { se: unscale(cl.se), groups: cl.groups },
-      rmseTr: Math.sqrt(f.SSE / nTr), rmseTe, r2Te, wOrig, seOrig, ar, perfect, noDg, splitFixed: sp.fixed, dropped: d.dropped || null };
+      rmseTr: Math.sqrt(f.SSE / nTr), rmseTe, r2Te, wOrig, seOrig, ar, perfect, noDg, splitFixed: sp.fixed, dropped: d.dropped || null, orig, scale: d.scale || 'std' };
   }
   return { run, splitIdx };
 })();

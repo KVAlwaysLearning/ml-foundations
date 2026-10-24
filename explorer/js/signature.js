@@ -421,6 +421,48 @@ const SIG = (() => {
     return { gen: 'Every feature is known before y, and nothing is learned from the data before the split.', see: li(['Nothing leaks: the test score is an honest estimate of performance on new rows.', `Test RMSE ${n(P.rmseTe, 3)}.`]), draw: el => [chart(row(el), 'Data and fit', 230, c => scatterXY(c, d.X.map(r => r[1]), d.y, 'x', 'y'))], table: '' };
   };
 
+  /* ================= Feature engineering: the same raw data, different columns built in step 5 ================= */
+  function feCurve(dd, f, xr){ const dv = dd.derive; if (!dv) return null; const m = dd.X[0].map((_, j) => mean(dd.X.map(r => r[j]))); return Array.from({ length: 121 }, (_, k) => { const xv = xr[0] + (xr[1] - xr[0]) * k / 120, r = [...m]; dv.f(xv).forEach((t, q) => { r[dv.cols[q]] = t; }); return [xv, LA.dot(r, f.w)]; }); }
+  function feSig(ctx){ const { cur, base, v, P, Pb, a } = ctx, d = cur.d, F = ctx.full ? ctx.full.cur : d, fe = F.fe, FB = ctx.full ? ctx.full.base : base.d;
+    const kap = x => isFinite(x) ? n(x, 1) : '∞', resetP = g => pfmt(g.dg?.reset?.p);
+    const rowsNum = [['columns after step 5', P.names.slice(1).join(', '), Pb.names.slice(1).join(', ')], ['train RMSE', n(P.rmseTr, 3), n(Pb.rmseTr, 3)], ['test RMSE', n(P.rmseTe, 3), n(Pb.rmseTe, 3)],
+      ...(P.orig || Pb.orig ? [['test RMSE in the units of y', n(P.orig ? P.orig.rmseTe : P.rmseTe, 3), n(Pb.orig ? Pb.orig.rmseTe : Pb.rmseTe, 3)]] : []),
+      ['κ of X̃ᵀX̃ (step 6)', kap(P.f.kappa), kap(Pb.f.kappa)], ['RESET p (shape)', resetP(cur), resetP(base)], ['largest VIF', cur.dg.vif?.length ? kap(Math.max(...cur.dg.vif)) : '—', base.dg.vif?.length ? kap(Math.max(...base.dg.vif)) : '—'],
+      ['gradient descent: loss after the last iteration vs the minimum', `${n(P.lossHist[P.lossHist.length - 1], 4)} vs ${n(P.f.SSE / P.nTr, 4)}`, `${n(Pb.lossHist[Pb.lossHist.length - 1], 4)} vs ${n(Pb.f.SSE / Pb.nTr, 4)}`]];
+    const tbl = `<div class="sig-tbl"><table><tr><th>quantity</th><th>this variant</th><th>baseline (${esc(a.variants[0].name)})</th></tr>${rowsNum.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</table></div>`;
+    const gen = `${esc(v.desc)} The raw data are identical for every variant of ${esc(a.name.toLowerCase())}; only the columns built in step 5 differ.${F.note ? ' ' + esc(F.note) + '.' : ''}`;
+    const see = li([`Columns that reach the model: <b>${P.names.slice(1).join(', ')}</b> (baseline: ${Pb.names.slice(1).join(', ')}).`,
+      fe.attr === 'scaling' ? `Predictions are identical to the baseline (train RMSE ${n(P.rmseTr, 4)} vs ${n(Pb.rmseTr, 4)}), but κ is ${kap(P.f.kappa)} vs ${kap(Pb.f.kappa)}, so gradient descent ${P.lossHist[P.lossHist.length - 1] - P.f.SSE / P.nTr < 1e-3 * (P.f.SSE / P.nTr) ? 'reaches the minimum' : 'is still far from the minimum'} after ${P.lossHist.length - 1} iterations.` :
+      fe.attr === 'centering' ? `Predictions are identical (train RMSE ${n(P.rmseTr, 4)} vs ${n(Pb.rmseTr, 4)}); what changes is the collinearity: largest VIF ${cur.dg.vif?.length ? kap(Math.max(...cur.dg.vif)) : '—'} vs ${base.dg.vif?.length ? kap(Math.max(...base.dg.vif)) : '—'}, and the SE of the linear term ${n(P.seOrig[1], 4)} vs ${n(Pb.seOrig[1], 4)}.` :
+      `Test RMSE ${n(P.orig ? P.orig.rmseTe : P.rmseTe, 3)} vs ${n(Pb.orig ? Pb.orig.rmseTe : Pb.rmseTe, 3)} for the baseline${P.orig ? ' (both back in the units of y)' : ''}; train RMSE ${n(P.rmseTr, 3)} vs ${n(Pb.rmseTr, 3)}.${P.rmseTe > 1.3 * P.rmseTr ? ' The gap between train and test is the sign of overfitting.' : ''}`,
+      fe.attr === 'selection' ? `Kept ${P.names.length - 1} of 10 columns. Useful columns kept: ${['x₁', 'x₂', 'x₃', 'x₄'].filter(x => P.names.includes(x)).join(', ') || 'none'}; noise kept: ${P.names.filter(x => /^n/.test(x)).join(', ') || 'none'}; the copy x₅ ${P.names.includes('x₅') ? 'kept' : 'dropped'}.` : '',
+      fe.attr === 'encoding' && fe.kind === 'keepall' ? `rank(X̃) = ${P.f.rank} of ${P.P}: the coefficients are not unique (the app shows the shortest solution).` : '',
+      `RESET p: ${resetP(cur)} (baseline ${resetP(base)}): a small value means a shape the columns still miss.`]);
+    const draw = el => { const r1 = row(el), out = [];
+      if (fe.attr === 'scaling') {
+        out.push(chart(r1, 'Gradient descent: loss at each iteration (log scale)', 240, c => { const L = P.lossHist.map(x => Math.min(x, 1e12)), Lb = Pb.lossHist.map(x => Math.min(x, 1e12)), m = Math.min(P.f.SSE / P.nTr, ...L, ...Lb);
+          c.begin([0, Math.max(L.length, Lb.length) - 1], [Math.max(m * 0.9, 1e-6), Math.max(...L, ...Lb)], 'iteration', 'loss (log)', { logY: true }); c.hline(P.f.SSE / P.nTr, C('--ink'), [5, 4]); c.line(Lb.map((t, i) => [i, t]), BASEC(), 2, [4, 3]); c.line(L.map((t, i) => [i, t]), CUR(), 2.4); c.end();
+          c.legend([[CUR(), 'this variant'], [BASEC(), 'baseline', true], [C('--ink'), 'the minimum (closed form)', true]]); }));
+        out.push(chart(r1, 'x₂ after scaling (training rows)', 240, c => { const j = 2, z = P.Xtr.map(r => r[j]), lo = Math.min(...z), hi = Math.max(...z), B = 24, w = (hi - lo) / B || 1, k = new Array(B).fill(0); z.forEach(t => k[Math.min(B - 1, Math.floor((t - lo) / w))]++);
+          c.begin([lo, hi], [0, Math.max(...k)], `scaled x₂ (${P.scale})`, 'rows'); k.forEach((q, i) => q && c.rect(lo + i * w, 0, lo + (i + 1) * w, q, CUR(), 0.7)); c.end(); }));
+        return out; }
+      if (fe.attr === 'selection') { const js = P.names.map((nm, j) => j).slice(1), tc = P.f.tc || 1.96;
+        out.push(chart(r1, 'Kept columns with 95% intervals (true value as a ring)', Math.max(200, 40 + 26 * js.length), c => { const lo = js.map(j => P.wOrig[j] - tc * P.seOrig[j]), hi = js.map(j => P.wOrig[j] + tc * P.seOrig[j]); c.begin(range([lo, hi, [0]]), [0.4, js.length + 0.6], 'coefficient', '', { noY: true }); c.vrule(0, C('--ink'), [4, 4], 1.2);
+          js.forEach((j, k) => { const y = js.length - k, tr = F.truth.coef[j]; c.line([[lo[k], y], [hi[k], y]], /^n/.test(P.names[j]) ? C('--normal') : C('--floor'), 4); c.dot([P.wOrig[j], y], C('--ink'), 3.5); if (tr != null) c.dot([tr, y], C('--surface'), 4.5, true); c.text(P.names[j], [lo[k], y], C('--ink'), -2, -7); }); c.end(); c.legend([[C('--floor'), 'useful or copy'], [C('--normal'), 'noise column'], [C('--surface'), 'true value']]); }));
+        return out; }
+      const xr = range([F.derive ? F.derive.raw : d.X.map(r => r[1])]), xs = cur.d.derive ? cur.d.derive.raw : d.X.map(r => r[1]), cv = feCurve(cur.d, cur.f, xr), cb = feCurve(base.d, base.f, xr);
+      const yl = F.yName || 'y';
+      out.push(chart(r1, `Training rows with the fitted model: this variant (solid) vs baseline (dashed)`, 250, c => { const ys = [...d.y, ...(cv || []).map(p => p[1]), ...(cb && !F.yName ? cb.map(p => p[1]) : [])].filter(isFinite); c.begin(xr, range([ys]), `${F.derive?.axisName || 'x'} (raw)`, yl);
+        xs.forEach((t, i) => c.dot([t, d.y[i]], d.group ? gColor(d.group[i], d.groupNames.length) : C('--floor'), 3, false, 0.75)); if (cb && !F.yName) c.line(cb, BASEC(), 2, [5, 4]); if (cv) c.line(cv, CUR(), 2.6); if (F.truth.fnRaw) c.line(Array.from({ length: 81 }, (_, k) => { const xv = xr[0] + (xr[1] - xr[0]) * k / 80; return [xv, F.truth.fnRaw(xv)]; }), C('--ink'), 1.4, [2, 3]); c.end();
+        c.legend([[CUR(), 'this variant'], ...(cb && !F.yName ? [[BASEC(), 'baseline', true]] : []), ...(F.truth.fnRaw ? [[C('--ink'), 'truth', true]] : [])]); }));
+      out.push(chart(r1, 'Residuals against the raw x: this variant', 250, c => residVsX(c, xs, cur.f.e, sym(range([cur.f.e])), { k: 6, xName: `${F.derive?.axisName || 'x'} (raw)` })));
+      if (P.orig) out.push(chart(row(el), 'Back on the original scale of y: test rows, predicted vs actual', 240, c => { const all = [...P.orig.yte, ...P.orig.pte]; c.begin(range([all]), range([all]), 'actual y', 'predicted y (turned back)'); const r0 = range([all]); c.line([[r0[0], r0[0]], [r0[1], r0[1]]], C('--ink'), 1.2, [4, 4]); P.orig.yte.forEach((t, i) => c.dot([t, P.orig.pte[i]], C('--residual'), 3.6, true)); c.end(); }));
+      return out; };
+    const table0 = tbl;
+    return { gen, see, draw, table: table0 };
+  }
+  ['scaling', 'xtransform', 'ytransform', 'degree', 'interactions', 'splines', 'binning', 'encoding', 'centering', 'selection'].forEach(k => { A[k] = feSig; });
+
   function howFit(v){
     const d = v.d, f = v.f;
     if (d.X[0].length !== 2) return `the weights solve the normal equations X̃ᵀX̃ w̃ = X̃ᵀy, exactly as in <a href="#step-9a" data-goto="step-9a">step 9a</a>`;

@@ -121,17 +121,65 @@ const CATALOG = [
       { id: 'lkprep', name: 'Preprocessing before the split', desc: 'An ID-like category (about one row per level, no real effect) is target-encoded, each level replaced by its mean y, using all rows before the split.', strength: 'blend from the overall mean to the leaky encoding' }
     ]}
   ]},
-  { id: 'features', name: 'Feature engineering', attrs: [
-    { id: 'scaling', name: 'Scaling', variants: ['None', 'Standardisation', 'Min–max', 'Robust'] },
-    { id: 'xtransform', name: 'Transform of x', variants: ['None', 'Log', 'Square root', 'Box-Cox', 'Yeo-Johnson'] },
-    { id: 'ytransform', name: 'Transform of y', variants: ['None', 'Log', 'Box-Cox'] },
-    { id: 'degree', name: 'Polynomial degree', variants: ['1', '2', '3', '5', '10'] },
-    { id: 'interactions', name: 'Interaction terms', variants: ['None', 'x₁·x₂ added'] },
-    { id: 'splines', name: 'Piecewise / splines', variants: ['None', 'One knot', 'Several knots'] },
-    { id: 'binning', name: 'Binning', variants: ['None', 'Equal-width', 'Quantile'] },
-    { id: 'encoding', name: 'Categorical encoding', variants: ['One-hot, drop one', 'One-hot, keep all', 'Ordinal', 'Target encoding'] },
-    { id: 'centering', name: 'Centering', variants: ['Raw', 'Mean-centred'] },
-    { id: 'selection', name: 'Feature selection', variants: ['All features', 'Forward', 'Backward', 'Stepwise', 'Lasso-based', 'VIF-based', 'p-value-based'] }
+  { id: 'features', name: 'Feature engineering', live: true, attrs: [
+    { id: 'scaling', name: 'Scaling', diag: 'fitted', variants: [
+      { id: 'scnone', name: 'None', desc: 'x₁ (0–10) and x₂ (1 000–5 000, one row at 30 000) are used as they are.' },
+      { id: 'scstd', name: 'Standardisation', desc: 'Each feature becomes (x − mean) / sd, using the training rows.' },
+      { id: 'scminmax', name: 'Min–max', desc: 'Each feature becomes (x − min) / (max − min): squeezed into [0, 1].' },
+      { id: 'scrobust', name: 'Robust', desc: 'Each feature becomes (x − median) / IQR: the large value of x₂ barely affects it.' }
+    ]},
+    { id: 'xtransform', name: 'Transform of x', diag: 'fitted', variants: [
+      { id: 'xtnone', name: 'None', desc: 'x is right-skewed and y rises with ln(x), but x is used as it is.' },
+      { id: 'xtlog', name: 'Log', desc: 'x is replaced by ln(x).' },
+      { id: 'xtsqrt', name: 'Square root', desc: 'x is replaced by √x: a milder squeeze than the log.' },
+      { id: 'xtboxcox', name: 'Box-Cox', desc: 'x is replaced by (x^λ − 1)/λ, with λ chosen from the training rows to make x as bell-shaped as possible.' },
+      { id: 'xtyj', name: 'Yeo-Johnson', desc: 'Like Box-Cox, but also works for zero and negative values.' }
+    ]},
+    { id: 'ytransform', name: 'Transform of y', diag: 'fitted', variants: [
+      { id: 'ytnone', name: 'None', desc: 'y grows exponentially with multiplicative noise, and is modelled as it is.' },
+      { id: 'ytlog', name: 'Log', desc: 'The model is fitted to ln(y); predictions are turned back with eˣ.' },
+      { id: 'ytboxcox', name: 'Box-Cox', desc: 'The model is fitted to the Box-Cox transform of y, with λ from the training rows.' }
+    ]},
+    { id: 'degree', name: 'Polynomial degree', diag: 'fitted', variants: [
+      { id: 'deg1', name: '1', desc: 'A straight line through an S-shaped cubic truth.' },
+      { id: 'deg2', name: '2', desc: 'Columns z and z², where z is x standardised: a parabola.' },
+      { id: 'deg3', name: '3', desc: 'Columns z, z², z³ (z = standardised x): the same shape as the truth.' },
+      { id: 'deg5', name: '5', desc: 'Up to z⁵: more flexible than needed.' },
+      { id: 'deg10', name: '10', desc: 'Up to z¹⁰: wiggles to chase the noise (overfitting), and X̃ᵀX̃ is badly conditioned.' }
+    ]},
+    { id: 'interactions', name: 'Interaction terms', diag: 'fitted', variants: [
+      { id: 'intnone', name: 'None', desc: 'The truth has an x₁·x₂ term, but the model only has x₁ and x₂.' },
+      { id: 'intx', name: 'x₁·x₂ added', desc: 'A column x₁·x₂ is added, so the slope of x₁ can change with x₂.' }
+    ]},
+    { id: 'splines', name: 'Piecewise / splines', diag: 'fitted', variants: [
+      { id: 'spnone', name: 'None', desc: 'A straight line through a curve that rises fast and then levels off.' },
+      { id: 'sp1', name: 'One knot', desc: 'A hinge column max(0, x − 5): the slope may change at x = 5.' },
+      { id: 'spmany', name: 'Several knots', desc: 'Hinges at 2.5, 5 and 7.5: a bendy line made of four straight pieces.' }
+    ]},
+    { id: 'binning', name: 'Binning', diag: 'fitted', variants: [
+      { id: 'binnone', name: 'None', desc: 'x is bunched near 0 and y jumps around x = 4; x is used as it is.' },
+      { id: 'binwidth', name: 'Equal-width', desc: 'x is cut into 5 bins of equal width; each bin gets its own level.' },
+      { id: 'binquant', name: 'Quantile', desc: 'x is cut into 5 bins with the same number of training rows each.' }
+    ]},
+    { id: 'encoding', name: 'Categorical encoding', diag: 'fitted', variants: [
+      { id: 'encoh', name: 'One-hot, drop one', desc: 'region (East, North, South, West) becomes three 0/1 columns; East is the reference.' },
+      { id: 'encall', name: 'One-hot, keep all', desc: 'All four 0/1 columns are kept next to the intercept: the dummy-variable trap.' },
+      { id: 'encord', name: 'Ordinal', desc: 'region becomes one number 0, 1, 2, 3 (alphabetical order), forcing an order and equal steps.' },
+      { id: 'enctarget', name: 'Target encoding', desc: 'region becomes one number: the mean y of its level in the training rows.' }
+    ]},
+    { id: 'centering', name: 'Centering', diag: 'fitted', variants: [
+      { id: 'cenraw', name: 'Raw', desc: 'x lies between 20 and 30; the model uses x and x² as they are.' },
+      { id: 'cencent', name: 'Mean-centred', desc: 'x is centred first: xc = x − mean, then xc and xc² are used.' }
+    ]},
+    { id: 'selection', name: 'Feature selection', diag: 'fitted', variants: [
+      { id: 'selall', name: 'All features', desc: 'All 10 candidates: 4 useful, 1 near-copy and 5 noise columns.' },
+      { id: 'selfwd', name: 'Forward', desc: 'Start empty; add the column with the smallest p-value while it is below 0.05.' },
+      { id: 'selbwd', name: 'Backward', desc: 'Start with all; drop the column with the largest p-value while it is above 0.05.' },
+      { id: 'selstep', name: 'Stepwise', desc: 'Forward, but after each addition remove any column whose p-value rose above 0.10.' },
+      { id: 'sellasso', name: 'Lasso-based', desc: 'Keep the columns lasso does not shrink to 0, with λ chosen by 5-fold cross-validation.' },
+      { id: 'selvif', name: 'VIF-based', desc: 'Drop the column with the largest VIF while it is above 5.' },
+      { id: 'selp', name: 'p-value-based', desc: 'Fit once with everything and drop every column with p > 0.05.' }
+    ]}
   ]},
   { id: 'formulation', name: 'Model formulation', attrs: [
     { id: 'intercept', name: 'Intercept', variants: ['Included', 'Through the origin'] },

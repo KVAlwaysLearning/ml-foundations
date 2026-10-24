@@ -239,13 +239,14 @@ const GEN = (() => {
   const EXTRA_BETA = [0.8, -0.6, 0.5, -0.4, 0.3, 0.7, -0.5, 0.4, -0.3];
   const SUBS = ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉', '₁₀'];
   const SUBS2 = k => String(k).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch]).join('');
-  const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3, nlarge: 5, nmod: 5, nsmall: 5, nap: 5, nlp: 5, irfew: 4, irmany: 9, ircopy: 2, interaction: 2, dummytrap: 2, cbin: 2, cmulti: 2, chigh: 2, lktarget: 2, lkprep: 2 };
+  const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3, nlarge: 5, nmod: 5, nsmall: 5, nap: 5, nlp: 5, irfew: 4, irmany: 9, ircopy: 2, interaction: 2, dummytrap: 2, cbin: 2, cmulti: 2, chigh: 2, lktarget: 2, lkprep: 2,
+    scnone: 2, scstd: 2, scminmax: 2, scrobust: 2, intnone: 2, intx: 2, encoh: 2, encall: 2, encord: 2, enctarget: 2, selall: 10, selfwd: 10, selbwd: 10, selstep: 10, sellasso: 10, selvif: 10, selp: 10 };
   /* 0/1 columns made from a categorical feature (named "feature_level") */
   const CAT_NAMES = ['customer', 'colour', 'segment', 'region', 'branch'];
   const isCat = nm => typeof nm === 'string' && CAT_NAMES.some(c => nm.startsWith(c + '_'));
   /* columns of the design matrix including categorical ones (for the minimum N) */
   /* extra design-matrix columns beyond one per feature: a category with L levels is one feature but L − 1 columns (chigh also needs every level twice in training) */
-  const P_EXTRA = { cbin: 0, cmulti: 2, chigh: 40, dummytrap: 2, interaction: 0 };
+  const P_EXTRA = { cbin: 0, cmulti: 2, chigh: 40, dummytrap: 2, interaction: 0, deg2: 1, deg3: 2, deg5: 4, deg10: 9, sp1: 1, spmany: 3, binwidth: 3, binquant: 3, encoh: 2, encall: 3, intx: 1, cenraw: 1, cencent: 1 };
   const pCount = (variant, k) => Math.max(k, baseCount(variant)) + 1 + (P_EXTRA[variant] || 0);
   /* sample-size variants fix N themselves: p = features + 1 */
   const fixedN = (variant, k) => { const p = Math.max(k, baseCount(variant)) + 1;
@@ -265,8 +266,9 @@ const GEN = (() => {
     for (let q = 0; q < add; q++) {
       const nm = 'x' + SUBS[start + q], beta = EXTRA_BETA[q], col = r.X.length;
       r.names.push(nm);
-      r.X.forEach((row, i) => { const v = U[q][idx(i)]; row.push(v); r.y[i] += beta * v; });
-      r.truth.coef[r.X[0].length - 1] = beta;
+      // a multiplicative target (Transform of y) takes the extra features in its exponent, so y stays positive
+      r.X.forEach((row, i) => { const v = U[q][idx(i)]; row.push(v); if (r.multExtras) r.y[i] *= Math.exp(0.1 * beta * v); else r.y[i] += beta * v; });
+      r.truth.coef[r.X[0].length - 1] = r.multExtras ? null : beta;
     }
     if (r.truth.fn) { const f0 = r.truth.fn, cols = r.X[0].length, from = cols - add, X = r.X, B = EXTRA_BETA;
       r.truth.fn = (v, i) => f0(v, i) + (X[i] ? X[i].slice(from).reduce((s, x, q) => s + B[q] * x, 0) : 0); r.truth.partial = true; }
@@ -275,13 +277,18 @@ const GEN = (() => {
     return r;
   }
   function generate(variant, { N, sigma, strength, seed, k = 1 }){
-    const P = pools(N, seed), fn = G[variant];
+    const P = pools(N, seed), fn = G[variant] || (FE.has(variant) ? (P2, N2, sg2, s2) => FE.data(variant, P2, N2, sg2, s2) : null);
     if (!fn) throw new Error('No generator for ' + variant);
     const r = addFeatures(fn(P, N, sigmaOf(variant, sigma), strength), k, seed);
     if (r.post) { r.post(r); delete r.post; }
+    if (FE.has(variant)) FE.apply(r, variant, seed);   // feature engineering: the design is built in step 5 from the raw columns
     r.N = r.y.length; r.sigmaUsed = sigmaOf(variant, sigma); return r;
   }
   /* the same feature in two datasets: 'x' and 'x₁' are one feature (x is renamed x₁ only when extra features are added) */
+  /* columns left unscaled in step 5: 0/1 columns from a category or from bins */
+  const noScale = nm => isCat(nm) || (typeof nm === 'string' && nm.startsWith('bin_'));
+  /* a column you can pick as a feature on its own (not a category column, not built from another column) */
+  const isFeat = nm => !isCat(nm) && !FE.isAux(nm);
   const colIn = (names, nm) => { let j = names.indexOf(nm); if (j < 0 && (nm === 'x' || nm === 'x₁')) j = names.indexOf(nm === 'x' ? 'x₁' : 'x'); return j; };
-  return { generate, has: id => !!G[id], baseCount, EXTRA_BETA, isCat, pCount, fixedN, sigmaOf, CAT_NAMES, colIn };
+  return { generate, has: id => !!G[id], baseCount, EXTRA_BETA, isCat, pCount, fixedN, sigmaOf, CAT_NAMES, colIn, noScale, isFeat };
 })();

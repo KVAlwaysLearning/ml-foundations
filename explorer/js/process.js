@@ -199,6 +199,86 @@ const INF = {
     4: ['major', 'The split must come before anything that learns from the data.'],
     12: ['major', 'The test score is too good to be true.'],
     13: ['major', 'The model will disappoint in real use.']
+  },
+  /* ---------- Feature engineering: the choice is made in step 5 ---------- */
+  scaling: {
+    5: ['origin', 'The scaling method is chosen and learned here, from the training rows.'],
+    6: ['major', 'The Gram matrix X̃ᵀX̃ and its condition number κ change with the scaling.'],
+    '9a': ['none', 'Predictions are identical under any of these scalings: only the units of w̃ change.'],
+    '9b': ['major', 'Gradient descent speed depends on κ: unscaled features make it crawl.'],
+    13: ['none', 'Converted back to original units, the coefficients are the same.']
+  },
+  xtransform: {
+    3: ['minor', 'The histogram of x is skewed: a hint that a transform may help.'],
+    5: ['origin', 'x is replaced by a transformed version, learned here from the training rows.'],
+    '9a': ['major', 'The line is fitted on the new scale, so its shape on the raw x changes.'],
+    10: ['major', 'RESET and the residual plot show whether the bend is gone.'],
+    12: ['major', 'Test error drops when the transform matches the true shape.'],
+    13: ['major', 'The slope now reads "per unit of the transformed x" (for ln x: per 1% change in x, w/100).']
+  },
+  ytransform: {
+    3: ['minor', 'The histogram of y is skewed.'],
+    5: ['origin', 'y is replaced by a transformed version; predictions are turned back at the end.'],
+    8: ['major', 'The loss is now measured on the transformed scale.'],
+    10: ['major', 'Constant spread and bell-shaped residuals are judged on the transformed scale.'],
+    12: ['major', 'Predictions must be turned back to the original scale before scoring them.'],
+    13: ['major', 'For ln y, the slope is a relative effect: e^w − 1 per unit of x.']
+  },
+  degree: {
+    5: ['origin', 'Powers of x (x², x³, …) are added as new columns.'],
+    6: ['major', 'Powers of x are strongly correlated: κ grows quickly with the degree.'],
+    '9a': ['major', 'More columns let the fitted curve bend; too many let it chase the noise.'],
+    '9b': ['major', 'A large κ makes gradient descent slow.'],
+    10: ['major', 'RESET passes once the degree is high enough.'],
+    11: ['major', 'Coefficients of correlated powers have large SEs and cannot be read one at a time.'],
+    12: ['major', 'Too low a degree underfits; too high a degree overfits: test error shows both.'],
+    13: ['major', 'There is no single slope: the effect of x depends on where x is.']
+  },
+  interactions: {
+    5: ['origin', 'A product column x₁·x₂ is added.'],
+    7: ['major', 'The model becomes ŷ = b + w₁x₁ + w₂x₂ + w₁₂x₁x₂.'],
+    10: ['minor', 'Without the term, residuals show a twisted pattern across x₁ and x₂.'],
+    12: ['major', 'Test error drops when the true relationship has an interaction.'],
+    13: ['major', 'The slope of x₁ is w₁ + w₁₂·x₂: it depends on x₂.']
+  },
+  splines: {
+    5: ['origin', 'Hinge columns max(0, x − knot) are added.'],
+    7: ['major', 'The model becomes a line whose slope changes at each knot.'],
+    '9a': ['major', 'Each hinge weight is the change in slope at its knot.'],
+    10: ['major', 'RESET and the residual plot show whether the bend is captured.'],
+    12: ['major', 'Test error drops when the pieces follow the curve.'],
+    13: ['major', 'The slope differs between knots.']
+  },
+  binning: {
+    5: ['origin', 'x is replaced by 0/1 columns for its bins, learned from the training rows.'],
+    6: ['minor', 'One column per bin minus one (the first bin is the reference).'],
+    '9a': ['major', 'The fit is a staircase: one level per bin.'],
+    11: ['minor', 'Each bin coefficient is the gap from the first bin.'],
+    12: ['major', 'Bins can capture a jump but throw away the variation inside each bin.'],
+    13: ['major', 'Read each bin coefficient as "compared with the first bin".']
+  },
+  encoding: {
+    5: ['origin', 'The text column region is turned into numbers here.'],
+    6: ['major', 'The encoding decides how many columns region becomes, and whether X̃ keeps full rank.'],
+    '9a': ['major', 'Different encodings give different models.'],
+    11: ['minor', 'What each coefficient is compared with depends on the encoding.'],
+    12: ['major', 'An encoding that forces a wrong order (ordinal) predicts worse.'],
+    13: ['major', 'Read the coefficients according to the encoding.']
+  },
+  centering: {
+    5: ['origin', 'x is centred (x − mean) before the square is taken.'],
+    6: ['major', 'Raw x and x² are almost the same column when x is far from 0: κ is huge.'],
+    10: ['major', 'VIF of x and x² drops from very large to about 1 after centring.'],
+    11: ['major', 'The SE of the linear term shrinks a lot after centring.'],
+    12: ['none', 'Predictions are identical: centring only re-labels the same model.'],
+    13: ['major', 'The intercept becomes the prediction at the mean x, and the linear term the slope there.']
+  },
+  selection: {
+    5: ['origin', 'Columns are chosen here, using the training rows only.'],
+    6: ['minor', 'Fewer columns: a smaller X̃ᵀX̃.'],
+    11: ['major', 'p-values after selection are too optimistic: the columns were chosen for looking significant.'],
+    12: ['major', 'Removing noise columns usually improves the test error; removing useful ones hurts it.'],
+    13: ['major', 'A dropped column is not proven useless, and a kept one is not proven causal.']
   }
 };
 const INF_V = {
@@ -246,8 +326,36 @@ const INF_V = {
   shfeat: { 12: ['minor', 'The rule is the same, so a correct model still predicts well; test error mostly reflects noise.'], 13: ['minor', 'Covariate shift hurts when the model is only approximately right.'] },
   shrel: { 12: ['major', 'Test error jumps: the slope learned on the past no longer applies.'], 13: ['major', 'Retrain on recent data and monitor the errors over time.'] },
   lktarget: { 3: ['major', 'The leak column correlates almost perfectly with y: suspicious, not good news.'], '9a': ['major', 'The model leans on the leak and ignores x.'], 11: ['minor', 'The leak looks extremely significant.'] },
-  lkprep: { 5: ['origin', 'Target encoding (each level replaced by its mean y) was computed on every row, before the split.'], '9a': ['major', 'The model puts weight on enc, a column built from y.'], 11: ['major', 'enc looks significant although the category has no effect.'] }
+  lkprep: { 5: ['origin', 'Target encoding (each level replaced by its mean y) was computed on every row, before the split.'], '9a': ['major', 'The model puts weight on enc, a column built from y.'], 11: ['major', 'enc looks significant although the category has no effect.'] },
+  scnone: { 6: ['major', 'x₂ is about 1 000 times larger than x₁: κ is enormous.'], '9b': ['major', 'Gradient descent barely moves along x₁ in the allowed iterations.'] },
+  scminmax: { 5: ['origin', 'One very large x₂ squeezes every other row into a small part of [0, 1].'] },
+  scrobust: { 5: ['origin', 'Median and IQR ignore the very large x₂, so the other rows keep a normal spread.'] },
+  deg1: { 12: ['major', 'Underfitting: a line cannot follow the S-shape, so train and test errors are both high.'] },
+  deg10: { 12: ['major', 'Overfitting: train error falls, test error rises.'], 6: ['major', 'κ is astronomically large: the powers are nearly collinear.'] },
+  encall: { 6: ['major', 'The four region columns add up to the intercept column: rank(X̃) < p.'] },
+  encord: { 12: ['major', 'The codes 0, 1, 2, 3 force equal steps in a fixed order; the real effects (0, 3, −2, 5) do not follow it.'] },
+  enctarget: { 11: ['minor', 'One column instead of three: fewer coefficients, but the encoding itself was estimated.'] },
+  ytnone: { 10: ['major', 'Residuals curve and fan out, and are skewed.'] },
+  xtnone: { 10: ['major', 'Residuals bend: the straight line in raw x misses the log shape.'] }
 };
+/* one line on what step 5 built for a Feature engineering variant */
+function feSummary(c){
+  const fe = c.d.fe; if (!fe) return 'none applied (covered in the Feature engineering branch)';
+  const nm = c.P.names.slice(1).join(', ');
+  switch (fe.attr) {
+    case 'scaling': return `scaling = ${{ none: 'none (raw values)', std: 'standardisation (x − mean) / sd', minmax: 'min–max (x − min) / (max − min)', robust: 'robust (x − median) / IQR' }[fe.kind]}; columns: ${nm}`;
+    case 'xtransform': return fe.kind === 'none' ? 'x used as it is' : `x → ${fe.nm}${fe.lam != null ? ` with λ = ${num(fe.lam, 3)}` : ''}; skewness of x ${num(fe.skewBefore, 2)} → ${num(fe.skewAfter, 2)}`;
+    case 'ytransform': return fe.kind === 'none' ? 'y used as it is' : `y → ${fe.yName}${fe.lam != null ? ` with λ = ${num(fe.lam, 3)}` : ''}; skewness of y ${num(fe.skewBefore, 2)} → ${num(fe.skewAfter, 2)}`;
+    case 'degree': return `degree ${fe.kind}: columns ${nm}`;
+    case 'interactions': return fe.kind === 'none' ? 'no product column' : 'added x₁·x₂ (row by row: x₁ × x₂)';
+    case 'splines': return fe.knots.length ? `hinges at ${fe.knots.join(', ')}: ${fe.knots.map((k, q) => `h${subN(q + 1)} = max(0, x − ${k})`).join(', ')}` : 'no hinges: one straight line';
+    case 'binning': return fe.edges ? `5 ${fe.kind === 'width' ? 'equal-width' : 'quantile'} bins, edges ${fe.edges.map(e => num(e, 2)).join(' | ')}; training rows per bin ${fe.counts.join(', ')}` : 'x used as it is';
+    case 'encoding': return { onehot: 'one-hot, East dropped: region_North, region_South, region_West', keepall: `${mark(false)} one-hot with all four levels kept (the dummy-variable trap)`, ordinal: 'ordinal codes: East 0, North 1, South 2, West 3 (one column, code(region))', target: `target encoding: each level → its mean y in the training rows (${fe.means.map((m, q) => `${c.d.rawCat.levels[q]} ${num(m, 2)}`).join(', ')})` }[fe.kind];
+    case 'centering': return fe.kind === 'centred' ? `x̄ = ${num(fe.c, 3)} from the training rows; columns xc = x − x̄ and xc²; no scaling` : 'columns x and x² as they are; no scaling';
+    case 'selection': return `${fe.kind === 'all' ? 'all' : 'kept'} ${c.P.names.length - 1} of 10 candidates: ${nm}`;
+  }
+  return '';
+}
 /* "no test" with its reason */
 const noTest = c => c.P.noDg ? `${mark(false)} not available: ${c.P.noDg}` : '—';
 /* refit without the row with the largest Cook's distance (standardised scale, then back to original units) */
@@ -311,11 +419,11 @@ const STEPS = [
   { id: 5, title: 'Feature engineering', goal: 'Transform and scale inputs using statistics from the training rows only.',
     attrs: ['scaling', 'xtransform', 'ytransform', 'degree', 'interactions', 'splines', 'binning', 'encoding', 'centering', 'selection', 'irrelevant'],
     subs: [
-      [`${sy('mu')}, ${sy('sd')}`, 'Training mean and SD of each numeric feature', c => c.P.names.slice(1).filter(nm => !GEN.isCat(nm)).map(n => { const k = c.P.names.indexOf(n) - 1; return `${n}: ${sy('mu')} = ${num(c.P.mu[k + 1], 3)}, ${sy('sd')} = ${num(c.P.sd[k + 1], 3)}`; }).join('; ') + (c.d.rawCat ? `; the 0/1 columns from ${c.d.rawCat.name} are not scaled (μ = 0, s = 1)` : '')],
+      [`${sy('mu')}, ${sy('sd')}`, c => ({ std: 'Training mean and SD of each numeric feature', none: 'No scaling: every feature kept as it is (μ = 0, s = 1)', minmax: 'Training minimum and range (max − min) of each numeric feature', robust: 'Training median and IQR (Q3 − Q1) of each numeric feature' })[c.P.scale || 'std'], c => c.P.names.slice(1).filter(nm => !GEN.noScale(nm)).map(n => { const k = c.P.names.indexOf(n) - 1, L = { std: ['μ', 's'], none: ['μ', 's'], minmax: ['min', 'range'], robust: ['median', 'IQR'] }[c.P.scale || 'std']; return `${n}: ${L[0]} = ${num(c.P.mu[k + 1], 3)}, ${L[1]} = ${num(c.P.sd[k + 1], 3)}`; }).join('; ') + (c.d.rawCat ? `; the 0/1 columns from ${c.d.rawCat.name} are not scaled (μ = 0, s = 1)` : '')],
       [sy('Xt'), 'Standardise: x̃ = (x − μ) / s, first training row', c => `${vec(c.P.Xtr[0], 3)}`],
       ['', c => c.d.rawCat ? `Encode ${c.d.rawCat.name}: text → 0/1 columns` : 'Categorical encoding', c => { const rc = c.d.rawCat; if (!rc) return c.d.hiddenGroup ? `${mark(false, true)} the rows come from two groups, but no group column was recorded` : 'no categorical features';
         const cols = c.P.names.filter(GEN.isCat); return `${rc.keepAll ? mark(false) : cols.length > 10 ? mark(false, true) : mark(true)} ${rc.levels.length} levels → ${cols.length} column${cols.length > 1 ? 's' : ''} (${cols.slice(0, 4).join(', ')}${cols.length > 4 ? ', …' : ''})${rc.keepAll ? ': all levels kept alongside the intercept, the dummy-variable trap' : `, reference level ${rc.ref} dropped`}; not scaled`; }],
-      ['', 'Transforms, polynomials, selection', () => 'none applied (covered in the Feature engineering branch)']
+      ['', c => c.d.fe ? 'Feature engineering in this variant' : 'Transforms, polynomials, selection', c => feSummary(c)]
     ]},
   { id: 6, title: 'Design matrix', goal: 'Assemble X̃ with the intercept column and check it can be solved.',
     attrs: ['intercept', 'multicollinearity'],
@@ -393,7 +501,8 @@ const STEPS = [
     attrs: ['metric', 'traintest', 'learningcurve', 'validationcurve', 'biasvariance', 'shift'],
     subs: [
       [sy('rmse'), 'Train vs test error', c => `train ${num(c.P.rmseTr, 3)}, test ${num(c.P.rmseTe, 3)}${c.P.rmseTe > 1.3 * c.P.rmseTr ? ` ${mark(false, true)} test noticeably worse` : ''}`],
-      [sy('r2'), 'Test R²', c => num(c.P.r2Te, 3)]
+      [sy('r2'), 'Test R²', c => num(c.P.r2Te, 3)],
+      ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y']
     ]},
   { id: 13, title: 'Interpretation', goal: 'Undo the scaling and say what the coefficients mean.',
     attrs: ['reading', 'causal', 'intervals'],
