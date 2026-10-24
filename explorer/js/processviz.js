@@ -38,13 +38,16 @@ const PVIZ = (() => {
   const pick = (ctx, id, o) => FS.pick(ctx.d.names, id, o);
   const col = (X, j) => X.map(r => r[j]);
   const multi = ctx => FS.cols(ctx.d.names).length > 1 || FS.catCols(ctx.d.names).length > 0;
+  /* the raw table as recorded: numeric features plus a categorical feature as text (its 0/1 columns only exist from step 5) */
+  const rawView = ctx => { const d = ctx.d, rc = d.rawCat, js = d.names.map((nm, j) => j).filter(j => j > 0 && !GEN.isCat(d.names[j]));
+    return { cols: [...js.map(j => d.names[j]), ...(rc ? [`${rc.name} (text)`] : []), 'y'], row: i => [...js.map(j => d.X[i][j]), ...(rc ? [rc.vals[i]] : []), d.y[i]] }; };
   const selOne = (c, ctx, id, redraw) => { FS.sel(c, ctx.d.names, id, 'one', redraw || c.drawFn); return c; };
 
   const V = {};
   /* 1. raw data as collected */
   V[1] = (el, ctx) => {
-    const { d, P } = ctx, r = box(el), cols = [...P.names.slice(1), 'y'];
-    table(r, 'The raw dataset', cols, d.X.map((x, i) => [...x.slice(1), d.y[i]]));
+    const { d, P } = ctx, r = box(el), rv = rawView(ctx);
+    table(r, 'The raw dataset', rv.cols, d.X.map((x, i) => rv.row(i)));
     const ch = chart(r, `y against ${fname(ctx)}, as collected`, 230, c => {
       const { j } = pick(ctx, 'v1'), xs = col(d.X, j); c.title(`y against ${P.names[j]}, as collected`); c.begin(rng(xs), rng(d.y), P.names[j], 'y');
       if (d.truth.fn && P.P === 2) c.line(grid(...rng(xs)).map(x => [x, d.truth.fn(x, 0)]), C('--ink'), 1.4, [5, 4], 0.8);
@@ -56,10 +59,10 @@ const PVIZ = (() => {
   };
   /* 2. cleaning: flagged rows */
   V[2] = (el, ctx) => {
-    const { d, P } = ctx, r = box(el), cols = [...P.names.slice(1), 'y'];
+    const { d, P } = ctx, r = box(el), rv = rawView(ctx), cols = rv.cols;
     const flag = i => [P.dupFlag[i] && 'duplicate', P.outFlag[i] && '|z| > 3'].filter(Boolean).join(', ');
     const order = [...Array(P.N).keys()].sort((a, b) => (!!flag(b)) - (!!flag(a)) || a - b);
-    table(r, 'Rows checked (flagged rows first)', cols, order.map(i => [...d.X[i].slice(1), d.y[i]]), { idx: order, rowCls: k => flag(order[k]) ? 'flag' : '', extra: { head: 'flag', cell: k => flag(order[k]) || '✓' } });
+    table(r, 'Rows checked (flagged rows first)', cols, order.map(i => rv.row(i)), { idx: order, rowCls: k => flag(order[k]) ? 'flag' : '', extra: { head: 'flag', cell: k => flag(order[k]) || '✓' } });
     const ch = chart(r, 'Flagged rows in the data', 230, c => {
       const { j } = pick(ctx, 'v2'), xs = col(d.X, j); c.begin(rng(xs), rng(d.y), P.names[j], 'y');
       xs.forEach((x, i) => c.dot([x, d.y[i]], C('--floor'), 3, false, 0.6));
@@ -114,6 +117,11 @@ const PVIZ = (() => {
       r2.appendChild(r2.firstChild); // heatmap first, the pair scatter after it
       out.push(pc);
     }
+    if (d.rawCat) { const rc = d.rawCat, L = rc.levels.length, r3 = box(el, 'pv-row'), gc = q => L <= 4 ? C(['--floor', '--residual', '--surface', '--normal'][q]) : `hsl(${(q * 360 / L + 160) % 360} 55% 45%)`;
+      out.push(chart(r3, `y for each level of ${rc.name} (a text column has no correlation: compare the levels)`, 230, c => { const ms = rc.levels.map((_, q) => { const ys = d.y.filter((_, i) => d.group[i] === q); return ys.length ? ST.mean(ys) : NaN; });
+        c.begin([0.4, L + 0.6], rng(d.y), rc.name, 'y'); d.y.forEach((v, i) => c.dot([d.group[i] + 1 + ((i * 37) % 11 - 5) * 0.025, v], gc(d.group[i]), 3, false, 0.75));
+        ms.forEach((m, q) => isFinite(m) && c.line([[q + 0.7, m], [q + 1.3, m]], C('--ink'), 3)); if (L <= 8) rc.levels.forEach((l, q) => c.text(l, [q + 1, c.box.y0], C('--ink'), -10, -4)); c.end();
+        c.legend([[C('--ink'), 'mean y of the level'], ...(L > 8 ? [[C('--muted'), `${L} levels, labelled 1–${L}`]] : [])]); })); }
     note(el, 'Analysis only: the dataset does not change in this step. These pictures are what you look at to decide what the later steps need.' + (FS.cols(names).length > 1 ? ' Click a cell of the heatmap: a feature pair is drawn in the scatter beside it, and a feature-with-y cell switches the "y against" chart to that feature.' : ''));
     return out;
   };

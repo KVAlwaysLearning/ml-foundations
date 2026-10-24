@@ -20,7 +20,7 @@ const CHG = (() => {
     sshape: { y: 'y = (1 − s)(2 + 1.5x) + s·(2 + 15 / (1 + e^(−1.5(x − 5)))) + ε' },
     step: { y: 'y = (1 − s)(2 + 1.5x) + s·(3 + 0.3x + 9·[x > 5]) + ε' },
     periodic: { y: 'y = 2 + 1.5·x + 4·s·sin(1.6x) + ε' },
-    interaction: { x: 'x as before, plus a new 0/1 column "group"', y: 'y = 2 + 1.5·x + s·(1.4x − 7)·group + ε' },
+    interaction: { x: 'x as before, plus a text column customer (new / returning); step 5 turns it into the 0/1 column customer_returning', y: 'y = 2 + 1.5·x + s·(1.4x − 7)·[returning] + ε' },
     posar: { e: 'εₜ = ρ·εₜ₋₁ + √(1 − ρ²)·σ·zₜ with ρ = 0.9·s: each error keeps ρ of the previous one' },
     negar: { e: 'εₜ = ρ·εₜ₋₁ + √(1 − ρ²)·σ·zₜ with ρ = −0.8·s: each error tends to flip the previous one' },
     cluster: { x: 'x = s·(centre of its cluster) + (1 − s)·10u + noise: 8 clusters of consecutive rows', e: 'εᵢ = σ·(√q·u_cluster + √(1 − q)·zᵢ), q = 0.8·s: part of the error is shared by the cluster' },
@@ -38,7 +38,7 @@ const CHG = (() => {
     high: { x: 'x₂ = 5 + ρ(x₁ − 5) + √(1 − ρ²)(10u₂ − 5), ρ = 0.97·s' },
     perfect: { x: 'x₂ = 2·x₁ + (1 − s)·2z: at full strength an exact copy' },
     combo: { x: 'x₃ = x₁ + x₂ + (1 − s)·1.5z: at full strength an exact sum', y: 'y = 2 + 1.5x₁ + 1.0x₂ + 0.5x₃ + ε' },
-    dummytrap: { x: 'x = 10u, plus three 0/1 columns A, B, C (one per category, all kept)', y: 'y = 2 + 1.5x + (0, 3 or 6 by category) + ε' },
+    dummytrap: { x: 'x = 10u, plus a text column colour (blue / green / red); step 5 makes one 0/1 column per colour and keeps all three', y: 'y = 2 + 1.5x + (0, 3 or 6 by colour) + ε' },
     confounder: { x: 'x = 5 + 2s·z + 2.2·z₃, where z is a hidden variable', e: 'error seen by the model = 3s·z + σ·zᵢ: the hidden z is inside it', y: 'y = 2 + 1.5·x + 3s·z + σ·zᵢ' },
     measerr: { x: 'recorded x = true x + 3s·z₂ (true x = 10u)', e: 'error seen by the model = σ·zᵢ − 1.5·(recorded x − true x)', y: 'y = 2 + 1.5·(true x) + σ·zᵢ' },
     reverse: { x: 'x = 10u + γ/(1 − 1.5γ)·ε with γ = 0.4s: x responds to y', e: 'εᵢ = σ·zᵢ (but now x moves with it)' },
@@ -62,9 +62,9 @@ const CHG = (() => {
     tskew: { e: 'multiplicative: e^(0.12·max(σ, 0.3)·zᵢ)', y: 'y = (1 − s)(2 + 1.5x + σzᵢ) + s·e^(0.6 + 0.25x + 0.12·max(σ, 0.3)·zᵢ)' },
     tbound: { e: 'inside the curve: 0.25·max(σ, 0.3)·zᵢ', y: 'y = 20 / (1 + e^(−(−3 + 0.6x + 0.25·max(σ, 0.3)·zᵢ))): always between 0 and 20' },
     tcount: { e: 'Poisson noise: variance equals the mean', y: 'y ~ Poisson(λ), λ = e^(0.3 + 0.25x): whole numbers 0, 1, 2, …' },
-    cbin: { x: 'x = 10u, plus a 0/1 column B (level B of a two-level category)', y: 'y = 2 + 1.5x + 4s·B + ε' },
-    cmulti: { x: 'x = 10u, plus one-hot columns B, C, D (level A is the reference)', y: 'y = 2 + 1.5x + (0, 3s, −2s or 5s by level) + ε' },
-    chigh: { x: 'x = 10u, plus 24 one-hot columns c₂ … c₂₅ (level 1 is the reference)', y: 'y = 2 + 1.5x + (a random effect per level, sd 3s) + ε' },
+    cbin: { x: 'x = 10u, plus a text column segment (basic / premium); step 5 makes the 0/1 column segment_premium', y: 'y = 2 + 1.5x + 4s·[premium] + ε' },
+    cmulti: { x: 'x = 10u, plus a text column region (East / North / South / West); step 5 makes region_North, region_South, region_West (East is the reference)', y: 'y = 2 + 1.5x + (0, 3s, −2s or 5s for East, North, South, West) + ε' },
+    chigh: { x: 'x = 10u, plus a text column branch (B01 … B25); step 5 makes 24 columns branch_B02 … branch_B25 (B01 is the reference)', y: 'y = 2 + 1.5x + (a random effect per branch, sd 3s) + ε' },
     sgint: { x: 'two hidden groups; group 1 has x = 3 + 0.7·10u, group 0 x = 0.8·10u', y: 'y = 2 + 1.5x + 7s·[group 1] + ε (the group is not a column)' },
     sgslope: { y: 'y = 2 + 1.5x − 2s·(x − 5)·[group 1] + ε (the group is not a column)' },
     simpson: { x: 'group 0: x = 0.5·10u; group 1: x = 5 + 0.5·10u', y: 'y = 2 + 1.5x + 18s·[group 0] + ε: slope +1.5 inside each group' },
@@ -98,7 +98,7 @@ const CHG = (() => {
   const rng = arrs => { const v = arrs.flat().filter(isFinite); let lo = Math.min(...v), hi = Math.max(...v); if (!(hi > lo)) { lo -= 1; hi += 1; } return [lo, hi]; };
 
   function trail(ctx){
-    const { cur, base, a, v, inf } = ctx, j = cur.d.focus[0], jb = base.d.names.indexOf(cur.d.names[j]), f = cur.f, fb = base.f;
+    const { cur, base, a, v, inf } = ctx, j = cur.d.focus[0], jb = GEN.colIn(base.d.names, cur.d.names[j]), f = cur.f, fb = base.f;
     const diagName = { fitted: 'Residuals vs fitted', order: 'Residuals in order', qq: 'Q–Q', x1x2: 'x₁ vs x₂' }[a.diag] || 'Residuals vs fitted';
     const vif = x => x.vif?.length ? Math.max(...x.vif) : NaN, fmtI = t => isFinite(t) ? n(t, 1) : '∞';
     const M = [

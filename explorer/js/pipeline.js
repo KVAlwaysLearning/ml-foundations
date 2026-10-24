@@ -45,7 +45,8 @@ const PIPE = (() => {
     const sp = splitIdx(N, seed, d), tr = sp.tr, te = sp.te, nTr = tr.length;
     // ---- 5. standardise with train statistics ----
     const mu = [0], sd = [1];
-    for (let j = 1; j < P; j++) { const c = tr.map(i => d.X[i][j]); mu.push(ST.mean(c)); const s = Math.sqrt(ST.mean(c.map(v => (v - mu[j]) ** 2))); sd.push(s > 1e-12 ? s : 1); }
+    // 0/1 columns from a categorical feature are left as they are (μ = 0, s = 1), so a coefficient stays "the gap from the reference level"
+    for (let j = 1; j < P; j++) { if (GEN.isCat(names[j])) { mu.push(0); sd.push(1); continue; } const c = tr.map(i => d.X[i][j]); mu.push(ST.mean(c)); const s = Math.sqrt(ST.mean(c.map(v => (v - mu[j]) ** 2))); sd.push(s > 1e-12 ? s : 1); }
     const z = r => r.map((v, j) => j === 0 ? 1 : (v - mu[j]) / sd[j]);
     const Xtr = tr.map(i => z(d.X[i])), ytr = tr.map(i => d.y[i]), Xte = te.map(i => z(d.X[i])), yte = te.map(i => d.y[i]);
     // ---- 6–9. fit ----

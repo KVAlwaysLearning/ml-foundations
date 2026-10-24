@@ -23,7 +23,7 @@
   panel.innerHTML = `<div class="crumb" id="crumb"></div><h2 id="vtitle"></h2><p class="vdesc" id="vdesc"></p>
     <div class="chips" id="chips" role="group" aria-label="Variants"></div><div id="planned"></div>
     <p class="hint-s">Sliders are in the floating <b>Controls</b> box at the bottom right of the screen.</p>
-    <a class="to-proc" href="#changed">What changed and how to see it ↓</a> <a class="to-proc" href="#process">The process ↓</a> <a class="to-proc" href="#notes">Interview notes ↓</a> <a class="to-proc" href="#code">Python code ↓</a>`;
+    <a class="to-proc" href="#variant-sec">The variant at a glance ↓</a> <a class="to-proc" href="#changed">What changed and how to see it ↓</a> <a class="to-proc" href="#process">The process ↓</a> <a class="to-proc" href="#notes">Interview notes ↓</a> <a class="to-proc" href="#code">Python code ↓</a>`;
   $('#chips').onclick = e => { const b = e.target.closest('button'); if (b) select({ attr: S.view, variant: b.dataset.id }); };
 
   // ---- floating controls ----
@@ -83,7 +83,7 @@
       truth: Object.assign({}, d.truth, { fn: d.truth.fn ? (v, k) => d.truth.fn(v, tr[k]) : null }) });
     const f = ST.ols(X, y); let dg = null; try { dg = ST.diagnostics(X, y, f); } catch (err) {}
     // the standardised design and its Gram matrix, exactly as in steps 5 and 6
-    const mu = X[0].map((_, j) => j ? ST.mean(X.map(r => r[j])) : 0), sd = X[0].map((_, j) => { if (!j) return 1; const s = Math.sqrt(ST.mean(X.map(r => (r[j] - mu[j]) ** 2))); return s > 1e-12 ? s : 1; });
+    const isC = j => GEN.isCat(d.names[j]), mu = X[0].map((_, j) => j && !isC(j) ? ST.mean(X.map(r => r[j])) : 0), sd = X[0].map((_, j) => { if (!j || isC(j)) return 1; const s = Math.sqrt(ST.mean(X.map(r => (r[j] - mu[j]) ** 2))); return s > 1e-12 ? s : 1; });
     const Z = X.map(r => r.map((v, j) => j ? (v - mu[j]) / sd[j] : 1)), A = LA.mul(LA.T(Z), Z), ev = LA.eigSym(A).values;
     const gram = { A, eig: ev, kappa: ev[ev.length - 1] > 1e-12 * ev[0] ? ev[0] / ev[ev.length - 1] : Infinity };
     return { d: dd, f, dg: dg || { vif: [], jb: {}, dw: NaN }, gram };
@@ -132,7 +132,15 @@
     $('#fboxV').textContent = `${a.name} › ${v.name}`;
     sK.el.style.display = v.strength ? '' : 'none';
     sK.el.querySelector('label').firstChild.textContent = 'Strength: ' + (v.strength || '');
-    sF.set(kEff(v.id)); sF.el.querySelector('label').firstChild.textContent = GEN.baseCount(v.id) > 1 ? `Number of features k (this variant has ${GEN.baseCount(v.id)} built in)` : 'Number of features k';
+    { // the slider counts input features (a text category is one feature, however many 0/1 columns it becomes); the variant's own features are a frozen minimum
+      const base = GEN.baseCount(v.id), dd = cur.d, rc = dd.rawCat, featNames = [...dd.names.slice(1).filter(nm => !GEN.isCat(nm)), ...(rc ? [rc.name] : [])], nCols = dd.names.length - 1;
+      sF.set(kEff(v.id));
+      sF.el.querySelector('label').firstChild.textContent = base > 1 ? `Number of features k (this variant has ${base} built in${rc ? `: ${featNames.slice(0, base).join(', ')} → ${nCols} column${nCols > 1 ? 's' : ''} after encoding` : ''})` : 'Number of features k';
+      let lock = sF.el.querySelector('.lock'), note = sF.el.querySelector('.lock-note'); const inp = sF.el.querySelector('input');
+      if (!lock) { lock = document.createElement('div'); lock.className = 'lock'; inp.before(lock); note = document.createElement('div'); note.className = 'lock-note'; inp.after(note); }
+      lock.style.display = note.style.display = base > 1 ? '' : 'none';
+      if (base > 1) { lock.style.width = `calc(${(base - 1) / 9 * 100}% )`; note.textContent = `🔒 Locked at ${base} or more: this variant needs ${featNames.slice(0, base).join(', ')}.${featNames.length > base ? ' Extra features are added from the slider.' : ''}`; }
+    }
     sN.set(nEff(v.id)); sN.el.querySelector('label').firstChild.textContent = GEN.fixedN(v.id, S.k) != null ? `Sample size N (set by this variant: ${nEff(v.id)})` : nMin(v.id) > 8 ? `Sample size N (at least ${nMin(v.id)} for ${GEN.pCount(v.id, S.k)} coefficients)` : 'Sample size N';
     sS.el.querySelector('label').firstChild.textContent = GEN.sigmaOf(v.id, S.sigma) !== S.sigma ? `Noise σ (this variant uses σ = ${num(GEN.sigmaOf(v.id, S.sigma), 2)})` : 'Noise σ';
     sS.set(S.sigma); sK.set(S.strength); sLR.set(S.lr); sIt.set(S.iters);
@@ -143,6 +151,7 @@
         `<label title="The second feature for pair charts (3D view, pair scatter, loss surface)">Second <select id="gfy">${cs.filter(j => j !== g.j).map(j => `<option${j === g.j2 ? ' selected' : ''}>${esc(nm[j])}</option>`).join('')}</select></label>` +
         `<label title="Partial residuals: move each point by the other features' share of its prediction, so it sits exactly its residual away from the slice line"><input type="checkbox" id="gadj"${S.adj ? ' checked' : ''}> Adjust slice points for the other features</label>`; }
     if (!viewA.live) {
+      if (topChart) { topChart.dispose(); topChart = null; } $('#topviz').innerHTML = ''; $('#about').innerHTML = '';
       $('#vtitle').textContent = viewA.name;
       $('#vdesc').textContent = `Planned for a later step. The simulation below still shows ${a.name} › ${v.name}.`;
       $('#chips').innerHTML = viewA.variants.map((x, i) => `<button type="button" disabled>${esc(x.name)}${i === 0 ? ' · baseline' : ''}</button>`).join('');
@@ -151,7 +160,75 @@
     $('#vtitle').textContent = v.name + (isBase ? ' (baseline)' : '');
     $('#vdesc').textContent = v.desc + (cur.d.note ? ' ' + cur.d.note.replace(/\.$/, '') + '.' : '');
     $('#chips').innerHTML = a.variants.map((x, i) => `<button type="button" data-id="${x.id}" aria-pressed="${x.id === v.id}">${esc(x.name)}${i === 0 ? ' · baseline' : ''}</button>`).join('');
+    try { $('#about').innerHTML = ABOUT.html(a, v, isBase, cur, aboutOpen); } catch (err) { console.error(err); $('#about').innerHTML = ''; }
+    renderTop(a, v, isBase);
     MATH.typeset(panel);
+  }
+
+  // ---- the characteristic picture at the top: y against x for the whole dataset ----
+  let topChart = null, aboutOpen = false;
+  document.addEventListener('toggle', e => { if (e.target.id === 'aboutD') aboutOpen = e.target.open; }, true);
+  function renderTop(a, v, isBase){
+    if (topChart) { topChart.dispose(); topChart = null; }
+    const el = $('#topviz'); el.innerHTML = '';
+    topChart = new Chart(el, { title: '', height: 330 }); topChart.wrap.classList.add('wide');
+    topChart.drawFn = () => drawTop(topChart, a, v, isBase); topChart.drawFn();
+    const names = cur.d.names; if (FS.cols(names).length > 1) { FS.sel(topChart, names, 'top', 'one', topChart.drawFn); FS.adjBtn(topChart, 'top', topChart.drawFn); }
+    const bb = document.createElement('button'); bb.type = 'button'; bb.className = 'fsel-adj';
+    const lab = () => { const on = S.ov.top?.base !== false; bb.textContent = on ? 'baseline: shown' : 'baseline: hidden'; bb.setAttribute('aria-pressed', String(on)); };
+    lab(); bb.onclick = () => { S.ov.top = Object.assign({}, S.ov.top, { base: S.ov.top?.base === false }); lab(); topChart.drawFn(); };
+    if (!isBase) (topChart.tabsEl.querySelector('.fsel') || topChart.tabsEl).appendChild(bb);
+    const cap = document.createElement('p'); cap.className = 'pv-note top-cap'; cap.innerHTML = topCaption(a, v, isBase); el.appendChild(cap);
+  }
+  function topCaption(a, v, isBase){
+    if (isBase) return `The baseline: what healthy data look like for ${esc(a.name.toLowerCase())}. Pick a variant to see it change.`;
+    const C2 = {
+      independence: { posar: 'Points are coloured by the sign of their residual (above or below the fitted line). Long runs of one colour along x are the signature of positive autocorrelation.', negar: 'Points are coloured by the sign of their residual. Colours that alternate almost every row are the signature of negative autocorrelation.', cluster: 'Points are coloured by cluster: whole clusters sit above or below the line together.', dupes: 'Each dot hides several identical copies stacked on top of each other: the picture looks normal, the row count does not.' },
+      multicollinearity: { dummytrap: 'Coloured by colour level. Nothing looks wrong here: the trap is in the encoded columns (step 5 and step 6), not in the points.', _: 'The trouble is between the features, not between x and y: compare the x₁ against x₂ picture in step 3 and step 10.' },
+      exogeneity: { _: 'Compare the fitted line with the dashed true line: the gap is the bias. The residuals around the fitted line look perfectly healthy, which is the trap.' },
+      outliers: { _: 'The changed rows are drawn larger in pink. Compare the fitted line with the dashed true line to see how much they pull it.' },
+      missing: { _: 'Hollow pink points are the rows whose y was lost (their y is known only because this is a simulation). The fitted line uses the filled points only.' },
+      range: { rextrap: 'Hollow points are the test rows, beyond the training range. The line keeps going straight where the dashed truth bends.', rgap: 'No rows between x = 4 and 7: the dashed truth has a bump there that the fitted line cannot see.' },
+      shift: { _: 'Hollow points are the test rows: compare where they sit with the training rows.' },
+      subgroups: { _: 'Coloured by the hidden group (which the model never sees). The single fitted line is compared with each group\u2019s true line (dashed).' },
+      categorical: { _: 'Coloured by level, one fitted line per level (the 0/1 columns from step 5 shift the line up or down).' },
+      leakage: { _: 'Nothing unusual in y against x: the leak is in another column. See the fingerprint below and step 2.' }
+    }[a.id] || {};
+    return C2[v.id] || C2._ || 'The variant (filled) against the baseline built from the same random numbers (small grey dots), with the fitted line and the true mean (dashed).';
+  }
+  function drawTop(Pc, a, v, isBase){
+    const d = cur.d, P = cur.P, f = cur.tv.f, names = d.names, { j } = FS.pick(names, 'top'), multi = FS.cols(names).length > 1, adj = FS.adj('top') && multi;
+    const xs = d.X.map(r => r[j]), groups = d.group ? d.groupNames.length : 0, grouped = !!d.cat && groups <= 6;
+    const sl = FS.slice(d.X, d.y, f.w, j, { keep: FS.catCols(names) }), yp = adj ? sl.y : d.y;
+    const dr = d.dropped, dx = dr ? dr.X.map(r => r[j]) : [], dy = dr ? dr.y.map((t, k) => adj ? t - sl.others.reduce((s2, q) => s2 + f.w[q] * (dr.X[k][q] - sl.means[q]), 0) : t) : [];
+    const bd = base.d, jb = GEN.colIn(bd.names, names[j]), showBase = !isBase && S.ov.top?.base !== false && jb > 0, bx = showBase ? bd.X.map(r => r[jb]) : [], by = showBase ? bd.y : [];
+    const all = [...xs, ...dx, ...bx], lo = Math.min(...all), hi = Math.max(...all), gx = grid(lo, hi);
+    const lineGroups = grouped ? [...Array(groups).keys()] : [null];
+    const fitLines = lineGroups.map(g => gx.map(x => [x, LA.dot(rowAt(d, x, g ?? 0, j), f.w)]));
+    const tf = d.truth.fn && !d.truth.partial ? d.truth.fn : null;
+    const trueLines = j !== 1 ? [] : d.truth.byGroup && !d.truth.byGroupPartial ? d.truth.byGroup.map(fn => gx.map(x => [x, fn(x)])) : tf && d.X[0].length === 2 ? (d.testIdx && v.id === 'shrel' ? [gx.map(x => [x, tf(x, 0)]), gx.map(x => [x, tf(x, d.y.length - 1)])] : [gx.map(x => [x, tf(x, 0)])]) : (d.truth.coef[1] != null && d.X[0].length === 2 ? [gx.map(x => [x, d.truth.coef[0] + d.truth.coef[1] * x])] : []);
+    const ys = [...yp, ...dy, ...by, ...fitLines.flat().map(p => p[1])].filter(isFinite);
+    const flag = new Set(d.flagRows || []), sign = a.id === 'independence' && (v.id === 'posar' || v.id === 'negar') ? d.y.map((t, i) => t - LA.dot(d.X[i], f.w)) : null;
+    const colOf = i => sign ? (sign[i] >= 0 ? css('--floor') : css('--normal')) : d.group ? groupColor(d.group[i], groups) : css('--floor');
+    Pc.title(`${v.name}${isBase ? ' (baseline)' : ''}: y against ${names[j]}${adj ? ' (points adjusted for the other features)' : ''}`);
+    Pc.begin([lo, hi], [Math.min(...ys), Math.max(...ys)], names[j], adj ? 'y adjusted for the other features' : 'y');
+    if (showBase) bx.forEach((x, i) => Pc.dot([x, by[i]], css('--muted'), 2.2, false, 0.45));
+    if (sign) { const ord = xs.map((_, i) => i); for (let k = 1; k < ord.length; k++) { const i0 = ord[k - 1], i1 = ord[k]; if (Math.sign(sign[i0]) === Math.sign(sign[i1])) Pc.line([[xs[i0], yp[i0]], [xs[i1], yp[i1]]], colOf(i1), 1, null, 0.35); } }
+    xs.forEach((x, i) => { const te = !P.isTrain[i] && P.splitFixed, fl = flag.has(i); Pc.dot([x, yp[i]], fl ? css('--normal') : te ? css('--residual') : colOf(i), fl ? 6 : 3.6, te, 0.9); });
+    dx.forEach((x, k) => Pc.dot([x, dy[k]], css('--normal'), 3.6, true, 0.9));
+    trueLines.forEach((l, k) => Pc.line(l, trueLines.length > 1 ? groupColor(k, groups) : css('--ink'), 1.6, [6, 5], 0.85));
+    fitLines.forEach((l, k) => Pc.line(l, lineGroups[k] == null ? css('--surface') : groupColor(lineGroups[k], groups), 2.8));
+    if (P.splitFixed) { const trx = P.tr.map(i => xs[i]); Pc.rect(Math.min(...trx), Pc.box.y0, Math.max(...trx), Pc.box.y1, css('--floor'), 0.05); }
+    Pc.end();
+    const leg = [[css('--surface'), grouped ? 'fitted lines (one per level)' : `fitted line (slope ${num(f.w[j], 3)})`]];
+    if (trueLines.length) leg.push([css('--ink'), trueLines.length > 1 ? 'true line of each group' : 'true mean E[y | x]', true]);
+    if (showBase) leg.push([css('--muted'), 'baseline data (same random numbers)']);
+    if (sign) leg.push([css('--floor'), 'above the line'], [css('--normal'), 'below the line']);
+    else if (d.group && groups <= 6) d.groupNames.forEach((nm, k) => leg.push([groupColor(k, groups), esc(nm)]));
+    if (flag.size) leg.push([css('--normal'), 'changed rows']);
+    if (dr) leg.push([css('--normal'), 'rows whose y was lost (hollow)']);
+    if (P.splitFixed) leg.push([css('--residual'), 'test rows (hollow); shaded: training x range']);
+    Pc.legend(leg);
   }
 
   // ---- colours and helpers ----
@@ -160,8 +237,6 @@
   const colMeans = X => X[0].map((_, j) => ST.mean(X.map(r => r[j])));
   function rowAt(d, x, g, j = 1){
     const r = colMeans(d.X); r[j] = x;
-    const gi = d.names.indexOf('group'); if (gi >= 0) r[gi] = g;
-    if (d.names.includes('A')) ['A', 'B', 'C'].forEach((n, k) => r[d.names.indexOf(n)] = +(k === g));
     if (d.cat) Object.entries(d.cat).forEach(([col, lev]) => { r[+col] = +(lev === g); });
     return r;
   }
@@ -175,27 +250,27 @@
   // ---- step 9a: the data and the fitted line (a slice through the chosen feature) ----
   function drawFit(P, isBase, id = 'fit'){
     const { d, f } = cur.tv, { j } = FS.pick(d.names, id), adj = FS.adj(id), xs = d.X.map(r => r[j]), groups = d.group ? d.groupNames.length : 0;
-    const lo = Math.min(...xs), hi = Math.max(...xs), gx = grid(lo, hi), multi = FS.cols(d.names).length > 1 || FS.catCols(d.names).length > 0;
-    const grouped = (d.names.includes('group') || d.names.includes('A') || !!d.cat) && groups <= 6;
+    const lo = Math.min(...xs), hi = Math.max(...xs), gx = grid(lo, hi), multi = FS.cols(d.names).length > 1 || FS.catCols(d.names).length > 0, adjN = FS.cols(d.names).length > 1;
+    const grouped = !!d.cat && groups <= 6;
     const lineGroups = grouped ? [...Array(groups).keys()] : [null];
     const fitLines = lineGroups.map(g => gx.map(x => [x, LA.dot(rowAt(d, x, g ?? 0, j), f.w)]));
     // adjusted points: remove the other numeric features' share of each prediction (categorical columns stay, so points match their group's line)
-    const sl = FS.slice(d.X, d.y, f.w, j, { keep: FS.catCols(d.names) }), yp = adj && multi ? sl.y : d.y, yh = adj && multi ? sl.y.map((v, i) => v - f.e[i]) : f.yhat;
+    const sl = FS.slice(d.X, d.y, f.w, j, { keep: FS.catCols(d.names) }), yp = adj && adjN ? sl.y : d.y, yh = adj && adjN ? sl.y.map((v, i) => v - f.e[i]) : f.yhat;
     const trueLines = j !== 1 ? [] : d.truth.byGroup && !d.truth.byGroupPartial ? d.truth.byGroup.map(fn => gx.map(x => [x, fn(x)])) : d.truth.fn && d.X[0].length === 2 ? [gx.map(x => [x, d.truth.fn(x, 0)])] : [];
     let baseLine = null;
-    if (S.cmp && !isBase) { const bd = base.tv.d, jb = bd.names.indexOf(d.names[j]); if (jb > 0) { const bx = bd.X.map(r => r[jb]); baseLine = grid(Math.min(...bx), Math.max(...bx)).map(x => [x, LA.dot(rowAt(bd, x, 0, jb), base.tv.f.w)]); } }
+    if (S.cmp && !isBase) { const bd = base.tv.d, jb = GEN.colIn(bd.names, d.names[j]); if (jb > 0) { const bx = bd.X.map(r => r[jb]); baseLine = grid(Math.min(...bx), Math.max(...bx)).map(x => [x, LA.dot(rowAt(bd, x, 0, jb), base.tv.f.w)]); } }
     const ys = [...yp, ...fitLines.flat().map(p => p[1])];
-    P.title(multi ? `A slice: y against ${d.names[j]}, other features at their means${adj ? ' (points adjusted)' : ''}` : 'The training data and the line these weights give (compare with the baseline and the truth)');
-    P.begin([lo, hi], [Math.min(...ys), Math.max(...ys)], d.names[j], adj && multi ? `y adjusted for the other features` : 'y');
+    P.title(multi ? `A slice: y against ${d.names[j]}, other features at their means${adj && adjN ? ' (points adjusted)' : ''}` : 'The training data and the line these weights give (compare with the baseline and the truth)');
+    P.begin([lo, hi], [Math.min(...ys), Math.max(...ys)], d.names[j], adj && adjN ? `y adjusted for the other features` : 'y');
     if (S.res) xs.forEach((x, i) => P.line([[x, yp[i]], [x, yh[i]]], css('--residual'), 1, null, 0.7));
     xs.forEach((x, i) => P.dot([x, yp[i]], ptColor(d, i), 3.4, false, 0.85));
-    if (d.X[0].length > 2 && !d.group && !(adj && multi)) xs.forEach((x, i) => P.dot([x, f.yhat[i]], css('--surface'), 3, true, 0.6));
+    if (d.X[0].length > 2 && !d.group && !(adj && adjN)) xs.forEach((x, i) => P.dot([x, f.yhat[i]], css('--surface'), 3, true, 0.6));
     trueLines.forEach(l => P.line(l, css('--ink'), 1.6, [6, 5], 0.8));
     if (baseLine) P.line(baseLine, css('--muted'), 2, [3, 4]);
     fitLines.forEach((l, k) => P.line(l, lineGroups[k] == null ? css('--surface') : groupColor(lineGroups[k], groups), 2.6));
     P.end();
     const leg = [[css('--surface'), d.X[0].length > 2 && !d.group ? `fitted line: slope w = ${num(f.w[j], 3)} for ${d.names[j]}, every other feature at its mean` : 'fitted line (weights from this step)']];
-    if (multi && adj) leg.push([css('--floor'), `points: y − Σ w·(x − mean) over the other features, so each sits its residual e away from the line`]);
+    if (adjN && adj) leg.push([css('--floor'), `points: y − Σ w·(x − mean) over the other features, so each sits its residual e away from the line`]);
     else if (d.X[0].length > 2 && !d.group) leg.push([css('--surface'), 'hollow: the model’s ŷ for each row (it uses every feature)']);
     if (trueLines.length) leg.push([css('--ink'), 'true mean E[y | x]', true]);
     if (baseLine) leg.push([css('--muted'), 'baseline fit (same rows of the baseline data)', true]);
@@ -299,7 +374,7 @@
     if (!mcCur) { P.begin([0, 1], [0, 1], '', ''); P.end(); P.legend([]); if (mcRO) mcRO.innerHTML = '<span class="muted">Running 200 fresh datasets…</span>'; return; }
     const names = cur.d.names, pk = FS.pick(names, 'mc', { second: cur.d.focus0.length > 1 ? 'auto' : 'none' }), want = [pk.j, ...(pk.j2 > 0 ? [pk.j2] : [])];
     const choose = arr => { const out = want.map(j => arr.find(m => m.j === j)).filter(Boolean); return out.length ? out : arr.slice(0, 1); };
-    const c = choose(mcCur), bn = S.cmp && mcBase !== mcCur ? mcBase : null, b = bn ? want.map(j => bn.find(m => base.d.names[m.j] === names[j])).filter(Boolean) : null;
+    const c = choose(mcCur), bn = S.cmp && mcBase !== mcCur ? mcBase : null, b = bn ? want.map(j => bn.find(m => m.j === GEN.colIn(base.d.names, names[j]))).filter(Boolean) : null;
     const bb = b && b.length === c.length ? b : null;
     P.title(c.length > 1 ? `Is the standard error honest? The ${names[c[0].j]} and ${names[c[1].j]} coefficients across 200 fresh datasets` : `Is the standard error honest? The ${names[c[0].j]} slope across 200 fresh datasets`);
     if (c.length > 1) {

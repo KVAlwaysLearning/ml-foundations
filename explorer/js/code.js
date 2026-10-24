@@ -16,23 +16,23 @@ const CODE = (() => {
   const openSet = new Set(); let bound = false;
 
   function csv(c){
-    const d = c.d, P = c.P, feats = d.names.slice(1).map(py), extra = [];
-    if (d.group && !d.names.includes('group') && !d.names.includes('A') && !d.cat) extra.push(c.v.id === 'cluster' ? 'cluster' : 'group');
-    if (d.names.includes('A') || d.cat) extra.push('category');
+    const d = c.d, P = c.P, feats = d.names.slice(1).map(py), extra = [], rc = d.rawCat;
+    // a categorical feature is written as it was recorded (text); the 0/1 columns are made in step 5
+    const numJ = d.names.map((nm, j) => j).filter(j => j > 0 && !GEN.isCat(d.names[j])), num = numJ.map(j => py(d.names[j]));
+    if (d.group && !d.cat) extra.push(c.v.id === 'cluster' ? 'cluster' : 'group');
     if (d.prep) extra.push('level');
-    const lvl = i => d.cat ? (d.groupNames.length > 6 ? 'L' + (d.group[i] + 1) : 'ABCD'[d.group[i]]) : 'ABC'[d.group[i]];
-    const head = ['row', ...feats, ...extra, 'y', 'set'];
-    const rows = d.y.map((y, i) => [d.orig ? d.orig[i] + 1 : i + 1, ...d.X[i].slice(1).map(v => +v.toFixed(8)), ...extra.map(e => e === 'category' ? lvl(i) : e === 'level' ? d.prep.lev[i] + 1 : d.group[i]), +y.toFixed(8), P.isTrain[i] ? 'train' : 'test']);
+    const head = ['row', ...num, ...(rc ? [rc.name] : []), ...extra, 'y', 'set'];
+    const rows = d.y.map((y, i) => [d.orig ? d.orig[i] + 1 : i + 1, ...numJ.map(j => +d.X[i][j].toFixed(8)), ...(rc ? [rc.vals[i]] : []), ...extra.map(e => e === 'level' ? d.prep.lev[i] + 1 : d.group[i]), +y.toFixed(8), P.isTrain[i] ? 'train' : 'test']);
     // rows whose y was never recorded (Missing data): kept in the file with an empty y, as they would arrive
-    if (d.dropped) d.dropped.idx.forEach((i, k) => rows.push([i + 1, ...d.dropped.X[k].slice(1).map(v => +v.toFixed(8)), ...extra.map(() => ''), '', 'missing']));
+    if (d.dropped) d.dropped.idx.forEach((i, k) => rows.push([i + 1, ...numJ.map(j => +d.dropped.X[k][j].toFixed(8)), ...(rc ? [''] : []), ...extra.map(() => ''), '', 'missing']));
     if (d.dropped) rows.sort((a, b) => a[0] - b[0]);
-    return { text: [head.join(','), ...rows.map(r => r.join(','))].join('\n'), feats, extra, nMiss: d.dropped ? d.dropped.idx.length : 0 };
+    return { text: [head.join(','), ...rows.map(r => r.join(','))].join('\n'), feats, extra, nMiss: d.dropped ? d.dropped.idx.length : 0, num, cat: rc ? rc.name : null, nCols: head.length };
   }
 
   function cells(c){
-    const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss } = csv(c);
-    const F = `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra[0];
-    const dummy = names.includes('A'), mark = s => `   # ← ${s}`;
+    const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss, num, cat, nCols } = csv(c);
+    const F = cat ? `num + cat` : `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra.find(e => e === 'group' || e === 'cluster');
+    const dummy = !!d.rawCat?.keepAll, mark = s => `   # ← ${s}`, Q = a2 => `[${a2.map(x => `"${x}"`).join(', ')}]`;
     const lag = P.nw?.lag ?? Math.max(1, Math.floor(4 * (P.nTr / 100) ** (2 / 9)));
     const fe = feats.filter((x, k) => !GEN.isCat(names[k + 1]));
     const X0 = feats[0], others = fe.filter(x => x !== X0 && x !== 'group'), plus = others.length ? ' + ' + others.join(' + ') : '';
@@ -58,9 +58,11 @@ from sklearn.metrics import mean_squared_error, r2_score` });
 
     out.push({ id: 1, t: 'Step 1: load the data', code:
 `df = pd.read_csv("dataset.csv")                  # app: N = ${P.N + nMiss} rows${nMiss ? ` (${nMiss} of them without y)` : ''}
-features = ${F}
+${cat ? `num = ${Q(num)}          # numeric features
+cat = ["${cat}"]                     # a categorical feature, recorded as text (encoded in step 5)
+` : ''}features = ${F}
 X, y = df[features], df["y"]
-print(df.shape)                                  # app: (${P.N + nMiss}, ${2 + feats.length + extra.length + 1})
+print(df.shape)                                  # app: (${P.N + nMiss}, ${nCols})
 
 # How the app generated these rows (the recipe, for reference):
 #   inputs x : ${py(rc.x)}
@@ -78,7 +80,8 @@ print("outliers (|z| > 3):", (z > 3).sum().to_dict())                  # app: y 
     out.push({ id: 3, t: 'Step 3: explore', code:
 `print(stats.skew(df["y"]))        # skewness γ1 (population formula, as in the app): app ${n(P.eda.skewY, 3)}
 print(df["y"].skew())             # pandas prints the sample-adjusted G1 instead
-print(df[features + ["y"]].corr().round(3))   # app: r(${feats[j - 1]}, y) = ${n(P.eda.corrXY[j - 1], 3)}${isFinite(P.eda.maxFeatCorr) ? `, largest |r| between inputs = ${n(P.eda.maxFeatCorr, 3)}` : ''}
+${cat ? `print(df.groupby("${cat}")["y"].agg(["count", "mean"]).round(3))   # a text column has no correlation: look at y per level
+` : ''}print(df[${cat ? 'num' : 'features'} + ["y"]].corr().round(3))   # app: r(${feats[j - 1]}, y) = ${n(P.eda.corrXY[j - 1], 3)}${isFinite(P.eda.maxFeatCorr) && !cat ? `, largest |r| between inputs = ${n(P.eda.maxFeatCorr, 3)}` : ''}
 # df.plot.scatter("${feats[0]}", "y")   # always look at the picture too` });
 
     const split = aid === 'independence' && vid !== 'indep' && vid !== 'dupes' ? (vid === 'cluster'
@@ -93,7 +96,22 @@ print(len(train), len(test))                                     # app: ${P.nTr}
 X_tr, y_tr = train[features], train["y"]
 X_te, y_te = test[features], test["y"]` + split });
 
-    out.push({ id: 5, t: 'Step 5: scale with the training mean and SD', code:
+    const catCols = names.filter(GEN.isCat).map(py);
+    out.push(cat ? { id: 5, t: `Step 5: encode ${cat} (text → 0/1 columns), then scale the numeric features`, code:
+`from sklearn.preprocessing import OneHotEncoder
+enc = OneHotEncoder(drop=${dummy ? 'None' : '"first"'}, handle_unknown="ignore", sparse_output=False).fit(X_tr[cat])   # levels learned on the TRAINING rows${dummy ? mark('drop=None keeps every level: the dummy-variable trap') : ''}
+print(enc.categories_)                  # app: ${d.rawCat.levels.join(', ')}${dummy ? '' : ` (reference ${d.rawCat.ref}, dropped)`}
+def encode(part):                       # the same columns for train and test; a level never seen in training gets all zeros
+    dummies = pd.DataFrame(enc.transform(part[cat]), columns=enc.get_feature_names_out(cat), index=part.index)
+    return pd.concat([part[num], dummies], axis=1)
+X_tr, X_te = encode(X_tr), encode(X_te)
+print(list(X_tr.columns))               # app: ${Q(feats)}
+
+scaler = StandardScaler().fit(X_tr[num])   # μ and s of the numeric features, TRAINING rows only (ddof=0)
+print(scaler.mean_)                     # app: μ = ${L(P.mu.filter((_, k) => k && !GEN.isCat(names[k])))}
+print(scaler.scale_)                    # app: s = ${L(P.sd.filter((_, k) => k && !GEN.isCat(names[k])))}
+Xs_tr, Xs_te = X_tr.copy(), X_te.copy()
+Xs_tr[num], Xs_te[num] = scaler.transform(X_tr[num]), scaler.transform(X_te[num])   # the 0/1 columns stay 0/1` } : { id: 5, t: 'Step 5: scale with the training mean and SD', code:
 `scaler = StandardScaler().fit(X_tr)     # learns μ and s from the TRAINING rows only (s uses ddof=0, as in the app)
 print(scaler.mean_)                     # app: μ = ${L(P.mu.slice(1))}
 print(scaler.scale_)                    # app: s = ${L(P.sd.slice(1))}
@@ -170,11 +188,11 @@ lr = model.named_steps["linearregression"]; sc = model.named_steps["standardscal
 print(lr.coef_ / sc.scale_, lr.intercept_ - np.sum(lr.coef_ * sc.mean_ / sc.scale_))` });
 
     const FIX = {
-      linearity: vid === 'interaction' ? `smf.ols("y ~ ${X0} * group${plus}", data=train).fit()   # let the slope differ by group` : vid === 'linear' ? null : vid === 'log' ? `smf.ols("y ~ np.log1p(${X0})${plus}", data=train).fit()   # model the diminishing effect` : vid === 'step' ? `smf.ols("y ~ ${X0} + I(${X0} > 5)${plus}", data=train).fit()   # add the threshold indicator` : vid === 'periodic' ? `smf.ols("y ~ ${X0} + np.sin(1.6 * ${X0}) + np.cos(1.6 * ${X0})${plus}", data=train).fit()   # seasonal terms` : `smf.ols("y ~ ${X0} + I(${X0} ** 2)${plus}", data=train).fit()   # or splines: bs(${X0}, df=4)`,
+      linearity: vid === 'interaction' ? `smf.ols("y ~ ${X0} * C(customer)${plus}", data=train).fit()   # let the slope differ by customer type` : vid === 'linear' ? null : vid === 'log' ? `smf.ols("y ~ np.log1p(${X0})${plus}", data=train).fit()   # model the diminishing effect` : vid === 'step' ? `smf.ols("y ~ ${X0} + I(${X0} > 5)${plus}", data=train).fit()   # add the threshold indicator` : vid === 'periodic' ? `smf.ols("y ~ ${X0} + np.sin(1.6 * ${X0}) + np.cos(1.6 * ${X0})${plus}", data=train).fit()   # seasonal terms` : `smf.ols("y ~ ${X0} + I(${X0} ** 2)${plus}", data=train).fit()   # or splines: bs(${X0}, df=4)`,
       independence: vid === 'cluster' ? `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="cluster", cov_kwds={"groups": train["${grp}"]})   # or a mixed model: smf.mixedlm("y ~ ${fe.join(' + ')}", train, groups=train["${grp}"])` : vid === 'dupes' ? `df = df.drop_duplicates(subset=features + ["y"])   # then refit; classical SEs are fine again` : vid === 'indep' ? null : `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HAC", cov_kwds={"maxlags": ${lag}})   # or model the dynamics: sm.tsa.SARIMAX(y, exog=X, order=(1, 0, 0))`,
       homoscedasticity: vid === 'constant' ? null : vid === 'groupvar' ? `w = 1 / train.groupby("${grp}")["y"].transform(lambda s: ols.resid[s.index].var())\nsm.WLS(y_tr, sm.add_constant(X_tr), weights=w).fit()   # weight each group by 1 / its variance` : `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HC3")   # robust SEs; or WLS, or model np.log(y)`,
       normality: vid === 'normal' ? null : vid === 'heavy' ? `from sklearn.linear_model import HuberRegressor\nHuberRegressor().fit(Xs_tr, y_tr)   # down-weights the extreme rows` : `# bootstrap the slope instead of trusting the t interval:\nboot = [sm.OLS(s["y"], sm.add_constant(s[features])).fit().params.iloc[1] for s in (train.sample(frac=1, replace=True, random_state=k) for k in range(2000))]\nprint(np.percentile(boot, [2.5, 97.5]))`,
-      multicollinearity: vid === 'uncorr' ? null : dummy ? `pd.get_dummies(df["category"], drop_first=True)   # keep k - 1 dummies` : vid === 'perfect' || vid === 'combo' ? `features = [${feats.filter(x => x !== (vid === 'perfect' ? 'x2' : 'x3')).map(x => `"${x}"`).join(', ')}]   # drop the redundant ${vid === 'perfect' ? 'x2' : 'x3'}, then refit` : `from sklearn.linear_model import RidgeCV\nmake_pipeline(StandardScaler(), RidgeCV(alphas=np.logspace(-3, 3, 50))).fit(X_tr, y_tr)   # shrink the unstable directions`,
+      multicollinearity: vid === 'uncorr' ? null : dummy ? `enc = OneHotEncoder(drop="first", handle_unknown="ignore", sparse_output=False)   # keep k - 1 dummies: blue becomes the reference` : vid === 'perfect' || vid === 'combo' ? `features = [${feats.filter(x => x !== (vid === 'perfect' ? 'x2' : 'x3')).map(x => `"${x}"`).join(', ')}]   # drop the redundant ${vid === 'perfect' ? 'x2' : 'x3'}, then refit` : `from sklearn.linear_model import RidgeCV\nmake_pipeline(StandardScaler(), RidgeCV(alphas=np.logspace(-3, 3, 50))).fit(X_tr, y_tr)   # shrink the unstable directions`,
       exogeneity: vid === 'exo' ? null : `# No residual test can detect this. Add the missing variable if you have it, or use an instrument:\n# from linearmodels.iv import IV2SLS\n# IV2SLS.from_formula("y ~ 1 + [x ~ instrument]", data=df).fit()`,
       outliers: vid === 'outnone' ? null : `infl = OLSInfluence(ols)
 k = int(np.argmax(infl.cooks_distance[0]))                      # the most influential training row
@@ -208,11 +226,10 @@ print(logm.params)                          # each unit of x multiplies y by exp
 print(smf.ols("z ~ ${fe.join(' + ')}", data=train).fit().params)`,
       categorical: vid === 'cnone' ? null : vid === 'chigh' ? `# 24 one-hot columns for 25 levels overfit. Alternatives:
 # from category_encoders import TargetEncoder           # target encoding, fitted inside cross-validation
-mixed = smf.mixedlm("y ~ ${X0}", train, groups=train["category"]).fit()   # a random effect per level shrinks rare levels
-print(mixed.params)` : `tr2 = train.drop(columns=[${names.filter(GEN.isCat).map(x => `"${py(x)}"`).join(', ')}])   # keep the raw category instead of the 0/1 columns
-full = smf.ols("y ~ ${X0} + C(category)", data=tr2).fit()       # the formula one-hot encodes and drops the reference level
+mixed = smf.mixedlm("y ~ ${X0}", train, groups=train["${cat}"]).fit()   # a random effect per level shrinks rare levels
+print(mixed.params)` : `full = smf.ols("y ~ ${X0} + C(${cat})", data=train).fit()       # the formula one-hot encodes the text column and drops the reference level
 print(full.params)
-print(sm.stats.anova_lm(smf.ols("y ~ ${X0}", data=tr2).fit(), full))   # partial F-test for the whole category`,
+print(sm.stats.anova_lm(smf.ols("y ~ ${X0}", data=train).fit(), full))   # partial F-test for the whole category`,
       subgroups: vid === 'sgnone' ? null : `print(smf.ols("y ~ ${X0}", data=train).fit().params)                 # pooled
 print(smf.ols("y ~ ${X0} * C(group)", data=train).fit().params)      # with the group: each group gets its own line${mark('the group must be recorded')}`,
       shift: vid === 'shnone' ? null : `print(X_tr.describe().loc[["mean", "std"]], X_te.describe().loc[["mean", "std"]])   # compare the input distributions

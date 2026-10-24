@@ -26,6 +26,15 @@ const GEN = (() => {
   const sortedX = (P, N) => P.u1.slice(0, N).map(v => 10 * v).sort((a, b) => a - b);
   const lin = x => 2 + 1.5 * x;
 
+  /* a categorical feature as it is recorded: text. The 0/1 columns are what step 5 makes from it
+     (named like pandas.get_dummies / OneHotEncoder: "region_North"); the reference level (alphabetically first) gets no column unless keepAll. */
+  function rawCat(name, levels, g, keepAll = false){
+    const lv = keepAll ? levels.map((_, q) => q) : levels.map((_, q) => q).slice(1), cat = {}, base = 2;
+    lv.forEach((q, k) => { cat[base + k] = q; });
+    return { names: lv.map(q => `${name}_${levels[q]}`), cols: i => lv.map(q => +(g[i] === q)), cat,
+      raw: { name, levels, ref: keepAll ? null : levels[0], keepAll, vals: g.map(q => levels[q]) },
+      groupNames: levels.map((l, q) => keepAll || q ? l : `${l} (reference)`) };
+  }
   function oneFeature(x, f, e, extra = {}){
     const y = x.map((v, i) => f(v, i) + e[i]);
     return Object.assign({ X: x.map(v => [1, v]), names: ['1', 'x'], y, px: x, xName: 'x', truth: { coef: { 0: 2, 1: 1.5 }, fn: f }, focus: [1] }, extra);
@@ -42,8 +51,8 @@ const GEN = (() => {
   G.periodic = (P, N, sg, s) => { const x = sortedX(P, N), f = v => lin(v) + s * 4 * Math.sin(1.6 * v); return oneFeature(x, f, P.z1.map(z => sg * z), { truth: { coef: {}, fn: f } }); };
   G.interaction = (P, N, sg, s) => {
     const x = sortedX(P, N), g = P.grp.slice(0, N), f = (v, i) => lin(v) + s * (1.4 * v - 7) * g[i];
-    const y = x.map((v, i) => f(v, i) + sg * P.z1[i]);
-    return { X: x.map((v, i) => [1, v, g[i]]), names: ['1', 'x', 'group'], y, px: x, xName: 'x', group: g, groupNames: ['group 0', 'group 1'],
+    const y = x.map((v, i) => f(v, i) + sg * P.z1[i]), rc = rawCat('customer', ['new', 'returning'], g);
+    return { X: x.map((v, i) => [1, v, ...rc.cols(i)]), names: ['1', 'x', ...rc.names], y, px: x, xName: 'x', group: g, groupNames: rc.groupNames, cat: rc.cat, rawCat: rc.raw,
       truth: { coef: {}, fn: f, byGroup: [v => lin(v), v => lin(v) + s * (1.4 * v - 7)] }, focus: [1] };
   };
   /* ---------- independence ---------- */
@@ -99,9 +108,9 @@ const GEN = (() => {
   };
   G.dummytrap = (P, N, sg) => {
     const x1 = P.u1.slice(0, N).map(v => 10 * v), c = P.u2.slice(0, N).map(v => Math.min(2, Math.floor(3 * v)));
-    const y = x1.map((v, i) => 2 + 1.5 * v + [0, 3, 6][c[i]] + sg * P.z1[i]);
-    return { X: x1.map((v, i) => [1, v, +(c[i] === 0), +(c[i] === 1), +(c[i] === 2)]), names: ['1', 'x', 'A', 'B', 'C'], y, px: x1, xName: 'x',
-      group: c, groupNames: ['category A', 'category B', 'category C'], truth: { coef: { 1: 1.5 }, fn: null, byGroup: [0, 3, 6].map(k => v => 2 + 1.5 * v + k) }, focus: [1, 2] };
+    const y = x1.map((v, i) => 2 + 1.5 * v + [0, 3, 6][c[i]] + sg * P.z1[i]), rc = rawCat('colour', ['blue', 'green', 'red'], c, true);
+    return { X: x1.map((v, i) => [1, v, ...rc.cols(i)]), names: ['1', 'x', ...rc.names], y, px: x1, xName: 'x', cat: rc.cat, rawCat: rc.raw,
+      group: c, groupNames: rc.groupNames, truth: { coef: { 1: 1.5 }, fn: null, byGroup: [0, 3, 6].map(k => v => 2 + 1.5 * v + k) }, focus: [1, 2] };
   };
   /* ---------- exogeneity ---------- */
   G.exo = G.linear;
@@ -153,7 +162,7 @@ const GEN = (() => {
   const noiseCols = (r, m, P, nameOf) => { const rng = P.rng2(); for (let q = 0; q < m; q++) { const nm = nameOf(q); r.names.push(nm); r.X.forEach(row => row.push(10 * rng())); r.truth.coef[r.X[0].length - 1] = 0; } return r; };
   G.irnone = G.linear;
   G.irfew = (P, N, sg) => noiseCols(G.linear(P, N, sg), 3, P, q => 'n' + SUBS[q]);
-  G.irmany = (P, N, sg) => noiseCols(G.linear(P, N, sg), 15, P, q => 'n' + SUBS2(q + 1));
+  G.irmany = (P, N, sg) => noiseCols(G.linear(P, N, sg), 8, P, q => 'n' + SUBS2(q + 1));
   G.ircopy = (P, N, sg, s) => { const r = G.linear(P, N, sg), sd = 0.05 + 2 * (1 - s); r.names.push('x_copy'); r.X.forEach((row, i) => row.push(row[1] + sd * P.z2[i])); r.truth.coef[2] = 0;
     return Object.assign(r, { note: `x_copy = x + ${num(sd, 2)}·z: the same information again` }); };
   /* missing data: values of y are lost; the affected rows are dropped (complete-case analysis) after the extras are added */
@@ -181,21 +190,20 @@ const GEN = (() => {
     const pois = (l, q) => { let k = 0, p = Math.exp(-l), c = p; while (q > c && k < 200) { k++; p *= l / k; c += p; } return k; };
     const y = x.map((v, i) => pois(lam(v), u[i])); const r = oneFeature(x, lam, x.map(() => 0), { truth: { coef: {}, fn: lam }, bounds: [0, Infinity], counts: true }); r.y = y; return r; };
   /* categorical features: one-hot columns (reference level dropped) */
-  const catData = (P, N, sg, L, effect, names, nameOf) => { const x = P.u1.slice(0, N).map(v => 10 * v), rng = P.rng2();
+  const catData = (P, N, sg, L, effect, name, levels) => { const x = P.u1.slice(0, N).map(v => 10 * v), rng = P.rng2();
     // with many levels, the first 2L rows hold every level twice and are kept in training, so every dummy column has rows
     const g = Array.from({ length: N }, (_, i) => L > 6 && i < 2 * L ? i % L : Math.min(L - 1, Math.floor(L * (L > 6 ? rng() : P.u2[i]))));
-    const y = x.map((v, i) => lin(v) + effect[g[i]] + sg * P.z1[i]), cols = {};
-    const X = x.map((v, i) => [1, v, ...Array.from({ length: L - 1 }, (_, q) => +(g[i] === q + 1))]);
-    for (let q = 1; q < L; q++) cols[q + 1] = q;
+    const y = x.map((v, i) => lin(v) + effect[g[i]] + sg * P.z1[i]), rc = rawCat(name, levels, g);
+    const X = x.map((v, i) => [1, v, ...rc.cols(i)]);
     const coef = { 0: 2 + effect[0], 1: 1.5 }; for (let q = 1; q < L; q++) coef[q + 1] = effect[q] - effect[0];
-    return { X, names: ['1', 'x', ...Array.from({ length: L - 1 }, (_, q) => nameOf(q + 1))], y, px: x, xName: 'x', group: g, groupNames: names, cat: cols, forceTrain: L > 6 ? [...Array(Math.min(N, 2 * L)).keys()] : undefined,
+    return { X, names: ['1', 'x', ...rc.names], y, px: x, xName: 'x', group: g, groupNames: rc.groupNames, cat: rc.cat, rawCat: rc.raw, forceTrain: L > 6 ? [...Array(Math.min(N, 2 * L)).keys()] : undefined,
       truth: { coef, fn: null, byGroup: effect.map(e => v => lin(v) + e) }, focus: [1, 2] };
   };
   G.cnone = G.linear;
-  G.cbin = (P, N, sg, s) => { const r = catData(P, N, sg, 2, [0, 4 * s], ['level A (reference)', 'level B'], () => 'B'); return r; };
-  G.cmulti = (P, N, sg, s) => catData(P, N, sg, 4, [0, 3 * s, -2 * s, 5 * s], ['A (reference)', 'B', 'C', 'D'], q => 'BCD'[q - 1]);
+  G.cbin = (P, N, sg, s) => catData(P, N, sg, 2, [0, 4 * s], 'segment', ['basic', 'premium']);
+  G.cmulti = (P, N, sg, s) => catData(P, N, sg, 4, [0, 3 * s, -2 * s, 5 * s], 'region', ['East', 'North', 'South', 'West']);
   G.chigh = (P, N, sg, s) => { const L = 25, rng = mulberry32(P.seed * 911 + 3), gz = gaussFn(rng), eff = Array.from({ length: L }, (_, q) => q ? 3 * s * gz() : 0);
-    return catData(P, N, sg, L, eff, Array.from({ length: L }, (_, q) => 'level ' + (q + 1) + (q ? '' : ' (reference)')), q => 'c' + SUBS2(q + 1)); };
+    return catData(P, N, sg, L, eff, 'branch', Array.from({ length: L }, (_, q) => 'B' + String(q + 1).padStart(2, '0'))); };
   /* hidden subgroups: the group is real but not a column of X */
   const hidden = (P, N, sg, s, fns) => { const x0 = P.u1.slice(0, N).map(v => 10 * v), g = P.grp.slice(0, N);
     const x = x0.map((v, i) => fns.x ? fns.x(v, g[i], i) : v), y = x.map((v, i) => fns.f[g[i]](v) + sg * P.z1[i]);
@@ -231,11 +239,13 @@ const GEN = (() => {
   const EXTRA_BETA = [0.8, -0.6, 0.5, -0.4, 0.3, 0.7, -0.5, 0.4, -0.3];
   const SUBS = ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉', '₁₀'];
   const SUBS2 = k => String(k).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch]).join('');
-  const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3, nlarge: 5, nmod: 5, nsmall: 5, nap: 5, nlp: 5, irfew: 4, irmany: 16, ircopy: 2 };
-  /* categorical columns (not numeric features): the binary 'group', the A/B/C/D dummies, and c₂…c₂₅ */
-  const isCat = nm => ['group', 'A', 'B', 'C', 'D'].includes(nm) || /^c[₀-₉]+$/.test(nm);
+  const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3, nlarge: 5, nmod: 5, nsmall: 5, nap: 5, nlp: 5, irfew: 4, irmany: 9, ircopy: 2, interaction: 2, dummytrap: 2, cbin: 2, cmulti: 2, chigh: 2, lktarget: 2, lkprep: 2 };
+  /* 0/1 columns made from a categorical feature (named "feature_level") */
+  const CAT_NAMES = ['customer', 'colour', 'segment', 'region', 'branch'];
+  const isCat = nm => typeof nm === 'string' && CAT_NAMES.some(c => nm.startsWith(c + '_'));
   /* columns of the design matrix including categorical ones (for the minimum N) */
-  const P_EXTRA = { cbin: 1, cmulti: 3, chigh: 41, dummytrap: 3, interaction: 1, lktarget: 1, lkprep: 1 };
+  /* extra design-matrix columns beyond one per feature: a category with L levels is one feature but L − 1 columns (chigh also needs every level twice in training) */
+  const P_EXTRA = { cbin: 0, cmulti: 2, chigh: 40, dummytrap: 2, interaction: 0 };
   const pCount = (variant, k) => Math.max(k, baseCount(variant)) + 1 + (P_EXTRA[variant] || 0);
   /* sample-size variants fix N themselves: p = features + 1 */
   const fixedN = (variant, k) => { const p = Math.max(k, baseCount(variant)) + 1;
@@ -244,12 +254,12 @@ const GEN = (() => {
   const sigmaOf = (variant, sg) => ({ nszero: 0, nsmod: 2.5 * Math.max(sg, 1), nshigh: 6 * Math.max(sg, 1) }[variant] ?? sg);
   const baseCount = variant => BASE_COUNT[variant] || 1;
   function addFeatures(r, k, seed){
-    const numeric = r.names.slice(1).filter(nm => !isCat(nm)).length;
-    const add = Math.max(0, Math.min(10, k) - numeric);
+    const numeric = r.names.slice(1).filter(nm => !isCat(nm)).length, feats = numeric + (r.rawCat ? 1 : 0);
+    const add = Math.max(0, Math.min(10, k) - feats);
     r.m = numeric; r.extra = add;
     // rename a lone 'x' to 'x₁' so the extras can be x₂, x₃, … (also when the variant's own columns fill the k features, so names match its baseline)
-    if (k > 1 && r.names.includes('x')) { r.names = r.names.map(nm => nm === 'x' ? 'x₁' : nm); if (r.xName === 'x') r.xName = 'x₁'; }
     if (!add) return r;
+    if (r.names.includes('x')) { r.names = r.names.map(nm => nm === 'x' ? 'x₁' : nm); if (r.xName === 'x') r.xName = 'x₁'; }
     const rng = mulberry32(seed * 104729 + 77), K = Math.max(r.y.length, 16), U = Array.from({ length: add }, () => Array.from({ length: K }, () => 10 * rng()));
     const idx = i => r.src ? r.src[i] : i, start = r.names.filter(nm => /^x/.test(nm)).length;
     for (let q = 0; q < add; q++) {
@@ -271,5 +281,7 @@ const GEN = (() => {
     if (r.post) { r.post(r); delete r.post; }
     r.N = r.y.length; r.sigmaUsed = sigmaOf(variant, sigma); return r;
   }
-  return { generate, has: id => !!G[id], baseCount, EXTRA_BETA, isCat, pCount, fixedN, sigmaOf };
+  /* the same feature in two datasets: 'x' and 'x₁' are one feature (x is renamed x₁ only when extra features are added) */
+  const colIn = (names, nm) => { let j = names.indexOf(nm); if (j < 0 && (nm === 'x' || nm === 'x₁')) j = names.indexOf(nm === 'x' ? 'x₁' : 'x'); return j; };
+  return { generate, has: id => !!G[id], baseCount, EXTRA_BETA, isCat, pCount, fixedN, sigmaOf, CAT_NAMES, colIn };
 })();

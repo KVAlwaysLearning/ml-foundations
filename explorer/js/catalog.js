@@ -12,7 +12,7 @@ const CATALOG = [
       { id: 'log', name: 'Saturating (log)', desc: 'Rises fast then levels off: y = 2 + 7·ln(1 + x) + ε.', strength: 'blend from linear to log' },
       { id: 'sshape', name: 'S-shaped', desc: 'Flat, steep, then flat again: a logistic curve centred at x = 5.', strength: 'blend from linear to S-curve' },
       { id: 'step', name: 'Step / threshold', desc: 'The mean jumps by 9 units at x = 5, with almost no slope either side.', strength: 'blend from linear to step' },
-      { id: 'interaction', name: 'Missing interaction', desc: 'Two groups whose slopes differ (1.5 vs 2.9), fitted with one common slope: y ~ x + group.', strength: 'slope difference between groups' },
+      { id: 'interaction', name: 'Missing interaction', desc: 'Two customer types (new, returning) whose slopes differ (1.5 vs 2.9), fitted with one common slope: y ~ x + customer.', strength: 'slope difference between groups' },
       { id: 'periodic', name: 'Periodic', desc: 'A straight trend plus a wave: y = 2 + 1.5x + 4·sin(1.6x) + ε.', strength: 'wave amplitude' }
     ]},
     { id: 'independence', name: 'Independence of errors', diag: 'order', variants: [
@@ -43,7 +43,7 @@ const CATALOG = [
       { id: 'high', name: 'High correlation', desc: 'x₁ and x₂ correlate at about ρ = 0.97.', strength: 'ρ from 0 to 0.97' },
       { id: 'perfect', name: 'Perfect copy', desc: 'x₂ = 2x₁ exactly. XᵀX is singular and the two coefficients cannot be separated.', strength: 'how exact the copy is' },
       { id: 'combo', name: 'Exact combination', desc: 'Three features with x₃ = x₁ + x₂ exactly: no single column is a copy, yet XᵀX is singular.', strength: 'how exact the combination is' },
-      { id: 'dummytrap', name: 'Dummy-variable trap', desc: 'A 3-level category one-hot encoded with all three columns plus an intercept: the dummies sum to the ones column.' }
+      { id: 'dummytrap', name: 'Dummy-variable trap', desc: 'A text column colour (blue, green, red) one-hot encoded with all three columns plus an intercept: the dummies sum to the ones column.' }
     ]},
     { id: 'exogeneity', name: 'Exogeneity', diag: 'fitted', variants: [
       { id: 'exo', name: 'Holds', desc: 'Errors are unrelated to x, so the fitted slope estimates the causal effect (1.5).' },
@@ -100,9 +100,9 @@ const CATALOG = [
     ]},
     { id: 'categorical', name: 'Categorical features', diag: 'fitted', variants: [
       { id: 'cnone', name: 'None', desc: 'Only the numeric x.' },
-      { id: 'cbin', name: 'Binary', desc: 'A two-level category (A, B); level B adds 4 to y. One 0/1 column B.', strength: 'effect of level B' },
-      { id: 'cmulti', name: 'Multi-category', desc: 'Four levels A–D with effects 0, +3, −2, +5; one-hot with A dropped: columns B, C, D.', strength: 'size of the level effects' },
-      { id: 'chigh', name: 'High-cardinality', desc: '25 levels with random effects; one-hot with level 1 dropped gives 24 columns, and most levels have only a few rows.', strength: 'spread of the level effects' }
+      { id: 'cbin', name: 'Binary', desc: 'A text column segment (basic, premium); premium adds 4 to y. Encoded as one 0/1 column, segment_premium.', strength: 'effect of level B' },
+      { id: 'cmulti', name: 'Multi-category', desc: 'A text column region (East, North, South, West) with effects 0, +3, −2, +5; one-hot with East dropped: three 0/1 columns.', strength: 'size of the level effects' },
+      { id: 'chigh', name: 'High-cardinality', desc: 'A text column branch with 25 levels (B01–B25) and random effects; one-hot with B01 dropped gives 24 columns, and most branches have only a few rows.', strength: 'spread of the level effects' }
     ]},
     { id: 'subgroups', name: 'Hidden subgroups', diag: 'fitted', variants: [
       { id: 'sgnone', name: 'None', desc: 'One population.' },

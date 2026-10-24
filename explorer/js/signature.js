@@ -171,8 +171,8 @@ const SIG = (() => {
     const r = corr(x1, x2), rb = corr(b1, b2), vmax = Math.max(...cur.dg.vif), vb = Math.max(...base.dg.vif);
     const dummy = v.id === 'dummytrap', combo = v.id === 'combo';
     const check = dummy ? d.X.map(rw => rw[2] + rw[3] + rw[4]) : combo ? d.X.map(rw => rw[3] - rw[1] - rw[2]) : d.X.map(rw => rw[2] - 2 * rw[1]);
-    return { gen: dummy ? 'A category with three levels (A, B, C) is one-hot encoded and all three 0/1 columns are kept alongside the intercept column of 1s.' : combo ? 'Three features where x₃ = x₁ + x₂ (think: "total spend" kept next to "online spend" and "store spend").' : v.id === 'perfect' ? 'x₂ = 2·x₁ (plus noise that the strength slider removes). Think: the same length recorded in inches and in half-inches.' : `${esc(v.desc)} Think: house size and number of rooms, or age and years of experience.`,
-      see: li([dummy ? 'Every row has exactly one 1 among A, B, C, so A + B + C = 1 = the intercept column on every row. Nothing in the raw data looks odd: the problem is created by the encoding.' :
+    return { gen: dummy ? 'A text column, colour (blue, green, red), is one-hot encoded in step 5 and all three 0/1 columns (colour_blue, colour_green, colour_red) are kept alongside the intercept column of 1s.' : combo ? 'Three features where x₃ = x₁ + x₂ (think: "total spend" kept next to "online spend" and "store spend").' : v.id === 'perfect' ? 'x₂ = 2·x₁ (plus noise that the strength slider removes). Think: the same length recorded in inches and in half-inches.' : `${esc(v.desc)} Think: house size and number of rooms, or age and years of experience.`,
+      see: li([dummy ? 'Every row has exactly one 1 among the three colour columns, so colour_blue + colour_green + colour_red = 1 = the intercept column on every row. Nothing in the raw data looks odd: the problem is created by the encoding.' :
           `In the x₁-vs-x₂ scatter the points ${Math.abs(r) > 0.99 ? 'lie on a line' : Math.abs(r) > 0.9 ? 'form a thin cigar' : 'form a tilted cloud'}, instead of filling the square (baseline).`,
         !dummy ? `Correlation r(x₁, x₂): ${vs(r, rb)}. Only √(1 − r²) = <b>${n(Math.sqrt(Math.max(0, 1 - r * r)) * 100, 0)}%</b> of x₂'s spread is independent of x₁ (baseline ${n(Math.sqrt(1 - rb * rb) * 100, 0)}%). That sliver is all the data has to tell the two effects apart.` : '',
         `Largest VIF: ${vs(vmax, vb, 1, t => isFinite(t) ? n(t, 1) : '∞')}. Condition number κ = λ_max / λ_min of X̃ᵀX̃: ${vs(cur.gram?.kappa, base.gram?.kappa, 1, t => isFinite(t) ? n(t, 1) : '∞')}.` + (cur.gram ? EIG.details(cur.gram.A, cur.d.names, 'How these eigenvalues are calculated (this variant)') : ''),
@@ -181,9 +181,9 @@ const SIG = (() => {
         if (!dummy) { out.push(chart(r1, 'Baseline: x₁ vs x₂', 240, c => scatterXY(c, b1, b2, 'x₁', 'x₂')), chart(r1, 'This variant: x₁ vs x₂', 240, c => scatterXY(c, x1, x2, 'x₁', 'x₂'))); }
         else out.push(chart(r1, 'This variant: data by category (the trap is in the columns, not the points)', 240, c => scatterXY(c, d.px, d.y, 'x', 'y', i => gColor(d.group[i], 3))));
         return out; },
-      table: table(dummy ? ['row', '1', 'A', 'B', 'C', 'A + B + C'] : combo ? ['row', 'x₁', 'x₂', 'x₃', 'x₃ − x₁ − x₂'] : ['row', 'x₁', 'x₂', 'x₂ − 2·x₁', 'y (true)'],
-        d.X.map((rw, i) => dummy ? [i + 1, 1, rw[2], rw[3], rw[4], check[i]] : combo ? [i + 1, rw[1], rw[2], rw[3], check[i]] : [i + 1, rw[1], rw[2], check[i], d.y[i]]),
-        { hi: i => Math.abs(check[i] - (dummy ? 1 : 0)) < 1e-6 ? 'hl' : '', max: 10, foot: dummy ? 'Highlighted: A + B + C equals the intercept column exactly, so one column is redundant.' : combo || v.id === 'perfect' ? 'Highlighted: the identity holds exactly on that row. When it holds on every row, XᵀX has no inverse.' : '' }) };
+      table: table(dummy ? ['row', 'colour (text)', '1', 'colour_blue', 'colour_green', 'colour_red', 'sum of the three'] : combo ? ['row', 'x₁', 'x₂', 'x₃', 'x₃ − x₁ − x₂'] : ['row', 'x₁', 'x₂', 'x₂ − 2·x₁', 'y (true)'],
+        d.X.map((rw, i) => dummy ? [i + 1, d.rawCat ? d.rawCat.vals[i] : '', 1, rw[2], rw[3], rw[4], check[i]] : combo ? [i + 1, rw[1], rw[2], rw[3], check[i]] : [i + 1, rw[1], rw[2], check[i], d.y[i]]),
+        { hi: i => Math.abs(check[i] - (dummy ? 1 : 0)) < 1e-6 ? 'hl' : '', max: 10, foot: dummy ? 'Highlighted: the three colour columns add up to the intercept column exactly, so one column is redundant.' : combo || v.id === 'perfect' ? 'Highlighted: the identity holds exactly on that row. When it holds on every row, XᵀX has no inverse.' : '' }) };
   };
 
   A.exogeneity = ctx => { const { cur, base, v, S } = ctx, d = cur.d, x = d.px, e = cur.f.e, eps = trueErr(d), epsb = trueErr(base.d);

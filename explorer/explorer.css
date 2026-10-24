@@ -442,3 +442,16 @@ a.term:hover{color:var(--surface)}
 .hm-c{min-width:38px;height:30px;text-align:center;border-radius:4px;cursor:pointer;color:var(--ink);font-variant-numeric:tabular-nums}
 .hm-c.hm-d{cursor:default;opacity:.55}
 .hm-c:not(.hm-d):hover,.hm-c:focus-visible,.hm-c.hm-on{outline:2px solid var(--ink);outline-offset:-1px}
+/* frozen minimum of the features slider */
+.ctlbox .ctl{position:relative}
+.ctlbox .ctl .lock{position:absolute;left:0;height:8px;margin-top:9px;border-radius:4px;background:repeating-linear-gradient(135deg,var(--rule) 0 4px,transparent 4px 8px);pointer-events:none;opacity:.9}
+.ctlbox .lock-note{font:12px var(--sans);color:var(--muted);margin-top:2px}
+/* about this variant + the characteristic chart at the top */
+.about{margin:10px 0 6px;border:1px solid var(--rule);border-radius:8px;background:var(--paper)}
+.about>summary{cursor:pointer;padding:9px 12px;font:600 14.5px var(--sans);color:var(--surface)}
+.about-b{padding:4px 14px 12px;font:14.5px/1.55 var(--sans)}
+.about-g{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 22px}
+.about h4{font:600 13px var(--sans);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:10px 0 4px}
+.about ol{margin:0;padding-left:20px}.about li{margin:3px 0}.about p{margin:0 0 4px}
+.topviz{margin-top:10px}.topviz .chart{width:100%}.top-cap{margin-top:6px}
+@media (max-width:760px){.about-g{grid-template-columns:minmax(0,1fr)}}

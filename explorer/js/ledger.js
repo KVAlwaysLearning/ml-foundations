@@ -37,11 +37,13 @@ const LEDGER = (() => {
     try { bpHat = ST.ols(P.Xtr, e.map(v => v * v), true).yhat; } catch (err) {}
     try { const m = ST.mean(f.yhat), s = ST.sd(f.yhat) || 1; zc = f.yhat.map(v => (v - m) / s); resetHat = ST.ols(P.Xtr.map((r, i) => [...r, zc[i] ** 2, zc[i] ** 3]), P.ytr, true).yhat; } catch (err) {}
     const j = d.focus[0], a = f.inv ? P.Xtr.map(r => LA.dot(f.inv[j], r)) : null;
+    const rc = d.rawCat, isC = nm => GEN.isCat(nm);
     const cols = [
-      ...feat.map((nm, q) => ({ h: nm, s: 1, v: k => d.X[tr[k]][q + 1] })),
+      ...feat.map((nm, q) => isC(nm) ? null : ({ h: nm, s: 1, v: k => d.X[tr[k]][q + 1] })).filter(Boolean),
+      ...(rc ? [{ h: `${rc.name} (text)`, s: 1, v: k => rc.vals[tr[k]] }] : []),
       { h: 'y (true)', s: 1, v: k => d.y[tr[k]] },
       { h: 'checks', s: 2, v: k => P.dupFlag[tr[k]] ? 'duplicate' : P.outFlag[tr[k]] ? 'outlier' : 'ok' },
-      ...feat.map((nm, q) => ({ h: `x̃ = (${nm} − μ)/s`, s: 5, v: k => P.Xtr[k][q + 1] })),
+      ...feat.map((nm, q) => isC(nm) ? ({ h: `${nm} (0/1 from ${rc ? rc.name : 'the category'})`, s: 5, v: k => P.Xtr[k][q + 1] }) : ({ h: `x̃ = (${nm} − μ)/s`, s: 5, v: k => P.Xtr[k][q + 1] })),
       { h: '1 (intercept)', s: 6, v: () => 1 },
       { h: 'ŷ = X̃w̃', s: 7, v: k => f.yhat[k] },
       { h: 'e = y − ŷ', s: 8, v: k => e[k] }, { h: 'e²', s: 8, v: k => e[k] ** 2 },
@@ -57,8 +59,9 @@ const LEDGER = (() => {
     const P = c.P, d = c.d, here = at(stepId);
     if (String(stepId) === '4') {
       const k = Math.min(d.y.length, 8);
-      return `<div class="wk"><table><tr><th>row</th>${d.names.slice(1).map(x => `<th>${x}</th>`).join('')}<th>y (true)</th><th class="ldg-new">set</th></tr>` +
-        [...Array(k).keys()].map(i => `<tr><td>${i + 1}</td>${d.X[i].slice(1).map(v => `<td>${n(v)}</td>`).join('')}<td>${n(d.y[i])}</td><td class="ldg-new">${P.isTrain[i] ? 'train' : '<b>test</b>'}</td></tr>`).join('') + `<tr class="gap"><td>⋮</td><td colspan="${d.names.length + 1}">⋮</td></tr></table></div>`;
+      const js = d.names.map((nm, j) => j).filter(j => j > 0 && !GEN.isCat(d.names[j])), rc = d.rawCat;
+      return `<div class="wk"><table><tr><th>row</th>${js.map(j => `<th>${d.names[j]}</th>`).join('')}${rc ? `<th>${rc.name} (text)</th>` : ''}<th>y (true)</th><th class="ldg-new">set</th></tr>` +
+        [...Array(k).keys()].map(i => `<tr><td>${i + 1}</td>${js.map(j => `<td>${n(d.X[i][j])}</td>`).join('')}${rc ? `<td>${rc.vals[i]}</td>` : ''}<td>${n(d.y[i])}</td><td class="ldg-new">${P.isTrain[i] ? 'train' : '<b>test</b>'}</td></tr>`).join('') + `<tr class="gap"><td>⋮</td><td colspan="${d.names.length + 1}">⋮</td></tr></table></div>`;
     }
     if (String(stepId) === '12') {
       const k = Math.min(P.te.length, 6);
