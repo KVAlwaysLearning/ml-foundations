@@ -240,13 +240,14 @@ const GEN = (() => {
   const SUBS = ['₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉', '₁₀'];
   const SUBS2 = k => String(k).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch]).join('');
   const BASE_COUNT = { uncorr: 2, moderate: 2, high: 2, perfect: 2, combo: 3, nlarge: 5, nmod: 5, nsmall: 5, nap: 5, nlp: 5, irfew: 4, irmany: 9, ircopy: 2, interaction: 2, dummytrap: 2, cbin: 2, cmulti: 2, chigh: 2, lktarget: 2, lkprep: 2,
-    scnone: 2, scstd: 2, scminmax: 2, scrobust: 2, intnone: 2, intx: 2, encoh: 2, encall: 2, encord: 2, enctarget: 2, selall: 10, selfwd: 10, selbwd: 10, selstep: 10, sellasso: 10, selvif: 10, selp: 10 };
+    scnone: 2, scstd: 2, scminmax: 2, scrobust: 2, intnone: 2, intx: 2, encoh: 2, encall: 2, encord: 2, enctarget: 2, selall: 10, selfwd: 10, selbwd: 10, selstep: 10, sellasso: 10, selvif: 10, selp: 10,
+    mtsimple: 2, mtmultiple: 2, mtpoly: 2, mtwls: 2, mtgls: 2, rgnone: 8, rgridge: 8, rglasso: 8, rgenet: 8, lam0: 8, lamsmall: 8, lamcv: 8, lamlarge: 8, lamhuge: 8, alridge: 8, albal: 8, allasso: 8, pbno: 3, pbyes: 3, ofpcr: 8, ofpls: 8, ofbayes: 8 };
   /* 0/1 columns made from a categorical feature (named "feature_level") */
   const CAT_NAMES = ['customer', 'colour', 'segment', 'region', 'branch'];
   const isCat = nm => typeof nm === 'string' && CAT_NAMES.some(c => nm.startsWith(c + '_'));
   /* columns of the design matrix including categorical ones (for the minimum N) */
   /* extra design-matrix columns beyond one per feature: a category with L levels is one feature but L − 1 columns (chigh also needs every level twice in training) */
-  const P_EXTRA = { cbin: 0, cmulti: 2, chigh: 40, dummytrap: 2, interaction: 0, deg2: 1, deg3: 2, deg5: 4, deg10: 9, sp1: 1, spmany: 3, binwidth: 3, binquant: 3, encoh: 2, encall: 3, intx: 1, cenraw: 1, cencent: 1 };
+  const P_EXTRA = { cbin: 0, cmulti: 2, chigh: 40, dummytrap: 2, interaction: 0, deg2: 1, deg3: 2, deg5: 4, deg10: 9, sp1: 1, spmany: 3, binwidth: 3, binquant: 3, encoh: 2, encall: 3, intx: 1, cenraw: 1, cencent: 1, mtpoly: 1, mtwls: 1, mtgls: 1 };
   const pCount = (variant, k) => Math.max(k, baseCount(variant)) + 1 + (P_EXTRA[variant] || 0);
   /* sample-size variants fix N themselves: p = features + 1 */
   const fixedN = (variant, k) => { const p = Math.max(k, baseCount(variant)) + 1;
@@ -254,6 +255,9 @@ const GEN = (() => {
   /* noise variants set σ themselves */
   const sigmaOf = (variant, sg) => ({ nszero: 0, nsmod: 2.5 * Math.max(sg, 1), nshigh: 6 * Math.max(sg, 1) }[variant] ?? sg);
   const baseCount = variant => BASE_COUNT[variant] || 1;
+  /* variants that are defined for a fixed number of features only, with the reason shown on the slider */
+  const MAX_COUNT = { rbtheil: [1, 'classic Theil–Sen (median of pairwise slopes) is defined for one feature'] };
+  const maxCount = variant => MAX_COUNT[variant] || null;
   function addFeatures(r, k, seed){
     const numeric = r.names.slice(1).filter(nm => !isCat(nm)).length, feats = numeric + (r.rawCat ? 1 : 0);
     const add = Math.max(0, Math.min(10, k) - feats);
@@ -277,11 +281,12 @@ const GEN = (() => {
     return r;
   }
   function generate(variant, { N, sigma, strength, seed, k = 1 }){
-    const P = pools(N, seed), fn = G[variant] || (FE.has(variant) ? (P2, N2, sg2, s2) => FE.data(variant, P2, N2, sg2, s2) : null);
+    const P = pools(N, seed), fn = G[variant] || (FE.has(variant) ? (P2, N2, sg2, s2) => FE.data(variant, P2, N2, sg2, s2) : MF.has(variant) ? (P2, N2, sg2, s2) => MF.data(variant, P2, N2, sg2, s2) : null);
     if (!fn) throw new Error('No generator for ' + variant);
     const r = addFeatures(fn(P, N, sigmaOf(variant, sigma), strength), k, seed);
     if (r.post) { r.post(r); delete r.post; }
-    if (FE.has(variant)) FE.apply(r, variant, seed);   // feature engineering: the design is built in step 5 from the raw columns
+    if (FE.has(variant)) FE.apply(r, variant, seed);
+    if (MF.has(variant)) MF.apply(r, variant, seed);   // model formulation: the design (model type) and the variant's own model   // feature engineering: the design is built in step 5 from the raw columns
     r.N = r.y.length; r.sigmaUsed = sigmaOf(variant, sigma); return r;
   }
   /* the same feature in two datasets: 'x' and 'x₁' are one feature (x is renamed x₁ only when extra features are added) */
@@ -290,5 +295,5 @@ const GEN = (() => {
   /* a column you can pick as a feature on its own (not a category column, not built from another column) */
   const isFeat = nm => !isCat(nm) && !FE.isAux(nm);
   const colIn = (names, nm) => { let j = names.indexOf(nm); if (j < 0 && (nm === 'x' || nm === 'x₁')) j = names.indexOf(nm === 'x' ? 'x₁' : 'x'); return j; };
-  return { generate, has: id => !!G[id], baseCount, EXTRA_BETA, isCat, pCount, fixedN, sigmaOf, CAT_NAMES, colIn, noScale, isFeat };
+  return { generate, has: id => !!G[id], baseCount, maxCount, EXTRA_BETA, isCat, pCount, fixedN, sigmaOf, CAT_NAMES, colIn, noScale, isFeat };
 })();

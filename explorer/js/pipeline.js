@@ -97,9 +97,12 @@ const PIPE = (() => {
     const wOrig = f.w.map((v, j) => j === 0 ? f.w[0] - f.w.slice(1).reduce((s, wj, k) => s + wj * mu[k + 1] / sd[k + 1], 0) : v / sd[j]);
     const seOrig = f.se.map((v, j) => j === 0 ? NaN : v / sd[j]), unscale = a => a ? a.map((v, j) => j === 0 ? NaN : v / sd[j]) : null;
     const isTrain = new Array(N).fill(false); tr.forEach(i => isTrain[i] = true);
-    return { N, P, names, dupes, outY, outX, eda, nTr, nTe: te.length, mu, sd, Xtr, ytr, Xte, yte, yhte, ete, tr, te, isTrain, dupFlag, outFlag, lossHist, wHist, f, dg, eigH, lim, eta, frac: lr, T, iters, diverged: !isFinite(lossHist[lossHist.length - 1]) || lossHist[lossHist.length - 1] > 1e12,
+    const res = { N, P, names, dupes, outY, outX, eda, nTr, nTe: te.length, mu, sd, Xtr, ytr, Xte, yte, yhte, ete, tr, te, isTrain, dupFlag, outFlag, lossHist, wHist, f, dg, eigH, lim, eta, frac: lr, T, iters, diverged: !isFinite(lossHist[lossHist.length - 1]) || lossHist[lossHist.length - 1] > 1e12,
       hc: unscale(hc), nw: nw && { se: unscale(nw.se), lag: nw.lag }, cl: cl && { se: unscale(cl.se), groups: cl.groups },
       rmseTr: Math.sqrt(f.SSE / nTr), rmseTe, r2Te, wOrig, seOrig, ar, perfect, noDg, splitFixed: sp.fixed, dropped: d.dropped || null, orig, scale: d.scale || 'std' };
+    // Model formulation: the variant's own model, fitted next to OLS on the same standardised training rows
+    try { res.alt = d.alt ? MF.fit(d.alt, res, d) : null; } catch (err) { console.error(err); res.alt = null; }
+    return res;
   }
   return { run, splitIdx };
 })();

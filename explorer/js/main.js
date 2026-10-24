@@ -69,7 +69,7 @@
 
   // ---- computation: one dataset, one split, one run ----
   const mcCache = new Map(); let mcTimer = null, R = 200;
-  const kEff = variant => Math.max(S.k, GEN.baseCount(variant));
+  const kEff = variant => { const mx = GEN.maxCount(variant); return mx ? mx[0] : Math.max(S.k, GEN.baseCount(variant)); };
   /* enough rows for the coefficients and the tests: N_train ≥ p + 6, where p = features + 1 (+ categorical columns) */
   const nMin = variant => Math.max(8, Math.ceil((GEN.pCount(variant, S.k) + 3 + 6) / 0.8));
   /* the sample-size variants set N themselves (N ≈ p and N < p are below the usual minimum on purpose) */
@@ -138,8 +138,10 @@
       sF.el.querySelector('label').firstChild.textContent = base > 1 ? `Number of features k (this variant has ${base} built in${rc ? `: ${featNames.slice(0, base).join(', ')} → ${nCols} column${nCols > 1 ? 's' : ''} after encoding` : ''})` : 'Number of features k';
       let lock = sF.el.querySelector('.lock'), note = sF.el.querySelector('.lock-note'); const inp = sF.el.querySelector('input');
       if (!lock) { lock = document.createElement('div'); lock.className = 'lock'; inp.before(lock); note = document.createElement('div'); note.className = 'lock-note'; inp.after(note); }
-      lock.style.display = note.style.display = base > 1 ? '' : 'none';
-      if (base > 1) { lock.style.width = `calc(${(base - 1) / 9 * 100}% )`; note.textContent = `🔒 Locked at ${base} or more: this variant needs ${featNames.slice(0, base).join(', ')}.${featNames.length > base ? ' Extra features are added from the slider.' : ''}`; }
+      const mxC = GEN.maxCount(v.id);
+      lock.style.display = note.style.display = base > 1 || mxC ? '' : 'none';
+      if (mxC) { lock.style.width = '100%'; note.textContent = `🔒 Locked at ${mxC[0]}: ${mxC[1]}.`; }
+      if (base > 1 && !mxC) { lock.style.width = `calc(${(base - 1) / 9 * 100}% )`; note.textContent = `🔒 Locked at ${base} or more: this variant needs ${featNames.slice(0, base).join(', ')}.${featNames.length > base ? ' Extra features are added from the slider.' : ''}`; }
     }
     sN.set(nEff(v.id)); sN.el.querySelector('label').firstChild.textContent = GEN.fixedN(v.id, S.k) != null ? `Sample size N (set by this variant: ${nEff(v.id)})` : nMin(v.id) > 8 ? `Sample size N (at least ${nMin(v.id)} for ${GEN.pCount(v.id, S.k)} coefficients)` : 'Sample size N';
     sS.el.querySelector('label').firstChild.textContent = GEN.sigmaOf(v.id, S.sigma) !== S.sigma ? `Noise σ (this variant uses σ = ${num(GEN.sigmaOf(v.id, S.sigma), 2)})` : 'Noise σ';
@@ -202,12 +204,20 @@
       binning: { _: 'Drawn against the raw x: a binned model is a staircase, one level per bin.' },
       encoding: { _: 'Coloured by region. Compare how each encoding places the four groups.' },
       centering: { _: 'The fitted curve is identical with or without centring; only the columns (and their VIF and SEs) differ.' },
-      selection: { _: 'A slice through the first kept feature. The selection itself is shown in step 5 and in the fingerprint below.' }
+      selection: { _: 'A slice through the first kept feature. The selection itself is shown in step 5 and in the fingerprint below.' },
+      intercept: { intorigin: 'Solid: OLS with an intercept. Dashed orange: the model forced through (0, 0), which must tilt to reach the data.' },
+      modeltype: { mtsimple: 'One straight line in x₁: x₂ and the curve are left in the errors.', mtmultiple: 'A slice through x₁ with x₂ at its mean: still straight.', mtpoly: 'The fitted curve against the raw x₁ (x₂ at its mean): the shape of the truth.', _: 'Solid: OLS on the same columns. Dashed orange: this variant’s model; the two curves almost coincide, the difference is in the precision (steps 11 and 13).' },
+      robust: { rbols: 'The large pink points are the contaminated rows; compare the fitted line with the dashed truth.', _: 'Large pink points: contaminated rows. Solid: OLS, pulled by them. Dashed orange: the robust model.' },
+      regularisation: { _: 'A slice through x₁ with the other 7 features at their means. Solid: OLS; dashed orange: the penalised model. The difference shows in the coefficients (fingerprint below and step 13).' },
+      lambda: { _: 'A slice through x₁. Solid: OLS; dashed orange: ridge with this λ. A large λ flattens the slice toward the mean.' },
+      alpha: { _: 'A slice through x₁. Solid: OLS; dashed orange: the elastic net with this α.' },
+      penalisebias: { _: 'A slice through x₁. Solid: OLS; dashed orange: ridge. With the intercept penalised the whole line drops toward 0.' },
+      otherforms: { _: 'A slice through x₁. Solid: OLS; dashed orange: this variant’s model.' }
     }[a.id] || {};
     return C2[v.id] || C2._ || 'The variant (filled) against the baseline built from the same random numbers (small grey dots), with the fitted line and the true mean (dashed).';
   }
   function drawTop(Pc, a, v, isBase){
-    if (useDer(cur.d, FS.pick(cur.d.names, 'top').j)) return drawDerived(Pc, cur.d, cur.tv.f, { adj: FS.adj('top'), base: base.d, baseF: base.tv.f, showBase: !isBase && S.ov.top?.base !== false, title: `${v.name}${isBase ? ' (baseline)' : ''}: y against the raw ${cur.d.derive.axisName || 'x'}, with the fitted model` });
+    if (useDer(cur.d, FS.pick(cur.d.names, 'top').j)) return drawDerived(Pc, cur.d, cur.tv.f, { alt: cur.P.alt, adj: FS.adj('top'), base: base.d, baseF: base.tv.f, showBase: !isBase && S.ov.top?.base !== false, title: `${v.name}${isBase ? ' (baseline)' : ''}: y against the raw ${cur.d.derive.axisName || 'x'}, with the fitted model` });
     const d = cur.d, P = cur.P, f = cur.tv.f, names = d.names, { j } = FS.pick(names, 'top'), multi = FS.cols(names).length > 1, adj = FS.adj('top') && multi;
     const xs = d.X.map(r => r[j]), groups = d.group ? d.groupNames.length : 0, grouped = !!d.cat && groups <= 6;
     const sl = FS.slice(d.X, d.y, f.w, j, { keep: FS.catCols(names) }), yp = adj ? sl.y : d.y;
@@ -229,9 +239,11 @@
     dx.forEach((x, k) => Pc.dot([x, dy[k]], css('--normal'), 3.6, true, 0.9));
     trueLines.forEach((l, k) => Pc.line(l, trueLines.length > 1 ? groupColor(k, groups) : css('--ink'), 1.6, [6, 5], 0.85));
     fitLines.forEach((l, k) => Pc.line(l, lineGroups[k] == null ? css('--surface') : groupColor(lineGroups[k], groups), 2.8));
+    const AL = cur.P.alt; if (AL) Pc.line(gx.map(x => [x, LA.dot(rowAt(d, x, 0, j), AL.wOrig)]), css('--residual'), 2.6, [8, 4]);
     if (P.splitFixed) { const trx = P.tr.map(i => xs[i]); Pc.rect(Math.min(...trx), Pc.box.y0, Math.max(...trx), Pc.box.y1, css('--floor'), 0.05); }
     Pc.end();
     const leg = [[css('--surface'), grouped ? 'fitted lines (one per level)' : `fitted line (slope ${num(f.w[j], 3)})`]];
+    if (AL) leg.push([css('--residual'), `this variant's model: ${esc(AL.label)} (slope ${num(AL.wOrig[j], 3)})`, true]);
     if (trueLines.length) leg.push([css('--ink'), trueLines.length > 1 ? 'true line of each group' : 'true mean E[y | x]', true]);
     if (showBase) leg.push([css('--muted'), 'baseline data (same random numbers)']);
     if (sign) leg.push([css('--floor'), 'above the line'], [css('--normal'), 'below the line']);
@@ -276,11 +288,12 @@
     if (bcurve) Pc.line(bcurve, css('--muted'), 2, [3, 4]);
     xs.forEach((x, i) => Pc.dot([x, yp[i]], d.group ? groupColor(d.group[i], d.groupNames.length) : css('--floor'), 3.4, false, 0.85));
     if (o.res) xs.forEach((x, i) => Pc.line([[x, yp[i]], [x, yp[i] - f.e[i]]], css('--residual'), 1, null, 0.7));
+    const acurve = o.alt ? gx.map(xv => [xv, LA.dot(rowOf(xv), o.alt.wOrig)]) : null; if (acurve) Pc.line(acurve, css('--residual'), 2.6, [8, 4]);
     Pc.line(curve, css('--surface'), 2.8); Pc.end();
-    Pc.legend([[css('--surface'), `fitted model (columns ${d.names.slice(1).filter((_, k) => dv.cols.includes(k + 1)).join(', ')} all move with ${an})`], ...(tf ? [[css('--ink'), 'true mean', true]] : []), ...(bcurve ? [[css('--muted'), 'baseline fit', true]] : []), ...(o.showBase ? [[css('--muted'), 'baseline data']] : [])]);
+    Pc.legend([...(acurve ? [[css('--residual'), `this variant's model: ${esc(o.alt.label)}`, true]] : []), [css('--surface'), `${acurve ? 'OLS: ' : ''}fitted model (columns ${d.names.slice(1).filter((_, k) => dv.cols.includes(k + 1)).join(', ')} all move with ${an})`], ...(tf ? [[css('--ink'), 'true mean', true]] : []), ...(bcurve ? [[css('--muted'), 'baseline fit', true]] : []), ...(o.showBase ? [[css('--muted'), 'baseline data']] : [])]);
   }
   function drawFit(P, isBase, id = 'fit'){
-    if (useDer(cur.tv.d, FS.pick(cur.tv.d.names, id).j)) return drawDerived(P, cur.tv.d, cur.tv.f, { adj: FS.adj(id), res: S.res, base: S.cmp && !isBase ? base.tv.d : null, baseF: base.tv.f, title: `The training data and the fitted ${cur.tv.d.derive.cols.length > 1 ? 'curve' : 'line'} (step 9a), against the raw ${cur.tv.d.derive.axisName || 'x'}` });
+    if (useDer(cur.tv.d, FS.pick(cur.tv.d.names, id).j)) return drawDerived(P, cur.tv.d, cur.tv.f, { alt: cur.P.alt, adj: FS.adj(id), res: S.res, base: S.cmp && !isBase ? base.tv.d : null, baseF: base.tv.f, title: `The training data and the fitted ${cur.tv.d.derive.cols.length > 1 ? 'curve' : 'line'} (step 9a), against the raw ${cur.tv.d.derive.axisName || 'x'}` });
     const { d, f } = cur.tv, { j } = FS.pick(d.names, id), adj = FS.adj(id), xs = d.X.map(r => r[j]), groups = d.group ? d.groupNames.length : 0;
     const lo = Math.min(...xs), hi = Math.max(...xs), gx = grid(lo, hi), multi = FS.cols(d.names).length > 1 || FS.catCols(d.names).length > 0, adjN = FS.cols(d.names).length > 1;
     const grouped = !!d.cat && groups <= 6;
@@ -300,10 +313,12 @@
     trueLines.forEach(l => P.line(l, css('--ink'), 1.6, [6, 5], 0.8));
     if (baseLine) P.line(baseLine, css('--muted'), 2, [3, 4]);
     fitLines.forEach((l, k) => P.line(l, lineGroups[k] == null ? css('--surface') : groupColor(lineGroups[k], groups), 2.6));
+    const AL = cur.P.alt; if (AL) P.line(gx.map(x => [x, LA.dot(rowAt(d, x, 0, j), AL.wOrig)]), css('--residual'), 2.6, [8, 4]);
     P.end();
     const leg = [[css('--surface'), d.X[0].length > 2 && !d.group ? `fitted line: slope w = ${num(f.w[j], 3)} for ${d.names[j]}, every other feature at its mean` : 'fitted line (weights from this step)']];
     if (adjN && adj) leg.push([css('--floor'), `points: y − Σ w·(x − mean) over the other features, so each sits its residual e away from the line`]);
     else if (d.X[0].length > 2 && !d.group) leg.push([css('--surface'), 'hollow: the model’s ŷ for each row (it uses every feature)']);
+    if (AL) leg.push([css('--residual'), `this variant's model: ${esc(AL.label)} (slope ${num(AL.wOrig[j], 3)})`, true]);
     if (trueLines.length) leg.push([css('--ink'), 'true mean E[y | x]', true]);
     if (baseLine) leg.push([css('--muted'), 'baseline fit (same rows of the baseline data)', true]);
     if (S.res) leg.push([css('--residual'), 'residuals e = y − ŷ']);

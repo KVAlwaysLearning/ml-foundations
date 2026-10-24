@@ -181,15 +181,52 @@ const CATALOG = [
       { id: 'selp', name: 'p-value-based', desc: 'Fit once with everything and drop every column with p > 0.05.' }
     ]}
   ]},
-  { id: 'formulation', name: 'Model formulation', attrs: [
-    { id: 'intercept', name: 'Intercept', variants: ['Included', 'Through the origin'] },
-    { id: 'modeltype', name: 'Model type', variants: ['Simple', 'Multiple', 'Polynomial', 'Weighted LS', 'Generalised LS'] },
-    { id: 'robust', name: 'Robust alternatives', variants: ['OLS', 'Huber', 'RANSAC', 'Theil–Sen', 'Quantile (median)'] },
-    { id: 'regularisation', name: 'Regularisation', variants: ['None', 'Ridge', 'Lasso', 'Elastic net'] },
-    { id: 'lambda', name: 'Penalty strength λ', variants: ['0', 'Small', 'Optimal (CV)', 'Large', 'Very large'] },
-    { id: 'alpha', name: 'Elastic-net mix α', variants: ['Pure ridge', 'Balanced', 'Pure lasso'] },
-    { id: 'penalisebias', name: 'Penalise the bias?', variants: ['No', 'Yes'] },
-    { id: 'otherforms', name: 'Other formulations', variants: ['PCA regression', 'Partial least squares', 'Bayesian'] }
+  { id: 'formulation', name: 'Model formulation', live: true, attrs: [
+    { id: 'intercept', name: 'Intercept', diag: 'fitted', variants: [
+      { id: 'intin', name: 'Included', desc: 'y = 6 + 1.0x + ε, fitted with an intercept.' },
+      { id: 'intorigin', name: 'Through the origin', desc: 'The same data, fitted with the intercept forced to 0: ŷ = w·x.' }
+    ]},
+    { id: 'modeltype', name: 'Model type', diag: 'fitted', variants: [
+      { id: 'mtsimple', name: 'Simple', desc: 'One feature, x₁, for data that depend on x₁, x₂ and x₁².' },
+      { id: 'mtmultiple', name: 'Multiple', desc: 'Both features x₁ and x₂, still straight lines.' },
+      { id: 'mtpoly', name: 'Polynomial', desc: 'x₁, x₂ and x₁²: the right shape for the mean.' },
+      { id: 'mtwls', name: 'Weighted LS', desc: 'The polynomial model, with each row weighted by 1 / its estimated error variance.' },
+      { id: 'mtgls', name: 'Generalised LS', desc: 'The polynomial model, refitted after removing the row-to-row correlation of the errors (Prais–Winsten).' }
+    ]},
+    { id: 'robust', name: 'Robust alternatives', diag: 'leverage', variants: [
+      { id: 'rbols', name: 'OLS', desc: 'Ordinary least squares on data with a few gross outliers.' },
+      { id: 'rbhuber', name: 'Huber', desc: 'Squared loss for small residuals, linear loss for large ones, by iteratively reweighted least squares.' },
+      { id: 'rbransac', name: 'RANSAC', desc: 'Fit many random pairs of rows; keep the line with the most inliers; refit on them.' },
+      { id: 'rbtheil', name: 'Theil–Sen', desc: 'The slope is the median of the slopes of all pairs of rows.' },
+      { id: 'rbquant', name: 'Quantile (median)', desc: 'Minimise the sum of absolute errors: the line through the conditional median.' }
+    ]},
+    { id: 'regularisation', name: 'Regularisation', diag: 'fitted', variants: [
+      { id: 'rgnone', name: 'None', desc: 'Least squares on 8 correlated features, only 4 of which matter.' },
+      { id: 'rgridge', name: 'Ridge', desc: 'Adds λ·Σw² to the loss (λ by 5-fold CV): shrinks all weights toward 0.' },
+      { id: 'rglasso', name: 'Lasso', desc: 'Adds λ·Σ|w| (λ by CV): shrinks, and sets some weights exactly to 0.' },
+      { id: 'rgenet', name: 'Elastic net', desc: 'Half ridge, half lasso penalty (α = 0.5), λ by CV.' }
+    ]},
+    { id: 'lambda', name: 'Penalty strength λ', diag: 'fitted', variants: [
+      { id: 'lam0', name: '0', desc: 'Ridge with λ = 0: the same as least squares.' },
+      { id: 'lamsmall', name: 'Small', desc: 'Ridge with λ = 0.1: barely any shrinkage.' },
+      { id: 'lamcv', name: 'Optimal (CV)', desc: 'Ridge with the λ that gives the lowest 5-fold cross-validation error.' },
+      { id: 'lamlarge', name: 'Large', desc: 'Ridge with λ = 300: strong shrinkage.' },
+      { id: 'lamhuge', name: 'Very large', desc: 'Ridge with λ = 30 000: every weight nearly 0, the model predicts about the mean.' }
+    ]},
+    { id: 'alpha', name: 'Elastic-net mix α', diag: 'fitted', variants: [
+      { id: 'alridge', name: 'Pure ridge', desc: 'α = 0: only the squared penalty.' },
+      { id: 'albal', name: 'Balanced', desc: 'α = 0.5: half squared, half absolute penalty.' },
+      { id: 'allasso', name: 'Pure lasso', desc: 'α = 1: only the absolute penalty.' }
+    ]},
+    { id: 'penalisebias', name: 'Penalise the bias?', diag: 'fitted', variants: [
+      { id: 'pbno', name: 'No', desc: 'Ridge (λ = 10) that leaves the intercept free; y averages about 60.' },
+      { id: 'pbyes', name: 'Yes', desc: 'The same ridge, but the intercept is shrunk toward 0 as well.' }
+    ]},
+    { id: 'otherforms', name: 'Other formulations', diag: 'fitted', variants: [
+      { id: 'ofpcr', name: 'PCA regression', desc: 'Regress y on the first k principal components of the features (k by CV).' },
+      { id: 'ofpls', name: 'Partial least squares', desc: 'Like PCA regression, but the components are chosen to predict y (k by CV).' },
+      { id: 'ofbayes', name: 'Bayesian', desc: 'A normal prior N(0, 1) on each standardised weight: the posterior mean and its spread.' }
+    ]}
   ]},
   { id: 'loss', name: 'Loss function', attrs: [
     { id: 'lossfn', name: 'Loss', variants: ['MSE', 'MAE', 'Huber', 'Quantile', 'Log-cosh'] },

@@ -279,7 +279,16 @@ const INF = {
     11: ['major', 'p-values after selection are too optimistic: the columns were chosen for looking significant.'],
     12: ['major', 'Removing noise columns usually improves the test error; removing useful ones hurts it.'],
     13: ['major', 'A dropped column is not proven useless, and a kept one is not proven causal.']
-  }
+  },
+  /* ---------- Model formulation: the variant's own model, next to OLS ---------- */
+  intercept: { 7: ['origin', 'The model is written without an intercept: ŷ = w·x.'], '9a': ['major', 'Without an intercept the slope has to absorb the level of y: it is biased.'], 10: ['major', 'Residuals no longer average 0.'], 11: ['major', 'R² is computed around 0 instead of around ȳ and looks misleadingly high.'], 12: ['major', 'Test error is larger.'], 13: ['major', 'The slope does not mean what the true slope means.'] },
+  modeltype: { 7: ['origin', 'The model type decides which columns go in and how the rows are weighted.'], '9a': ['major', 'Different model types solve different equations.'], 10: ['major', 'The residual checks show what the simpler models miss.'], 11: ['major', 'WLS and GLS give honest standard errors when the error spread or correlation is modelled.'], 12: ['major', 'Test error drops as the model gets the shape right.'] },
+  robust: { 7: ['origin', 'A different way of fitting the same straight line.'], 8: ['major', 'The loss grows slower than e² for large residuals (or not at all).'], '9a': ['major', 'The robust line is not pulled by the outliers.'], 10: ['major', 'The outliers stand out as large residuals of the robust fit.'], 12: ['major', 'On clean test rows, the robust line predicts better.'], 13: ['major', 'The robust slope describes the bulk of the data.'] },
+  regularisation: { 5: ['major', 'Features must be standardised so the penalty treats them alike.'], 8: ['origin', 'A penalty on the size of the weights is added to the loss.'], '9a': ['major', 'The solution changes: ridge adds λ to the diagonal of X̃ᵀX̃; lasso needs coordinate descent.'], 11: ['major', 'Classical SEs and p-values do not apply to penalised estimates.'], 12: ['major', 'Shrinkage trades a little bias for less variance: test error usually drops with correlated features.'], 13: ['major', 'Coefficients are shrunk toward 0 (biased) on purpose.'] },
+  lambda: { 8: ['origin', 'λ sets how much the penalty counts against the fit.'], '9a': ['major', 'Larger λ, smaller weights.'], 12: ['major', 'Too small: overfits; too large: underfits. CV picks the middle.'], 13: ['major', 'Coefficients shrink toward 0 as λ grows.'] },
+  alpha: { 8: ['origin', 'α mixes the squared (ridge) and absolute (lasso) penalties.'], '9a': ['major', 'With α > 0, some weights become exactly 0.'], 12: ['minor', 'Test error is similar across α when λ is tuned.'], 13: ['major', 'Lasso keeps one of a group of correlated features; ridge spreads the weight over all of them.'] },
+  penalisebias: { 8: ['origin', 'Whether the intercept is part of the penalty.'], '9a': ['major', 'A penalised intercept is pulled toward 0, away from the mean of y.'], 12: ['major', 'Every prediction is shifted toward 0.'], 13: ['major', 'The intercept is wrong; the slopes are barely affected.'] },
+  otherforms: { 6: ['major', 'PCA and PLS replace the correlated columns by a few uncorrelated components.'], 7: ['origin', 'A different model built on the same features.'], '9a': ['major', 'The solution is found in component space (PCA, PLS) or as a posterior (Bayesian).'], 11: ['major', 'Bayesian credible intervals replace confidence intervals.'], 12: ['major', 'Fewer effective parameters: less variance on correlated data.'], 13: ['major', 'Coefficients are mapped back from the components, or come with posterior spreads.'] }
 };
 const INF_V = {
   interaction: { 5: ['major', 'Add the x · group interaction term.'], 13: ['major', 'The effect of x differs by group, so one slope is wrong for both.'] },
@@ -338,6 +347,18 @@ const INF_V = {
   ytnone: { 10: ['major', 'Residuals curve and fan out, and are skewed.'] },
   xtnone: { 10: ['major', 'Residuals bend: the straight line in raw x misses the log shape.'] }
 };
+/* Model formulation: what the variant's own model is, minimises, finds and scores (next to the OLS backbone) */
+const ALT_MODEL = { origin: 'ŷ = w·x (no intercept: the line must pass through 0)', wls: 'ŷ = X̃w̃, the same columns as OLS', gls: 'ŷ = X̃w̃, with errors εₜ = ρεₜ₋₁ + uₜ', huber: 'ŷ = X̃w̃, the same line shape as OLS', ransac: 'ŷ = X̃w̃, fitted on the inliers only', theil: 'ŷ = b + w·x', quantile: 'ŷ = X̃w̃ estimates the median of y, not its mean', ridge: 'ŷ = X̃w̃, the same columns as OLS', lasso: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', enet: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', pcr: 'ŷ = b + Σ γₖ·(component k); each component is a fixed mix of the features', pls: 'ŷ = b + Σ qₖ·(PLS component k)', bayes: 'w̃ has a prior N(0, τ²); ŷ uses its posterior mean' };
+function altText(c, part){
+  const A = c.P.alt; if (!A) return c.d.mf ? 'this variant is ordinary least squares itself: see above' : 'not used: this is ordinary least squares (the Model formulation branch has the alternatives)';
+  const m = A.info.method || A.kind, lam = A.info.lam;
+  if (part === 'model') return `${esc(A.label)}: ${ALT_MODEL[m] || ALT_MODEL[A.kind] || ''}`;
+  if (part === 'loss') return ({ origin: 'Σ(y − w·x)², with no intercept to absorb the level of y', wls: 'Σ wᵢ(yᵢ − ŷᵢ)², with wᵢ = 1 / estimated variance of row i', gls: `Σ (transformed residual)², after removing ρ = ${num(A.info.rho, 3)} of the previous row`, huber: 'Σ ρ(eᵢ/s): eᵢ²/2 when |eᵢ/s| ≤ 1.345, otherwise 1.345·|eᵢ/s| − 1.345²/2', ransac: `the number of rows within ${num(A.info.thr, 3)} of the line (maximised), then squared error on those rows`, theil: 'no loss is minimised: the slope is the median of pairwise slopes', quantile: 'Σ |yᵢ − ŷᵢ| (absolute, not squared)', ridge: `Σe² + λ·Σw̃ⱼ² with λ = ${num(lam, 4)}${A.info.penB ? ' (the intercept is penalised too)' : ' (the intercept is not penalised)'}`, lasso: `(1/2N)·Σe² + λ·Σ|w̃ⱼ| with λ = ${num(lam, 4)}`, enet: `(1/2N)·Σe² + λ·(α·Σ|w̃ⱼ| + (1 − α)/2·Σw̃ⱼ²), α = ${A.info.alpha}, λ = ${num(lam, 4)}`, pcr: `Σe² using the first ${A.info.K} principal components only`, pls: `Σe² using ${A.info.K} components built to covary with y`, bayes: `posterior ∝ likelihood × prior, the same as Σe² + (s²/τ²)·Σw̃ⱼ² with s²/τ² = ${num(lam, 4)}` })[m] || '';
+  if (part === 'fit') return `w̃ = ${vec(A.w || A.wOrig, 4)}; training RMSE ${num(A.rmseTr, 3)} (OLS ${num(c.P.rmseTr, 3)})`;
+  if (part === 'test') return `${A.rmseTe < c.P.rmseTe ? mark(true) : mark(false, true)} test RMSE ${num(A.rmseTe, 3)} vs OLS ${num(c.P.rmseTe, 3)}; test R² ${num(A.r2Te, 3)} vs ${num(c.P.r2Te, 3)}`;
+  if (part === 'coef') return c.P.names.map((nm, j) => `${nm === '1' ? 'b' : nm}: ${num(A.wOrig[j], 3)} (OLS ${num(c.P.wOrig[j], 3)}${c.d.truth.coef[j] != null ? `, true ${c.d.truth.coef[j]}` : ''})`).join('; ');
+  return '';
+}
 /* one line on what step 5 built for a Feature engineering variant */
 function feSummary(c){
   const fe = c.d.fe; if (!fe) return 'none applied (covered in the Feature engineering branch)';
@@ -437,21 +458,24 @@ const STEPS = [
     attrs: ['modeltype', 'robust', 'regularisation', 'otherforms', 'intercept'],
     subs: [
       [sy('yhat'), 'Prediction rule', c => `${sy('yhat')} = ${sy('Xt')}${sy('wt')} = w̃₀ + ${c.P.names.slice(1).map((n, k) => `w̃${k + 1}·x̃_${n}`).join(' + ')}`],
-      ['', 'Formulation', () => 'ordinary least squares with an intercept']
+      ['', 'Formulation', () => 'ordinary least squares with an intercept'],
+      ['', "This variant's model", c => altText(c, 'model')]
     ]},
   { id: 8, title: 'Loss', goal: 'Decide what "best" means.',
     attrs: ['lossfn', 'penalty', 'lambda', 'alpha', 'penalisebias'],
     subs: [
       [sy('e'), 'Residuals', () => `${sy('e')} = ${sy('y')} − ${sy('yhat')}`],
       [sy('L'), 'Mean squared error', c => `${sy('L')}(${sy('wt')}) = (1/${c.P.nTr}) ${sy('e')}ᵀ${sy('e')}; at ${sy('wt')} = 0 it is ${num(c.P.iters[0].L, 3)}`],
-      [sy('lam'), 'Penalty', () => `${sy('lam')} = 0 (no regularisation)`]
+      [sy('lam'), 'Penalty', () => `${sy('lam')} = 0 (no regularisation)`],
+      ['', "This variant's loss", c => altText(c, 'loss')]
     ]},
   { id: '9a', title: 'Optimise: closed form', goal: 'Set the gradient to zero and solve the normal equations.',
     attrs: ['solver'],
     subs: [
       [`${sy('XtX')}, ${sy('det')}`, 'From the loss to the normal equations X̃ᵀX̃ w̃ = X̃ᵀy', c => `${c.P.P}×${c.P.P}, ${sy('det')} = ${num(c.P.f.det, 4)}`],
       [sy('wt'), 'Solve them: w̃ = (X̃ᵀX̃)⁻¹X̃ᵀy', c => `${c.P.f.full ? mark(true) : mark(false)} ${sy('wt')}* = ${vec(c.P.f.w)}${c.P.f.full ? '' : ' (minimum-norm: the solution is not unique)'}`],
-      [sy('L'), 'Loss at the solution', c => `${sy('L')}(${sy('wt')}*) = ${num(c.P.f.SSE / c.P.nTr, 4)}`]
+      [sy('L'), 'Loss at the solution', c => `${sy('L')}(${sy('wt')}*) = ${num(c.P.f.SSE / c.P.nTr, 4)}`],
+      ['', "This variant's fit", c => altText(c, 'fit')]
     ]},
   { id: '9b', title: 'Optimise: gradient descent', goal: 'Reach the same minimum by repeated downhill steps.',
     attrs: ['gdtype', 'lr', 'schedule', 'optimiser', 'init', 'stopping', 'scalegd'],
@@ -502,6 +526,7 @@ const STEPS = [
     subs: [
       [sy('rmse'), 'Train vs test error', c => `train ${num(c.P.rmseTr, 3)}, test ${num(c.P.rmseTe, 3)}${c.P.rmseTe > 1.3 * c.P.rmseTr ? ` ${mark(false, true)} test noticeably worse` : ''}`],
       [sy('r2'), 'Test R²', c => num(c.P.r2Te, 3)],
+      ['', 'This variant on the test rows', c => altText(c, 'test')],
       ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y']
     ]},
   { id: 13, title: 'Interpretation', goal: 'Undo the scaling and say what the coefficients mean.',
@@ -509,6 +534,7 @@ const STEPS = [
     subs: [
       [sy('w'), 'Back to the original scale: w_j = w̃_j / s_j, b = w̃₀ − Σ w̃_j μ_j / s_j', c => c.P.names.map((n, j) => `${n === '1' ? 'b' : n}: ${num(c.P.wOrig[j], 3)}${c.d.truth.coef[j] != null ? ` (true ${c.d.truth.coef[j]})` : ''}`).join(', ')],
       ['', 'Reading the slope', c => { const j = c.focus; return `one unit more of ${c.P.names[j]} changes ${sy('yhat')} by ${num(c.P.wOrig[j], 3)}, holding the other features fixed`; }],
+      ['', "This variant's coefficients, next to OLS", c => altText(c, 'coef')],
       ['', 'Confidence and prediction intervals at a new x', c => { const b = band(c.P, c.focus); if (!b) return `${mark(false)} not available: ${c.P.noDg || 'X̃ᵀX̃ has no inverse'}`;
         return b.pts.filter((_, k) => k % 2 === 0).map(q => `${c.P.names[c.focus]} = ${num(q.x, 1)}: ŷ ${num(q.yh, 2)}, mean ± ${num(q.ci, 2)}, new point ± ${num(q.pi, 2)}`).join('; '); }]
     ]}

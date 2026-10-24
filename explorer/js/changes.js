@@ -83,8 +83,18 @@ const CHG = (() => {
     encoh: { x: 'x = 10u and region (text: East, North, South, West); step 5: one-hot, East dropped', y: 'y = 2 + 1.5x + (0, 3, −2, 5 by region) + ε' }, encall: { x: 'same raw data; step 5: one-hot, all four kept', y: 'y = 2 + 1.5x + (0, 3, −2, 5 by region) + ε' }, encord: { x: 'same raw data; step 5: code(region) = 0, 1, 2, 3', y: 'y = 2 + 1.5x + (0, 3, −2, 5 by region) + ε' }, enctarget: { x: 'same raw data; step 5: te(region) = mean y of the level (training rows)', y: 'y = 2 + 1.5x + (0, 3, −2, 5 by region) + ε' },
     cenraw: { x: 'x = 20 + 10u sorted; columns x, x² (no scaling)', y: 'y = 2 + 1.5(x − 25) + 0.2(x − 25)² + ε' }, cencent: { x: 'same raw x; columns xc = x − x̄, xc² (no scaling)', y: 'y = 2 + 1.5(x − 25) + 0.2(x − 25)² + ε' },
     selall: { x: 'x₁ … x₄ = 10u, x₅ = x₁ + 0.3z, n₁ … n₅ = 10u (noise); all 10 kept', y: 'y = 2 + 1.5x₁ + 1.0x₂ − 0.8x₃ + 0.5x₄ + ε' }, selfwd: { x: 'same 10 candidates; step 5 keeps the forward-selected ones', y: 'y = 2 + 1.5x₁ + 1.0x₂ − 0.8x₃ + 0.5x₄ + ε' }, selbwd: { x: 'same 10 candidates; backward elimination', y: 'y = 2 + 1.5x₁ + 1.0x₂ − 0.8x₃ + 0.5x₄ + ε' }, selstep: { x: 'same 10 candidates; stepwise', y: 'y = 2 + 1.5x₁ + 1.0x₂ − 0.8x₃ + 0.5x₄ + ε' }, sellasso: { x: 'same 10 candidates; lasso with CV λ', y: 'y = 2 + 1.5x₁ + 1.0x₂ − 0.8x₃ + 0.5x₄ + ε' }, selvif: { x: 'same 10 candidates; VIF < 5', y: 'y = 2 + 1.5x₁ + 1.0x₂ − 0.8x₃ + 0.5x₄ + ε' }, selp: { x: 'same 10 candidates; one-shot p < 0.05', y: 'y = 2 + 1.5x₁ + 1.0x₂ − 0.8x₃ + 0.5x₄ + ε' },
+    /* model formulation: the data stay the same within an attribute; the model changes (written in the y row) */
+    intin: { x: 'x = 10u sorted', y: 'y = 6 + 1.0x + ε; fit ŷ = b + w·x' }, intorigin: { x: 'x = 10u sorted', y: 'y = 6 + 1.0x + ε; fit ŷ = w·x (no intercept)' },
+    mtsimple: { x: 'x₁ = 10u₁ sorted, x₂ = 10u₂; model uses x₁ only', e: 'ε: spread 0.3 + 0.17x₁, AR(1) with ρ = 0.6', y: 'y = 2 + x₁ + x₂ + 0.1x₁² + ε; OLS' }, mtmultiple: { x: 'same x₁, x₂; model uses both', e: 'ε: spread 0.3 + 0.17x₁, AR(1) with ρ = 0.6', y: 'y = 2 + x₁ + x₂ + 0.1x₁² + ε; OLS' },
+    mtpoly: { x: 'same x₁, x₂, plus x₁²', e: 'ε: spread 0.3 + 0.17x₁, AR(1) with ρ = 0.6', y: 'y = 2 + x₁ + x₂ + 0.1x₁² + ε; OLS' }, mtwls: { x: 'same x₁, x₂, x₁²', e: 'ε: spread 0.3 + 0.17x₁, AR(1) with ρ = 0.6', y: 'y = 2 + x₁ + x₂ + 0.1x₁² + ε; WLS with ω = 1/σ̂²' }, mtgls: { x: 'same x₁, x₂, x₁²', e: 'ε: spread 0.3 + 0.17x₁, AR(1) with ρ = 0.6', y: 'y = 2 + x₁ + x₂ + 0.1x₁² + ε; GLS (Prais–Winsten)' },
+    rbols: { x: 'x = 10u sorted; last row moved to x = 10 + 4s', y: 'y = 2 + 1.5x + ε; every 12th row +s(12 + 3|z|), last row −10s; OLS' }, rbhuber: { x: 'same x', y: 'same contaminated y; Huber IRLS (c = 1.345)' }, rbransac: { x: 'same x', y: 'same contaminated y; RANSAC (100 trials)' }, rbtheil: { x: 'same x', y: 'same contaminated y; Theil–Sen' }, rbquant: { x: 'same x', y: 'same contaminated y; median regression' },
+    rgnone: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; OLS' }, rgridge: { y: 'same y; ridge, λ by 5-fold CV' }, rglasso: { y: 'same y; lasso, λ by 5-fold CV' }, rgenet: { y: 'same y; elastic net α = 0.5, λ by CV' },
+    lam0: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; ridge λ = 0' }, lamsmall: { y: 'same y; ridge λ = 0.1' }, lamcv: { y: 'same y; ridge λ by CV' }, lamlarge: { y: 'same y; ridge λ = 300' }, lamhuge: { y: 'same y; ridge λ = 30 000' },
+    alridge: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; α = 0' }, albal: { y: 'same y; α = 0.5' }, allasso: { y: 'same y; α = 1' },
+    pbno: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε; ridge λ = 10, intercept free' }, pbyes: { x: 'x₁, x₂, x₃ = 10u', y: 'y = 50 + 1.5x₁ + 1.0x₂ − 0.5x₃ + ε; ridge λ = 10, intercept penalised' },
+    ofpcr: { x: 'x₁–x₄ = 5 + 2(0.95f₁ + 0.31z), x₅–x₈ = 5 + 2(0.6f₂ + 0.8z)', e: 'ε = 1.5σz', y: 'y = 2 + 1.0x₁ + 0.5x₂ + 0.8x₅ + 0.3x₈ + ε; PCR, k by CV' }, ofpls: { y: 'same y; PLS, k by CV' }, ofbayes: { y: 'same y; Bayesian, prior N(0, 1)' },
   };
-  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, R[v.id] || {}) }; };
+  const recipeOf = (a, v) => { const B = a.id === 'multicollinearity' ? BASE.two : BASE.one, b0 = R[a.variants[0].id] || {}; const base = Object.assign({}, B, b0); return { base, cur: Object.assign({}, B, a.variants[0].id in R && MF.has(v.id) ? b0 : {}, R[v.id] || {}) }; };
 
   /* data-driven comparison of columns */
   function columns(d){
@@ -111,6 +121,7 @@ const CHG = (() => {
   function trail(ctx){
     const { cur, base, a, v, inf } = ctx, j = cur.d.focus[0], jb = (k => k < 0 && cur.d.fe ? 1 : k)(GEN.colIn(base.d.names, cur.d.names[j])), f = cur.f, fb = base.f;
     const diagName = { fitted: 'Residuals vs fitted', order: 'Residuals in order', qq: 'Q–Q', x1x2: 'x₁ vs x₂' }[a.diag] || 'Residuals vs fitted';
+    const PA = ctx.P && ctx.P.alt, PB = ctx.Pb && ctx.Pb.alt;
     const vif = x => x.vif?.length ? Math.max(...x.vif) : NaN, fmtI = t => isFinite(t) ? n(t, 1) : '∞';
     const M = [
       ['Slope of ' + cur.d.names[j], jb > 0 ? fb.w[jb] : NaN, f.w[j], t => isFinite(t) ? n(t, 3) : '—', (x, y) => Math.abs(x - y) > 0.1 * Math.abs(x) + 0.05],
@@ -121,13 +132,15 @@ const CHG = (() => {
       ['Durbin–Watson (≈ 2 is healthy)', base.dg.dw, cur.dg.dw, t => n(t, 2), (x, y) => Math.abs(x - y) > 0.4],
       ['Jarque–Bera p (bell shape)', base.dg.jb.p, cur.dg.jb.p, pf, (x, y) => (x < 0.05) !== (y < 0.05)],
       ['Largest VIF', vif(base.dg), vif(cur.dg), fmtI, (x, y) => !isFinite(y) || y > 2 * x],
+      ...(PA || PB ? [['Slope of ' + cur.d.names[j] + ", this variant's own model", jb > 0 ? (PB ? PB.wOrig[jb] : ctx.Pb.wOrig[jb]) : NaN, PA ? PA.wOrig[j] : ctx.P.wOrig[j], t => isFinite(t) ? n(t, 3) : '—', (x, y) => Math.abs(x - y) > 0.1 * Math.abs(x) + 0.05],
+        ["Test RMSE, this variant's own model", PB ? PB.rmseTe : ctx.Pb.rmseTe, PA ? PA.rmseTe : ctx.P.rmseTe, t => n(t, 3), (x, y) => Math.abs(y / x - 1) > 0.05]] : []),
       ['Condition number κ (eigenvalues of X̃ᵀX̃, step 6)', base.gram?.kappa, cur.gram?.kappa, t => isFinite(t) ? n(t, 0) : '∞', (x, y) => !isFinite(y) || y > 3 * x]
     ];
     const rows = M.map(([lab, b, c, fm, ch]) => { const moved = isFinite(b) && (isFinite(c) ? ch(b, c) : true); return `<tr class="${moved ? 'hl' : ''}"><td>${lab}</td><td>${fm(b)}</td><td>${fm(c)}</td><td>${moved ? '<b>changed</b>' : 'about the same'}</td></tr>`; }).join('');
     const steps = STEPS.filter(st => inf[st.id] && inf[st.id][0] !== 'none').map(st => { const L = LEVELS[inf[st.id][0]];
       return `<li><a href="#step-${st.id}" data-goto="step-${st.id}"><span class="lv ${L.cls}"><b>${L.glyph}</b></span> Process step ${st.id}, ${esc(st.title)}</a>: ${esc(inf[st.id][1])}</li>`; }).join('');
     const quiet = STEPS.filter(st => !inf[st.id] || inf[st.id][0] === 'none').map(st => st.id).join(', ');
-    const sub10 = { linearity: 0, homoscedasticity: 1, independence: 2, normality: 3, multicollinearity: 4, exogeneity: 0, outliers: 6, samplesize: 0, noise: 0, range: 0, irrelevant: 4, missing: 0, target: 3, categorical: 0, subgroups: 0, shift: 0, leakage: 4 }[a.id] ?? 0, tests = ['RESET', 'Breusch–Pagan', 'Durbin–Watson', 'Jarque–Bera', 'VIF', "Cook's distance", 'the refit without the most influential row'];
+    const sub10 = { linearity: 0, homoscedasticity: 1, independence: 2, normality: 3, multicollinearity: 4, exogeneity: 0, outliers: 6, samplesize: 0, noise: 0, range: 0, irrelevant: 4, missing: 0, target: 3, categorical: 0, subgroups: 0, shift: 0, leakage: 4, robust: 5, intercept: 0, modeltype: 1 }[a.id] ?? 0, tests = ['RESET', 'Breusch–Pagan', 'Durbin–Watson', 'Jarque–Bera', 'VIF', "Cook's distance", 'the refit without the most influential row'];
     return `<div class="chg-cols"><div><h3>Where to look, in order</h3><ol class="chg-trail">
         <li><a href="#chg-data" data-goto="chg-data">The dataset table in section 2</a>: the changed column is tinted, so compare baseline and variant cell by cell.</li>
         <li><a href="#sig-part" data-goto="sig-part">Section 3, what it looks like</a>: the fingerprint, measured against the baseline.</li>

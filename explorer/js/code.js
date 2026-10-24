@@ -72,6 +72,118 @@ ${kind === 'minmax' ? `print(scaler.data_min_, scaler.data_range_)   # app: min 
 Xs_tr, Xs_te = X_tr.copy(), X_te.copy()
 Xs_tr[sc], Xs_te[sc] = scaler.transform(X_tr[sc]), scaler.transform(X_te[sc])`;
   }
+  /* Model formulation: the variant's own model, reproduced with the standard library for it */
+  function mfCode(c, { feats, L, n, mark }){
+    const P = c.P, A = P.alt, d = c.d; if (!A) return null;
+    const m = A.info.method || A.kind, I = A.info, G = a => '[' + a.join(', ') + ']';
+    const head = `yv = y_tr.to_numpy()
+D = sm.add_constant(Xs_tr, has_constant="add")   # X̃ (standardised, column of 1s first), as in step 6
+`;
+    const kf = `from sklearn.model_selection import KFold, GridSearchCV
+cv5 = KFold(n_splits=5)                          # contiguous folds, no shuffle (as in the app)`;
+    const chkW = (expr, w, lab = 'w̃') => `print(np.round(${expr}, 4))${' '.repeat(Math.max(1, 34 - expr.length))}# app: ${lab} = ${L(w)}`;
+    switch (m) {
+      case 'origin': return `ori = sm.OLS(y_tr, X_tr).fit()                  # no add_constant: the line is forced through (0, 0)${mark('no intercept')}
+print(ori.params.round(4).to_dict())             # app: w = ${L(A.wOrig.slice(1))}
+print(round(ori.rsquared, 4))                    # uncentred R² = 1 - SSE/Σy² (statsmodels switches when there is no constant): app ${n(I.r2u, 4)}
+print(LinearRegression(fit_intercept=False).fit(X_tr, y_tr).coef_.round(4))   # the same slope
+print(round(float(np.mean(y_tr - ori.predict(X_tr))), 4))   # residuals no longer average 0`;
+      case 'wls': return head + `e = yv - D @ w_std                              # OLS residuals (step 9a)
+Z = sm.add_constant(Xs_tr[:, [0]])               # variance model: ln(e²) = g0 + g1·x̃₁
+g = np.linalg.lstsq(Z, np.log(e**2 + 1e-12), rcond=None)[0]
+print(np.round(g, 4))                            # app: g = ${L(I.g)}
+omega = 1 / np.exp(Z @ g)                        # weight = 1 / estimated variance
+wls = sm.WLS(yv, D, weights=omega).fit()${mark('weighted least squares')}
+${chkW('wls.params', A.w)}
+print(np.round(wls.bse / np.r_[1, scaler.scale_], 4))   # SEs in original units (slopes): app ${L(I.se.map((s2, j) => j ? s2 / P.sd[j] : NaN).slice(1))}`;
+      case 'gls': return head + `e = yv - D @ w_std                              # OLS residuals, rows in time order
+rho = (e[1:] @ e[:-1]) / (e[:-1] @ e[:-1])
+print(round(rho, 4))                             # app: ρ̂ = ${n(I.rho, 4)}
+Ds = np.vstack([np.sqrt(1 - rho**2) * D[:1], D[1:] - rho * D[:-1]])   # Prais–Winsten: keep the first row, scaled
+ys = np.r_[np.sqrt(1 - rho**2) * yv[:1], yv[1:] - rho * yv[:-1]]
+gls = sm.OLS(ys, Ds).fit()${mark('OLS on the transformed rows = feasible GLS')}
+${chkW('gls.params', A.w)}
+# statsmodels' built-in version iterates ρ until it settles (results differ slightly):
+# sm.GLSAR(yv, D, rho=1).iterative_fit(maxiter=10)`;
+      case 'huber': return head + `rlm = sm.RLM(yv, D, M=sm.robust.norms.HuberT(t=1.345)).fit(scale_est="mad", conv="coefs", tol=1e-10, maxiter=200)${mark('Huber M-estimation by IRLS')}
+${chkW('rlm.params', A.w)}
+print(np.round(rlm.weights[:8], 3))              # final IRLS weights (1 = untouched): app ${L(I.hist[I.hist.length - 1].wt.slice(0, 8))}
+print(int((rlm.weights < 0.999).sum()))          # rows down-weighted: app ${I.hist[I.hist.length - 1].down}
+# scikit-learn: HuberRegressor(epsilon=1.345).fit(Xs_tr, y_tr) estimates the scale jointly, so its numbers differ a little`;
+      case 'quantile': return head + `qr = sm.QuantReg(yv, D).fit(q=0.5)${mark('median (least absolute deviations) regression')}
+${chkW('qr.params', A.w)}
+print(round(float(np.mean(yv > D @ qr.params)), 3))   # about half the rows above the line
+# scikit-learn: QuantileRegressor(quantile=0.5, alpha=0, solver="highs").fit(Xs_tr, y_tr)`;
+      case 'theil': return head + `res = stats.theilslopes(yv, Xs_tr[:, 0], method="joint")   # median of the slopes of all pairs; intercept = median(y - slope·x̃)${mark('Theil–Sen')}
+print(round(res.slope, 4), round(res.intercept, 4))   # app: ${n(I.s, 4)} ${n(I.b, 4)}
+print(round(res.slope / scaler.scale_[0], 4))    # per unit of x: app ${n(A.wOrig[1], 4)}
+# scikit-learn: TheilSenRegressor().fit(Xs_tr, y_tr) (subsamples pairs for speed)`;
+      case 'ransac': return head + `from sklearn.linear_model import RANSACRegressor
+thr = np.median(np.abs(yv - np.median(yv)))      # inlier threshold = MAD of y (also sklearn's default): app ${n(I.thr, 4)}
+rs = RANSACRegressor(LinearRegression(), min_samples=2, residual_threshold=thr, max_trials=100, random_state=17).fit(Xs_tr, yv)${mark('RANSAC')}
+print(rs.estimator_.intercept_, rs.estimator_.coef_)   # app: w̃ = ${L(A.w)}
+print(int((~rs.inlier_mask_).sum()))             # rows left out: app ${I.outl}
+# Its random pairs are not the app's, so its line can differ. To replay the app's winning trial exactly:
+pair = np.array(${G(I.best.sub)})                   # the two training rows of the app's best trial (0-based)
+wp = np.linalg.solve(D[pair], yv[pair])          # the line through them
+inl = np.abs(yv - D @ wp) < thr                  # its inliers: app ${I.best.inl.length}
+w_ran = np.linalg.lstsq(D[inl], yv[inl], rcond=None)[0]   # least squares on the inliers
+${chkW('w_ran', A.w)}`;
+      case 'ridge': if (I.penB) return head + `lam = ${I.lam}
+A = D.T @ D + lam * np.eye(D.shape[1])           # λ on EVERY diagonal entry, the intercept included${mark('the intercept is penalised')}
+w_pen = np.linalg.solve(A, D.T @ yv)
+${chkW('w_pen', A.w)}
+from sklearn.linear_model import Ridge
+print(Ridge(alpha=lam).fit(Xs_tr, yv).intercept_)   # sklearn never penalises the intercept: app (λ on slopes only) gives b̃ = mean(y)`;
+        return head + `from sklearn.linear_model import Ridge
+` + ((A.attr === 'lambda' && A.kind !== 'cv') || A.attr === 'penalisebias' ? `lam = ${I.lam}                                  # fixed by this variant` : `${kf}
+grid = ${G([0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000])}
+gs = GridSearchCV(Ridge(), {"alpha": grid}, cv=cv5, scoring="neg_mean_squared_error").fit(Xs_tr, yv)
+print(np.round(-gs.cv_results_["mean_test_score"], 4))   # mean CV error per λ: app ${L(I.cv.map(t => t.mse))}
+lam = gs.best_params_["alpha"]                   # app: λ = ${I.lam}`) + `
+rd = Ridge(alpha=lam).fit(Xs_tr, yv)${mark('ridge: (X̃ᵀX̃ + λD)w̃ = X̃ᵀy')}
+${chkW('np.r_[rd.intercept_, rd.coef_]', A.w)}
+A = D.T @ D + lam * np.diag([0] + [1] * Xs_tr.shape[1])   # the same by hand: λ on the diagonal, not on the intercept
+print(np.allclose(np.linalg.solve(A, D.T @ yv), np.r_[rd.intercept_, rd.coef_]))`;
+      case 'lasso': case 'enet': return head + `from sklearn.linear_model import ElasticNet
+${kf}
+grid = ${G([0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2])}
+est = ElasticNet(l1_ratio=${I.alpha}, tol=1e-12, max_iter=100000)${m === 'lasso' ? '   # l1_ratio=1 is the lasso (sklearn.linear_model.Lasso)' : ''}
+gs = GridSearchCV(est, {"alpha": grid}, cv=cv5, scoring="neg_mean_squared_error").fit(Xs_tr, yv)
+print(np.round(-gs.cv_results_["mean_test_score"], 4))   # mean CV error per λ: app ${L(I.cv.map(t => t.mse))}
+lam = gs.best_params_["alpha"]                   # app: λ = ${I.lam}
+en = ElasticNet(alpha=lam, l1_ratio=${I.alpha}, tol=1e-12, max_iter=100000).fit(Xs_tr, yv)${mark(m === 'lasso' ? 'lasso: (1/2N)‖y − X̃w‖² + λ‖w‖₁' : 'elastic net')}
+${chkW('np.r_[en.intercept_, en.coef_]', A.w)}
+print([f for f, w in zip(features, en.coef_) if w == 0])   # exactly zero: app ${'[' + P.names.slice(1).filter((_, k) => Math.abs(A.w[k + 1]) < 1e-12).map(x => `"${x.replace(/[₀-₉]/g, ch => '0123456789'['₀₁₂₃₄₅₆₇₈₉'.indexOf(ch)])}"`).join(', ') + ']'}`;
+      case 'pcr': return head + `from sklearn.decomposition import PCA
+${kf}
+print(np.round(PCA().fit(Xs_tr).explained_variance_ * (len(Xs_tr) - 1) / len(Xs_tr), 4))   # eigenvalues of X̃ᵀX̃/N: app ${L(I.vals)}
+pipe = make_pipeline(PCA(), LinearRegression())
+gs = GridSearchCV(pipe, {"pca__n_components": list(range(1, Xs_tr.shape[1] + 1))}, cv=cv5, scoring="neg_mean_squared_error").fit(Xs_tr, yv)
+print(np.round(-gs.cv_results_["mean_test_score"], 4))   # mean CV error per k: app ${L(I.cv.map(t => t.mse))}
+k = gs.best_params_["pca__n_components"]         # app: k = ${I.K}
+pcr = make_pipeline(PCA(n_components=k), LinearRegression()).fit(Xs_tr, yv)${mark('regress y on the first k components')}
+V = pcr[0].components_.T                         # feature × k
+print(np.round(np.r_[pcr[1].intercept_ - pcr[1].coef_ @ V.T @ pcr[0].mean_, V @ pcr[1].coef_], 4))   # weights on the features: app w̃ = ${L(A.w)}`;
+      case 'pls': return head + `from sklearn.cross_decomposition import PLSRegression
+${kf}
+gs = GridSearchCV(PLSRegression(scale=False), {"n_components": list(range(1, Xs_tr.shape[1] + 1))}, cv=cv5, scoring="neg_mean_squared_error").fit(Xs_tr, yv)
+print(np.round(-gs.cv_results_["mean_test_score"], 4))   # mean CV error per k: app ${L(I.cv.map(t => t.mse))}
+k = gs.best_params_["n_components"]              # app: k = ${I.K}
+pls = PLSRegression(n_components=k, scale=False).fit(Xs_tr, yv)${mark('partial least squares (NIPALS)')}
+print(np.round(np.r_[pls.intercept_.ravel(), pls.coef_.ravel()], 4))   # app: w̃ = ${L(A.w)}`;
+      case 'bayes': return head + `tau2 = ${I.tau2}                                     # prior: each standardised slope ~ N(0, τ²); the intercept is left flat
+s2 = ((yv - D @ w_std) ** 2).sum() / (len(yv) - D.shape[1])   # σ² estimated by s² (step 11): app ${n(I.s2, 4)}
+Lam = s2 / tau2 * np.diag([0] + [1] * Xs_tr.shape[1])
+Ainv = np.linalg.inv(D.T @ D + Lam)
+post_mean = Ainv @ D.T @ yv${mark('posterior mean = ridge with λ = σ²/τ²')}
+post_sd = np.sqrt(np.diag(s2 * Ainv))
+${chkW('post_mean', A.w)}
+${chkW('post_sd', I.sdPost, 'posterior SD')}
+# sklearn.linear_model.BayesianRidge estimates σ² and τ² from the data (empirical Bayes), so its numbers differ.`;
+    }
+    return null;
+  }
   function cells(c){
     const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss, num, cat, nCols } = csv(c);
     const F = cat ? `num + cat` : `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra.find(e => e === 'group' || e === 'cluster');
@@ -233,7 +345,7 @@ print(np.sqrt(mean_squared_error(test["raw_y"], back(yhat_te))))   # app: test R
 lr = model.named_steps["linearregression"]; sc = model.named_steps["standardscaler"]
 print(lr.coef_ / sc.scale_, lr.intercept_ - np.sum(lr.coef_ * sc.mean_ / sc.scale_))` });
 
-    const FIX = {
+    let FIX = {
       linearity: vid === 'interaction' ? `smf.ols("y ~ ${X0} * C(customer)${plus}", data=train).fit()   # let the slope differ by customer type` : vid === 'linear' ? null : vid === 'log' ? `smf.ols("y ~ np.log1p(${X0})${plus}", data=train).fit()   # model the diminishing effect` : vid === 'step' ? `smf.ols("y ~ ${X0} + I(${X0} > 5)${plus}", data=train).fit()   # add the threshold indicator` : vid === 'periodic' ? `smf.ols("y ~ ${X0} + np.sin(1.6 * ${X0}) + np.cos(1.6 * ${X0})${plus}", data=train).fit()   # seasonal terms` : `smf.ols("y ~ ${X0} + I(${X0} ** 2)${plus}", data=train).fit()   # or splines: bs(${X0}, df=4)`,
       independence: vid === 'cluster' ? `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="cluster", cov_kwds={"groups": train["${grp}"]})   # or a mixed model: smf.mixedlm("y ~ ${fe.join(' + ')}", train, groups=train["${grp}"])` : vid === 'dupes' ? `df = df.drop_duplicates(subset=features + ["y"])   # then refit; classical SEs are fine again` : vid === 'indep' ? null : `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HAC", cov_kwds={"maxlags": ${lag}})   # or model the dynamics: sm.tsa.SARIMAX(y, exog=X, order=(1, 0, 0))`,
       homoscedasticity: vid === 'constant' ? null : vid === 'groupvar' ? `w = 1 / train.groupby("${grp}")["y"].transform(lambda s: ols.resid[s.index].var())\nsm.WLS(y_tr, sm.add_constant(X_tr), weights=w).fit()   # weight each group by 1 / its variance` : `sm.OLS(y_tr, sm.add_constant(X_tr)).fit(cov_type="HC3")   # robust SEs; or WLS, or model np.log(y)`,
@@ -287,7 +399,9 @@ features = [f for f in features if f != "leak"]        # drop every column not k
 # pipe = make_pipeline(ColumnTransformer([("te", TargetEncoder(), ["level"])], remainder="passthrough"), LinearRegression())
 # Any step that learns from data (encoding, selection, imputation) belongs inside the Pipeline, after the split.`
     }[aid];
-    out.push({ id: 'fix', t: `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${(influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
+    const MFC = MF.has(vid) ? mfCode(c, { feats, L, n, mark }) : undefined;
+    if (MF.has(vid)) FIX = MFC;
+    out.push({ id: 'fix', t: MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
     return out;
   }
 

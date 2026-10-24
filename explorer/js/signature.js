@@ -463,6 +463,59 @@ const SIG = (() => {
   }
   ['scaling', 'xtransform', 'ytransform', 'degree', 'interactions', 'splines', 'binning', 'encoding', 'centering', 'selection'].forEach(k => { A[k] = feSig; });
 
+  /* ================= Model formulation: the same data, a different model or rule for the weights ================= */
+  function mfSig(ctx){ const { v, P, Pb, a } = ctx, F = ctx.full ? ctx.full.cur : ctx.cur.d, A = P.alt, tr = P.tr, y = P.ytr;
+    const M = A || { w: P.f.w, wOrig: P.wOrig, yhat: P.f.yhat, rmseTr: P.rmseTr, rmseTe: P.rmseTe, label: 'ordinary least squares', info: {} }, I = M.info || {}, m = I.method || (A ? A.kind : 'ols');
+    const BM = Pb.alt || { rmseTe: Pb.rmseTe, rmseTr: Pb.rmseTr, wOrig: Pb.wOrig, label: 'ordinary least squares' };
+    const means = F.X[0].map((_, j) => mean(tr.map(i => F.X[i][j])));
+    const rowAt = xv => { const r = [...means]; r[1] = xv; if (F.derive) F.derive.f(xv).forEach((t, q) => { r[F.derive.cols[q]] = t; }); return r; };
+    const curve = (wO, xr) => Array.from({ length: 101 }, (_, k) => { const xv = xr[0] + (xr[1] - xr[0]) * k / 100; return [xv, LA.dot(rowAt(xv), wO)]; });
+    const xs = tr.map(i => F.X[i][1]), xr = range([xs]), flag = new Set(F.flagRows || []), many = ['regularisation', 'lambda', 'alpha', 'otherforms', 'penalisebias'].includes(a.id);
+    const e = y.map((t, k) => t - M.yhat[k]);
+    const coefRows = P.names.map((nm, j) => [nm === '1' ? 'b (intercept)' : nm, F.truth.coef[j] ?? '—', P.wOrig[j], M.wOrig[j]]);
+    const gen = `${esc(v.desc)} The data are the same for every variant of ${esc(a.name.toLowerCase())}; only the model, or the rule that picks its weights, changes.${F.note ? ' ' + esc(F.note) + '.' : ''}`;
+    const zeros = M.w ? P.names.slice(1).filter((_, k) => Math.abs(M.w[k + 1]) < 1e-10) : [];
+    const see = li([
+      `The model: <b>${esc(M.label)}</b>.`,
+      `Test RMSE ${vs(M.rmseTe, BM.rmseTe, 3)}${A ? `; OLS on the same rows: ${n(P.rmseTe, 3)}` : ''}. Train RMSE ${n(M.rmseTr, 3)}${A ? ` (OLS ${n(P.rmseTr, 3)}, always the lowest possible training error for these columns)` : ''}.`,
+      a.id === 'intercept' ? `Slope ${vs(M.wOrig[1], BM.wOrig[1], 3)} (true 1.0); intercept ${n(M.wOrig[0], 3)} (true 6). Mean training residual ${n(mean(e), 3)}${m === 'origin' ? `: not 0 any more. The uncentred R² = ${n(I.r2u, 3)} vs the usual R² of OLS ${n(P.f.R2, 3)}` : ''}.` : '',
+      a.id === 'robust' ? `Slope ${vs(M.wOrig[1], BM.wOrig[1], 3)} (true 1.5), intercept ${n(M.wOrig[0], 3)} (true 2). ${flag.size} contaminated rows are ringed in the chart.${I.hist ? ` After the last iteration ${I.hist[I.hist.length - 1].down} rows have a weight below 1.` : ''}${I.best ? ` RANSAC left out ${I.outl} rows.` : ''}` : '',
+      a.id === 'modeltype' ? `Columns: <b>${P.names.slice(1).join(', ')}</b>. ${m === 'wls' ? `Weights ω range from ${n(Math.min(...I.wt), 3)} (noisy rows, large x₁) to ${n(Math.max(...I.wt), 3)}.` : m === 'gls' ? `Estimated ρ̂ = ${n(I.rho, 3)} (true 0.6); lag-1 correlation of the transformed residuals ${n(lag1(I.ys.map((t, k) => t - LA.dot(I.Xs[k], M.w))), 3)} vs ${n(lag1(P.f.e), 3)} for OLS.` : `RESET p ${pfmt(ctx.cur.dg?.reset?.p)}, Breusch–Pagan p ${pfmt(ctx.cur.dg?.bp?.p)}, Durbin–Watson ${n(ctx.cur.dg?.dw, 2)}.`}` : '',
+      many ? `Weights exactly 0: ${zeros.join(', ') || 'none'}. Size of the weights Σ|w̃| = ${n((M.w || []).slice(1).reduce((s2, t) => s2 + Math.abs(t), 0), 3)} (OLS ${n(P.f.w.slice(1).reduce((s2, t) => s2 + Math.abs(t), 0), 3)}). ${a.id === 'penalisebias' ? '' : 'Truth: only x₁, x₂, x₅, x₈ matter.'}${I.lam != null ? ` λ = ${n(I.lam, 4)}.` : ''}${I.K ? ` ${I.K} component${I.K > 1 ? 's' : ''} chosen by CV.` : ''}` : '',
+      a.id === 'penalisebias' ? `Intercept ${vs(M.wOrig[0], BM.wOrig[0], 2)} (true 50); mean of y ${n(mean(y), 2)}; mean training residual ${n(mean(e), 3)}${Math.abs(mean(e)) > 0.05 ? ': the predictions are pulled toward 0 on average' : ''}.` : '']);
+    const draw = el => { const r1 = row(el), out = [];
+      if (!many) {
+        out.push(chart(r1, `Training rows: OLS (dashed) and this variant's model (solid)`, 250, c => { const cv = curve(M.wOrig, xr), co = curve(P.wOrig, xr), all = [...y, ...cv.map(p => p[1]), ...co.map(p => p[1])]; c.begin(m === 'origin' ? [0, xr[1]] : xr, range([m === 'origin' ? [...all, 0] : all]), `${F.derive?.axisName || F.xName || 'x'}${P.names.length > 2 ? ' (others at their mean)' : ''}`, 'y');
+          if (m === 'origin') c.dot([0, 0], C('--ink'), 4, true);
+          xs.forEach((t, k) => c.dot([t, y[k]], flag.has(tr[k]) ? C('--normal') : C('--floor'), flag.has(tr[k]) ? 4 : 3, flag.has(tr[k]), 0.8));
+          if (F.truth.fnRaw) { const tx = m === 'origin' ? [0, xr[1]] : xr; c.line(Array.from({ length: 41 }, (_, k) => { const t = tx[0] + (tx[1] - tx[0]) * k / 40; return [t, F.truth.fnRaw(t)]; }), C('--ink'), 1, [2, 3]); }
+          if (A) c.line(co, BASEC(), 2, [5, 4]); c.line(m === 'origin' ? curve(M.wOrig, [0, xr[1]]) : cv, CUR(), 2.6); c.end();
+          c.legend([[CUR(), A ? 'this variant' : 'OLS (this variant)'], ...(A ? [[BASEC(), 'OLS', true]] : []), ...(F.truth.fnRaw ? [[C('--ink'), 'truth', true]] : []), ...(flag.size ? [[C('--normal'), 'contaminated rows']] : [])]); }));
+        if (I.hist && I.hist.length) { const wt = I.hist[I.hist.length - 1].wt;
+          out.push(chart(r1, 'Final IRLS weight of each training row', 250, c => { c.begin(xr, [0, Math.max(1.05, ...wt.map(t => Math.min(t, 50)) )], F.xName || 'x', 'weight'); c.hline(1, C('--ink'), [4, 3]); xs.forEach((t, k) => c.dot([t, Math.min(wt[k], 50)], flag.has(tr[k]) ? C('--normal') : C('--floor'), flag.has(tr[k]) ? 4.5 : 3, flag.has(tr[k]), 0.85)); c.end(); c.legend([[C('--floor'), 'clean rows'], [C('--normal'), 'contaminated rows (rings)'], [C('--ink'), 'weight 1 = treated as in OLS', true]]); })); }
+        else if (I.best) { const inl = new Set(I.best.inl); out.push(chart(r1, 'RANSAC: inliers (filled) and rows left out (rings)', 250, c => { c.begin(xr, range([y]), F.xName || 'x', 'y'); xs.forEach((t, k) => c.dot([t, y[k]], inl.has(k) ? C('--floor') : C('--normal'), 3.5, !inl.has(k))); c.end(); })); }
+        else if (m === 'wls') out.push(chart(r1, 'Weights ω = 1/σ̂² against x₁ (noisier rows count less)', 250, c => { c.begin(xr, [0, Math.max(...I.wt) * 1.05], 'x₁', 'weight ω'); xs.forEach((t, k) => c.dot([t, I.wt[k]], CUR(), 3)); c.end(); }));
+        else if (m === 'gls') out.push(chart(r1, 'Residuals in row order: OLS (dashed) vs after the GLS transform (solid)', 250, c => { const r2 = I.ys.map((t, k) => t - LA.dot(I.Xs[k], M.w)), yr = sym(range([P.f.e, r2])); c.begin([1, y.length], yr, 'training row', 'residual'); c.hline(0, C('--ink')); c.line(P.f.e.map((t, k) => [k + 1, t]), BASEC(), 1.4, [4, 3]); c.line(r2.map((t, k) => [k + 1, t]), CUR(), 2); c.end(); c.legend([[CUR(), 'transformed residuals u'], [BASEC(), 'OLS residuals', true]]); }));
+        else out.push(chart(r1, `Residuals against ${F.xName || 'x'}: this variant`, 250, c => residVsX(c, xs, e, sym(range([e])), { k: 6, xName: F.xName || 'x' })));
+      } else {
+        const js = P.names.map((_, j) => j).slice(1);
+        out.push(chart(r1, 'Coefficients per feature: truth (ring), OLS (grey), this variant (filled)', 260, c => { const vals = [...js.map(j => P.wOrig[j]), ...js.map(j => M.wOrig[j]), ...js.map(j => F.truth.coef[j] ?? 0)]; c.begin([0.5, js.length + 0.5], range([vals, [0]]), 'feature (1 = x₁ …)', 'coefficient'); c.hline(0, C('--rule'));
+          js.forEach((j, k) => { const X0 = k + 1; c.line([[X0 - 0.12, 0], [X0 - 0.12, P.wOrig[j]]], BASEC(), 5); c.line([[X0 + 0.12, 0], [X0 + 0.12, M.wOrig[j]]], CUR(), 5); if (F.truth.coef[j] != null) c.dot([X0, F.truth.coef[j]], C('--ink'), 5, true); }); c.end();
+          c.legend([[CUR(), 'this variant'], [BASEC(), 'OLS'], [C('--ink'), 'truth']]); }));
+        if (I.path) { const lg = I.path.map(p => Math.log10(p.g)); out.push(chart(r1, 'Weights w̃ as λ grows (the path); the chosen λ marked', 260, c => { c.begin([Math.min(...lg), Math.max(...lg)], range([I.path.flatMap(p => p.w.slice(1))]), 'log₁₀ λ', 'w̃ (standardised)'); c.hline(0, C('--rule'));
+          js.forEach((j, k) => c.line(I.path.map((p, q) => [lg[q], p.w[j]]), F.truth.coef[j] ? gColor(k % 4, 4) : C('--muted'), F.truth.coef[j] ? 2.2 : 1.2, F.truth.coef[j] ? null : [3, 3])); if (I.lam > 0) c.vline(Math.log10(I.lam), C('--ink'), [4, 3]); c.end(); c.legend([[C('--floor'), 'features that matter'], [C('--muted'), 'features that do not', true]]); })); }
+        else if (I.cv) out.push(chart(r1, 'Cross-validation error for each number of components', 260, c => { c.begin([0.5, I.cv.length + 0.5], range([I.cv.map(t => t.mse)]), 'components k', 'mean CV error'); c.line(I.cv.map(t => [t.g, t.mse]), CUR(), 2.2); I.cv.forEach(t => c.dot([t.g, t.mse], t.g === I.K ? C('--ink') : CUR(), t.g === I.K ? 5 : 3)); c.end(); }));
+        else if (I.sdPost) out.push(chart(r1, '95% intervals per standardised weight: Bayesian credible (solid) vs OLS confidence (dashed)', 260, c => { const lo = js.map(j => Math.min(M.w[j] - 1.96 * I.sdPost[j], P.f.w[j] - 1.96 * P.f.se[j])), hi = js.map(j => Math.max(M.w[j] + 1.96 * I.sdPost[j], P.f.w[j] + 1.96 * P.f.se[j])); c.begin([0.5, js.length + 0.5], range([lo, hi]), 'feature', 'w̃'); c.hline(0, C('--rule'));
+          js.forEach((j, k) => { c.line([[k + 0.85, P.f.w[j] - 1.96 * P.f.se[j]], [k + 0.85, P.f.w[j] + 1.96 * P.f.se[j]]], BASEC(), 2, [3, 2]); c.line([[k + 1.15, M.w[j] - 1.96 * I.sdPost[j]], [k + 1.15, M.w[j] + 1.96 * I.sdPost[j]]], CUR(), 3); c.dot([k + 1.15, M.w[j]], C('--ink'), 3); }); c.end(); }));
+        else out.push(chart(r1, 'Training rows: predicted vs actual y', 260, c => { const all = [...y, ...M.yhat]; c.begin(range([all]), range([all]), 'actual y', 'predicted ŷ'); const r0 = range([all]); c.line([r0, r0].map((_, q) => [r0[q], r0[q]]), C('--ink'), 1, [3, 3]); y.forEach((t, k) => c.dot([t, M.yhat[k]], CUR(), 3, false, 0.8)); c.end(); }));
+      }
+      return out; };
+    const tbl = table(['coefficient', 'true', 'OLS', 'this variant'], coefRows, { max: 12, foot: `Original units. Test RMSE: this variant ${n(M.rmseTe, 3)}, OLS ${n(P.rmseTe, 3)}, baseline (${esc(a.variants[0].name)}) ${n(BM.rmseTe, 3)}.` })
+      + table(['row', F.xName || 'x', 'y (true)', 'ŷ OLS', 'ŷ this variant', 'e this variant'], y.map((t, k) => [k + 1, xs[k], t, P.f.yhat[k], M.yhat[k], e[k]]), { hi: k => flag.has(tr[k]) ? 'hl' : '', max: 10, foot: flag.size ? 'Highlighted: contaminated rows.' : '' });
+    return { gen, see, draw, table: tbl };
+  }
+  ['intercept', 'modeltype', 'robust', 'regularisation', 'lambda', 'alpha', 'penalisebias', 'otherforms'].forEach(k => { A[k] = mfSig; });
+
   function howFit(v){
     const d = v.d, f = v.f;
     if (d.X[0].length !== 2) return `the weights solve the normal equations X̃ᵀX̃ w̃ = X̃ᵀy, exactly as in <a href="#step-9a" data-goto="step-9a">step 9a</a>`;
