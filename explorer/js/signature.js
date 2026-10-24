@@ -594,6 +594,50 @@ const SIG = (() => {
   }
   ['split', 'cv', 'seed'].forEach(k => { A[k] = vpSig; });
 
+  /* ================= Evaluation ================= */
+  function evSig(ctx){ const { v, P, Pb, a } = ctx, F = ctx.full ? ctx.full.cur : ctx.cur.d, E = P.evr, I = E ? E.info : {};
+    const gen = `${esc(v.desc)}${F.note ? ' ' + esc(F.note) + '.' : ''}`;
+    const xtr = P.tr.map(i => F.X[i][1]), xte = P.te.map(i => F.X[i][1]), xr = range([[...xtr, ...xte]]), grid = Array.from({ length: 121 }, (_, k) => xr[0] + (xr[1] - xr[0]) * k / 120);
+    const dataPlot = (c, curves, title) => { const ys = [...P.ytr, ...P.yte, ...curves.flatMap(([f]) => grid.map(f))].filter(t => isFinite(t) && Math.abs(t) < 1e4), lo = Math.min(...P.ytr, ...P.yte), hi = Math.max(...P.ytr, ...P.yte), pad = (hi - lo) * 0.25;
+      c.begin(xr, [lo - pad, hi + pad], 'x', 'y'); xtr.forEach((t, k) => c.dot([t, P.ytr[k]], C('--floor'), 3, false, 0.8)); xte.forEach((t, k) => c.dot([t, P.yte[k]], C('--residual'), 3.5, true, 0.9));
+      c.line(grid.map(t => [t, EV.truthF(t)]), C('--ink'), 1.2, [3, 3]); curves.forEach(([f, col, w, dash]) => c.line(grid.map(t => [t, Math.max(lo - pad, Math.min(hi + pad, f(t)))]), col, w, dash)); c.end();
+      c.legend([[C('--floor'), 'training rows'], [C('--residual'), 'test rows (hollow)'], [C('--ink'), 'truth', true], ...curves.map(([, col, , dash, lab]) => [col, lab, !!dash])]); };
+    const see = li(!E ? ['—'] : [
+      `What is evaluated: <b>${esc(E.label)}</b>.`,
+      E.attr === 'metric' ? `This metric picks <b>degree ${I.pick}</b> (${I.degs.map((dg, k) => `${dg}: ${n(I.vals[k], 3)}`).join(', ')}).` : '',
+      E.attr === 'traintest' ? `Train RMSE <b>${n(I.tr, 3)}</b>, test RMSE <b>${n(I.te, 3)}</b>, noise σ = ${n(F.sigmaUsed ?? 1, 3)}: ${I.te > 1.5 * I.tr ? 'a big gap, the mark of overfitting' : I.tr > 1.3 * (F.sigmaUsed ?? 1) ? 'both high, the mark of underfitting' : 'both close to the noise level'}.` : '',
+      E.attr === 'learningcurve' ? `With all ${I.pts[I.pts.length - 1].sz} rows: training MSE ${n(I.pts[I.pts.length - 1].tr, 3)}, validation MSE ${n(I.pts[I.pts.length - 1].va, 3)}; noise σ² = ${n(I.sigma2, 3)}.` : '',
+      E.attr === 'validationcurve' ? `The validation error is lowest at ${E.kind === 'deg' ? 'degree' : 'λ ='} <b>${I.best.g}</b>.` : '',
+      E.attr === 'biasvariance' ? I.rows.map(r => `Degree ${r.dg}: bias² ${n(r.bias2, 3)}, variance ${n(r.variance, 3)}, total ${n(r.total, 3)}.`).join(' ') : '']);
+    const draw = el => { const r1 = row(el), out = []; if (!E) return out;
+      if (E.attr === 'metric') { out.push(chart(r1, `${esc(E.label.split(' on ')[0])} by degree (${I.better === 'max' ? 'higher' : 'lower'} is better)`, 250, c => { c.begin([0.4, 5.6], range([I.vals, I.better === 'max' ? [] : []]), 'degree', 'metric'); I.vals.forEach((t, k) => c.dot([k + 1, t], k + 1 === I.pick ? C('--normal') : CUR(), k + 1 === I.pick ? 6 : 4)); c.line(I.vals.map((t, k) => [k + 1, t]), CUR(), 1.6); c.end(); }));
+        out.push(chart(r1, 'Data, with degree 1 and this metric’s choice', 250, c => dataPlot(c, [[I.rows[0].f.pred, BASEC(), 2, [5, 4], 'degree 1'], [I.rows[I.pick - 1].f.pred, CUR(), 2.4, null, `degree ${I.pick}`]]))); }
+      if (E.attr === 'traintest') { out.push(chart(r1, 'Train and test RMSE by degree', 250, c => { c.begin([0.5, 10.5], [0, Math.min(Math.max(...I.all.map(t => t.te)), 6 * (F.sigmaUsed ?? 1) + 2) * 1.05], 'degree', 'RMSE'); c.line(I.all.map(t => [t.dg, t.tr]), C('--floor'), 2.2); c.line(I.all.map(t => [t.dg, Math.min(t.te, 1e3)]), C('--residual'), 2.2); c.vline(I.dg, C('--normal'), [4, 3]); c.end(); c.legend([[C('--floor'), 'training'], [C('--residual'), 'test'], [C('--normal'), 'this variant', true]]); }));
+        out.push(chart(r1, `The degree-${I.dg} fit`, 250, c => dataPlot(c, [[I.f.pred, CUR(), 2.4, null, `degree ${I.dg}`]]))); }
+      if (E.attr === 'learningcurve') { out.push(chart(r1, 'Learning curve: MSE against the number of training rows', 250, c => { const vals = I.pts.flatMap(t => [t.tr, t.va]).filter(t => t < 1e4); c.begin([0, I.nMax], [0, Math.min(Math.max(...vals), 20 * I.sigma2 + 5) * 1.05], 'training rows', 'MSE');
+          c.line(I.pts.map(t => [t.sz, t.tr]), C('--floor'), 2.2); c.line(I.pts.map(t => [t.sz, Math.min(t.va, 1e4)]), C('--residual'), 2.2); c.hline(I.sigma2, C('--ink'), [5, 4]); c.end(); c.legend([[C('--floor'), 'training'], [C('--residual'), 'validation (5-fold)'], [C('--ink'), 'noise σ²', true]]); }));
+        out.push(chart(r1, `The degree-${I.dg} fit on all training rows`, 250, c => dataPlot(c, [[E.curve, CUR(), 2.4, null, `degree ${I.dg}`]]))); }
+      if (E.attr === 'validationcurve') { const gx = t => E.kind === 'deg' ? t : Math.log10(t);
+        out.push(chart(r1, `Validation curve: MSE against ${E.kind === 'deg' ? 'the degree' : 'log₁₀ λ'}`, 250, c => { const vals = I.pts.flatMap(t => [t.tr, t.va]).filter(t => t < 1e4); c.begin([gx(I.grid[0]), gx(I.grid[I.grid.length - 1])], [0, Math.min(Math.max(...vals), 50) * 1.05], E.kind === 'deg' ? 'degree' : 'log₁₀ λ', 'MSE');
+          c.line(I.pts.map(t => [gx(t.g), t.tr]), C('--floor'), 2.2); c.line(I.pts.map(t => [gx(t.g), Math.min(t.va, 1e4)]), C('--residual'), 2.2); c.vline(gx(I.best.g), C('--normal'), [4, 3]); c.end(); c.legend([[C('--floor'), 'training'], [C('--residual'), 'validation (5-fold)'], [C('--normal'), 'lowest validation error', true]]); }));
+        out.push(chart(r1, 'The chosen model', 250, c => dataPlot(c, [[E.curve, CUR(), 2.4, null, esc(E.curveLabel)]]))); }
+      if (E.attr === 'biasvariance') { const r2 = row(el);
+        I.rows.forEach((r, q) => out.push(chart(q < 2 ? r1 : r2, `Degree ${r.dg}: 20 of the ${I.R} fits`, 230, c => { const lo = 0, hi = Math.max(...I.grid.map(EV.truthF)) * 1.4; c.begin([1, 10], [lo, hi], 'x', 'ŷ');
+          I.sample[q].forEach(f => c.line(I.grid.map(t => [t, Math.max(lo, Math.min(hi, f.pred(t)))]), CUR(), 1, null, 0.35)); c.line(r.at.map(t => [t.x0, t.mean]), C('--normal'), 2.4); c.line(I.grid.map(t => [t, EV.truthF(t)]), C('--ink'), 1.6, [5, 4]); c.end();
+          c.legend([[CUR(), 'single fits'], [C('--normal'), 'average fit'], [C('--ink'), 'truth', true]]); })));
+        out.push(chart(r2, 'Expected test MSE = bias² + variance + noise', 230, c => { const top = Math.max(...I.rows.map(r => r.total)) * 1.1; c.begin([0.4, I.rows.length + 0.6], [0, top], 'model', 'MSE');
+          I.rows.forEach((r, q) => { const x0 = q + 0.65, x1 = q + 1.35; c.rect(x0, 0, x1, r.noise, C('--muted'), 0.6); c.rect(x0, r.noise, x1, r.noise + r.bias2, C('--normal'), 0.75); c.rect(x0, r.noise + r.bias2, x1, r.total, CUR(), 0.75); c.text(`deg ${r.dg}`, [x0, r.total], C('--ink')); }); c.end();
+          c.legend([[C('--muted'), 'noise σ²'], [C('--normal'), 'bias²'], [CUR(), 'variance']]); })); }
+      return out; };
+    const tbl = !E ? '' : E.attr === 'metric' ? table(['degree', 'MSE', 'RMSE', 'MAE', 'MAPE %', 'R²', 'adj. R² (train)', 'AIC (train)', 'BIC (train)'], I.rows.map(r => [r.dg, r.te.mse, r.te.rmse, r.te.mae, r.te.mape, r.te.r2, r.tr.adjr2, r.tr.aic, r.tr.bic]), { max: 6, hi: k => k + 1 === I.pick ? 'hl' : '' })
+      : E.attr === 'traintest' ? table(['degree', 'train RMSE', 'test RMSE'], I.all.map(r => [r.dg, r.tr, r.te]), { max: 8, hi: k => I.all[k].dg === I.dg ? 'hl' : '' })
+      : E.attr === 'learningcurve' ? table(['training rows', 'training MSE', 'validation MSE'], I.pts.map(t => [t.sz, t.tr, t.va]), { max: 10 })
+      : E.attr === 'validationcurve' ? table([E.kind === 'deg' ? 'degree' : 'λ', 'training MSE', 'validation MSE'], I.pts.map(t => [t.g, t.tr, t.va]), { max: 12, hi: k => I.pts[k] === I.best ? 'hl' : '' })
+      : table(['degree', 'bias²', 'variance', 'noise', 'total'], I.rows.map(r => [r.dg, r.bias2, r.variance, r.noise, r.total]), { max: 4 });
+    return { gen, see, draw, table: tbl };
+  }
+  ['metric', 'traintest', 'learningcurve', 'validationcurve', 'biasvariance'].forEach(k => { A[k] = evSig; });
+
   function howFit(v){
     const d = v.d, f = v.f;
     if (d.X[0].length !== 2) return `the weights solve the normal equations X̃ᵀX̃ w̃ = X̃ᵀy, exactly as in <a href="#step-9a" data-goto="step-9a">step 9a</a>`;

@@ -377,6 +377,70 @@ flat = inner.fit(x1, yt)                         # tuning on all training rows (
 print(flat.best_params_, (-flat.best_score_).round(4))   # app: degree ${I.bestFlat}, ${n(I.flatBest, 4)} (optimistic)` + truth + ` The chosen degree-${I.bestFlat} model scores ${n(V.trueSel, 4)} there.`;
     return null;
   }
+  /* Evaluation: scikit-learn / statsmodels code reproducing the app's numbers */
+  function evCode(c, { L, n, mark }){
+    const P = c.P, E = P.evr; if (!E) return null; const I = E.info;
+    const head = `from sklearn.preprocessing import PolynomialFeatures
+from sklearn.model_selection import KFold, learning_curve, validation_curve
+from sklearn.linear_model import Ridge
+from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
+xt, xs = X_tr[["x"]].to_numpy(), X_te[["x"]].to_numpy()
+yt, ys = y_tr.to_numpy(), y_te.to_numpy()
+poly = lambda deg: make_pipeline(StandardScaler(), PolynomialFeatures(deg), LinearRegression())   # standardise x, then 1, z, z², …
+`;
+    if (E.attr === 'metric') return head + `for deg in range(1, 6):
+    m = poly(deg).fit(xt, yt); p_te, p_tr = m.predict(xs), m.predict(xt)
+    Z = m[:-1].transform(xt)                          # the design 1, z, …, z^deg (statsmodels for adjusted R², AIC, BIC)
+    o = sm.OLS(yt, Z).fit()
+    print(deg, round(mean_squared_error(ys, p_te), 4), round(np.sqrt(mean_squared_error(ys, p_te)), 4), round(mean_absolute_error(ys, p_te), 4),
+          round(100 * mean_absolute_percentage_error(ys, p_te), 4), round(r2_score(ys, p_te), 4), round(o.rsquared_adj, 4), round(o.aic, 4), round(o.bic, 4))
+# app, degree by degree (MSE, RMSE, MAE, MAPE %, R² on test; adjusted R², AIC, BIC on train):
+${I.rows.map(r => `# app: ${r.dg} ${[r.te.mse, r.te.rmse, r.te.mae, r.te.mape, r.te.r2, r.tr.adjr2, r.tr.aic, r.tr.bic].map(t => n(t, 4)).join(' ')}`).join('\n')}
+# this variant's metric (${E.kind}) picks degree ${I.pick}${mark('the metric decides the model')}`;
+    if (E.attr === 'traintest') return head + `for deg in ${'[' + I.all.map(t => t.dg).join(', ') + ']'}:
+    m = poly(deg).fit(xt, yt)
+    print(deg, round(np.sqrt(mean_squared_error(yt, m.predict(xt))), 4), round(np.sqrt(mean_squared_error(ys, m.predict(xs))), 4))
+${I.all.map(r => `# app: ${r.dg} ${n(r.tr, 4)} ${n(r.te, 4)}`).join('\n')}
+# this variant: degree ${I.dg}${mark(E.kind === 'over' ? 'overfit' : E.kind === 'under' ? 'underfit' : 'about right')}`;
+    if (E.attr === 'learningcurve') return head + `sizes, tr, va = learning_curve(poly(${I.dg}), xt, yt, train_sizes=${'[' + I.pts.map(t => t.sz).join(', ') + ']'}, cv=KFold(5), scoring="neg_mean_squared_error")${mark(`degree ${I.dg}`)}
+print(sizes, (-tr.mean(axis=1)).round(4), (-va.mean(axis=1)).round(4))
+# app: training MSE ${L(I.pts.map(t => t.tr))}
+# app: validation MSE ${L(I.pts.map(t => t.va))}`;
+    if (E.attr === 'validationcurve') return head + (E.kind === 'deg' ? `tr, va = validation_curve(poly(1), xt, yt, param_name="polynomialfeatures__degree", param_range=list(range(1, 11)), cv=KFold(5), scoring="neg_mean_squared_error")`
+      : `ridge10 = make_pipeline(StandardScaler(), PolynomialFeatures(10, include_bias=False), Ridge())   # the intercept is not penalised
+tr, va = validation_curve(ridge10, xt, yt, param_name="ridge__alpha", param_range=${'[' + I.grid.join(', ') + ']'}, cv=KFold(5), scoring="neg_mean_squared_error")`) + `${mark('one setting at a time, 5-fold CV')}
+print((-tr.mean(axis=1)).round(4), (-va.mean(axis=1)).round(4))
+# app: training MSE ${L(I.pts.map(t => t.tr))}
+# app: validation MSE ${L(I.pts.map(t => t.va))}  (lowest at ${I.best.g})`;
+    if (E.attr === 'biasvariance') return head + `
+def mulberry32(a):                               # the app's random-number generator, bit for bit
+    st = [a & 0xFFFFFFFF]
+    imul = lambda x, y: (x * y) & 0xFFFFFFFF
+    def r():
+        a = (st[0] + 0x6D2B79F5) & 0xFFFFFFFF; st[0] = a
+        t = imul(a ^ (a >> 15), 1 | a)
+        t = ((t + imul(t ^ (t >> 7), 61 | t)) & 0xFFFFFFFF) ^ t
+        return ((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296
+    return r
+def app_dataset(seed, N, sigma):                 # the app's generator for this variant: the same draws in the same order
+    rng = mulberry32(seed * 7919 + 13); K = max(N, 16)
+    def gauss():
+        u = 0
+        while u == 0: u = rng()
+        return np.sqrt(-2 * np.log(u)) * np.cos(2 * np.pi * rng())
+    u1 = [rng() for _ in range(K)]; [rng() for _ in range(2 * K)]   # u1, then u2 and the group draws (unused here)
+    z1 = [gauss() for _ in range(K)]
+    x = 1 + 9 * np.array(u1[:N]); f = 2 + 1.5 * x + 0.45 * (x - 5) ** 2
+    return x[:, None], f + sigma * np.array(z1[:N])
+truth = lambda x: 2 + 1.5 * x + 0.45 * (x - 5) ** 2
+grid = np.arange(1, 10.01, 0.5)[:, None]; sigma = ${I.sigma}
+for deg in ${'[' + I.degs.join(', ') + ']'}:
+    preds = np.array([poly(deg).fit(*app_dataset(1000 + r, ${I.N}, sigma)).predict(grid) for r in range(1, ${I.R + 1})])${mark('200 fresh training sets')}
+    bias2 = ((preds.mean(axis=0) - truth(grid.ravel())) ** 2).mean(); var = preds.var(axis=0).mean()
+    print(deg, round(bias2, 4), round(var, 4), round(sigma**2, 4), round(bias2 + var + sigma**2, 4))
+${I.rows.map(r => `# app: ${r.dg} ${n(r.bias2, 4)} ${n(r.variance, 4)} ${n(r.noise, 4)} ${n(r.total, 4)}`).join('\n')}`;
+    return null;
+  }
   function cells(c){
     const { P, d, a, v, isBase } = c, f = P.f, dg = P.dg || {}, j = d.focus[0], names = d.names, { feats, extra, nMiss, num, cat, nCols } = csv(c);
     const F = cat ? `num + cat` : `[${feats.map(x => `"${x}"`).join(', ')}]`, rc = CHG.recipe(a, v).cur, aid = a.id, vid = v.id, grp = extra.find(e => e === 'group' || e === 'cluster');
@@ -596,7 +660,8 @@ features = [f for f in features if f != "leak"]        # drop every column not k
     if (MF.has(vid)) FIX = MFC;
     if (OP.has(vid)) FIX = optCode(c, { L, n, mark });
     if (VP.has(vid)) FIX = valCode(c, { L, n, mark });
-    out.push({ id: 'fix', t: VP.has(vid) ? `This variant's validation in code` : OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) || VP.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
+    if (EV.has(vid)) FIX = evCode(c, { L, n, mark });
+    out.push({ id: 'fix', t: EV.has(vid) ? `This variant's evaluation in code` : VP.has(vid) ? `This variant's validation in code` : OP.has(vid) ? `This variant's solver / run in code` : MF.has(vid) ? `This variant's model in code` : `This variant: the fix in code`, code: FIX ? `# ${a.name} › ${v.name}: ${MF.has(vid) || OP.has(vid) || VP.has(vid) || EV.has(vid) ? v.desc : (influence(aid, v, false, 1)[11] || [, ''])[1] || v.desc}\n${FIX}` : MF.has(vid) ? `# ${a.name} › ${v.name}: ${v.desc}\n# This variant is ordinary least squares itself: the fit in steps 7–9a above is its code.` : `# Baseline: the assumptions hold, so the plain fit above is the right model.` });
     return out;
   }
 

@@ -290,6 +290,11 @@ const INF = {
   penalisebias: { 8: ['origin', 'Whether the intercept is part of the penalty.'], '9a': ['major', 'A penalised intercept is pulled toward 0, away from the mean of y.'], 12: ['major', 'Every prediction is shifted toward 0.'], 13: ['major', 'The intercept is wrong; the slopes are barely affected.'] },
   lossfn: { 8: ['origin', 'The loss decides how much each residual costs: squared, absolute, Huber, pinball or log-cosh.'], '9a': ['major', 'Only squared loss has the normal equations; the others are solved by iteratively reweighted least squares.'], 10: ['major', 'Residuals of a non-squared loss need not average 0.'], 11: ['major', 'Classical SEs belong to OLS; other losses need their own (sandwich or bootstrap) SEs.'], 12: ['major', 'The best loss for the test score depends on the metric: MSE is scored best by the squared loss, MAE by the absolute loss.'], 13: ['major', 'Each loss estimates a different line: mean, median, a quantile, or a robust centre.'] },
   penalty: { 5: ['major', 'Features must be standardised so the penalty treats them alike.'], 8: ['origin', 'A penalty term on the weights is added to the loss.'], '9a': ['major', 'L2 keeps a closed form (λ on the diagonal); L1 needs coordinate descent.'], 11: ['major', 'Classical SEs do not apply to penalised estimates.'], 12: ['major', 'With correlated features a penalty usually lowers the test error.'], 13: ['major', 'Coefficients are shrunk; L1 sets some exactly to 0.'] },
+  metric: { 12: ['origin', 'Which number summarises the errors: squared, absolute, percentage, explained share, or a likelihood with a complexity penalty.'], 13: ['minor', 'Different metrics can prefer different models.'] },
+  traintest: { 7: ['origin', 'The model\u2019s flexibility: the polynomial degree.'], '9a': ['major', 'More coefficients fit the training rows more closely.'], 12: ['major', 'The gap between training and test error shows over- or underfitting.'], 13: ['major', 'An overfit model\u2019s coefficients are wild and meaningless.'] },
+  learningcurve: { 4: ['major', 'The model is refitted on growing subsets of the training rows, with 5-fold CV.'], 12: ['origin', 'How the training and validation errors change as data grow.'] },
+  validationcurve: { 4: ['major', '5-fold CV on the training rows scores every setting.'], 12: ['origin', 'Training and validation error against one setting (degree or λ).'], 8: ['minor', 'For the λ curve, the ridge penalty is part of the loss.'] },
+  biasvariance: { 1: ['major', '200 fresh datasets are drawn from the same process.'], 12: ['origin', 'The expected test error split into bias², variance and noise.'] },
   split: { 4: ['origin', 'The share of rows held out for testing.'], '9a': ['minor', 'Fewer training rows: slightly less precise weights.'], 11: ['minor', 'Standard errors grow as the training set shrinks.'], 12: ['major', 'A small test set gives a noisy test score.'] },
   cv: { 4: ['origin', 'How the error on new rows is estimated: one split, k folds, leave-one-out, forward-in-time folds, or nested.'], 12: ['major', 'Cross-validation averages several held-out scores, so the estimate is steadier than one split.'], 13: ['minor', 'Choosing a model on the same CV that reports its score is optimistic: nested CV fixes that.'] },
   seed: { 4: ['origin', 'Which rows land in the test set.'], 12: ['major', 'A different split gives a different test score: one number hides that spread.'], 13: ['minor', 'The coefficients move a little from split to split.'] },
@@ -362,6 +367,16 @@ const INF_V = {
 };
 /* Model formulation: what the variant's own model is, minimises, finds and scores (next to the OLS backbone) */
 const ALT_MODEL = { origin: 'ŷ = w·x (no intercept: the line must pass through 0)', wls: 'ŷ = X̃w̃, the same columns as OLS', gls: 'ŷ = X̃w̃, with errors εₜ = ρεₜ₋₁ + uₜ', huber: 'ŷ = X̃w̃, the same line shape as OLS', ransac: 'ŷ = X̃w̃, fitted on the inliers only', theil: 'ŷ = b + w·x', quantile: 'ŷ = X̃w̃ estimates the median of y, not its mean', ridge: 'ŷ = X̃w̃, the same columns as OLS', lasso: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', enet: 'ŷ = X̃w̃, some w̃ⱼ exactly 0', pcr: 'ŷ = b + Σ γₖ·(component k); each component is a fixed mix of the features', pls: 'ŷ = b + Σ qₖ·(PLS component k)', bayes: 'w̃ has a prior N(0, τ²); ŷ uses its posterior mean' };
+function evText(c){
+  const E = c.P.evr; if (!E) return 'not used here (the Evaluation branch compares metrics, train vs test, learning and validation curves, and bias–variance)';
+  const I = E.info;
+  if (E.attr === 'metric') return `${esc(E.label)}: ${I.degs.map((dg, k) => `degree ${dg} ${num(I.vals[k], 3)}`).join(', ')}. ${I.better === 'max' ? 'Highest' : 'Lowest'}: <b>degree ${I.pick}</b>`;
+  if (E.attr === 'traintest') return `${I.te > 1.5 * I.tr ? mark(false) : I.tr > 1.3 * (c.d.sigmaUsed || 1) ? mark(false, true) : mark(true)} degree ${I.dg}: train RMSE ${num(I.tr, 3)}, test RMSE ${num(I.te, 3)}`;
+  if (E.attr === 'learningcurve') { const L = I.pts[I.pts.length - 1]; return `degree ${I.dg}: at ${L.sz} rows, training MSE ${num(L.tr, 3)}, validation MSE ${num(L.va, 3)} (noise level σ² = ${num(I.sigma2, 3)})`; }
+  if (E.attr === 'validationcurve') return `lowest CV error at ${E.kind === 'deg' ? 'degree' : 'λ ='} ${I.best.g} (CV MSE ${num(I.best.va, 3)}); refitted, test RMSE ${num(I.testRmse, 3)}`;
+  if (E.attr === 'biasvariance') return I.rows.map(r => `degree ${r.dg}: bias² ${num(r.bias2, 3)} + variance ${num(r.variance, 3)} + noise ${num(r.noise, 3)} = ${num(r.total, 3)}`).join('; ');
+  return '';
+}
 function valText(c, part){
   const V = c.P.val; if (!V) return part === 'cv' ? 'not used here (covered in the Validation branch)' : part === 'truth' ? 'not computed here (the Validation branch scores each protocol against 2 000 fresh rows)' : 'the single random split above';
   const I = V.info;
@@ -561,7 +576,8 @@ const STEPS = [
       [sy('r2'), 'Test R²', c => num(c.P.r2Te, 3)],
       ['', 'This variant on the test rows', c => altText(c, 'test')],
       ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y'],
-      ['', "This variant's error estimate vs the truth", c => valText(c, 'truth')]
+      ['', "This variant's error estimate vs the truth", c => valText(c, 'truth')],
+      ['', "This variant's evaluation", c => evText(c)]
     ]},
   { id: 13, title: 'Interpretation', goal: 'Undo the scaling and say what the coefficients mean.',
     attrs: ['reading', 'causal', 'intervals'],

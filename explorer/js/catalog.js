@@ -311,12 +311,34 @@ const CATALOG = [
       { id: 'sdvaried', name: 'Varied', desc: 'The same 80/20 split repeated with 200 seeds: a distribution of test scores.' }
     ]}
   ]},
-  { id: 'evaluation', name: 'Evaluation', attrs: [
-    { id: 'metric', name: 'Metric', variants: ['MSE', 'RMSE', 'MAE', 'MAPE', 'R²', 'Adjusted R²', 'AIC', 'BIC'] },
-    { id: 'traintest', name: 'Train vs test', variants: ['Both good', 'Overfit', 'Underfit'] },
-    { id: 'learningcurve', name: 'Learning curves', variants: ['High bias', 'High variance', 'Good fit'] },
-    { id: 'validationcurve', name: 'Validation curves', variants: ['vs degree', 'vs λ'] },
-    { id: 'biasvariance', name: 'Bias–variance', variants: ['Decomposition'] }
+  { id: 'evaluation', name: 'Evaluation', live: true, attrs: [
+    { id: 'metric', name: 'Metric', diag: 'fitted', variants: [
+      { id: 'mtmse', name: 'MSE', desc: 'Mean squared error on the test rows, for polynomial models of degree 1–5 on a gently curved truth.' },
+      { id: 'mtrmse', name: 'RMSE', desc: '√MSE: a typical error in the units of y.' },
+      { id: 'mtmae', name: 'MAE', desc: 'Mean absolute error: every unit of error counts the same.' },
+      { id: 'mtmape', name: 'MAPE', desc: 'Mean absolute percentage error: |e/y| averaged, in %.' },
+      { id: 'mtr2', name: 'R²', desc: '1 − SSE/SST on the test rows: the share of the variation explained.' },
+      { id: 'mtadjr2', name: 'Adjusted R²', desc: 'R² on the training rows, penalised for the number of coefficients.' },
+      { id: 'mtaic', name: 'AIC', desc: '−2 log-likelihood + 2p on the training rows: lower is better.' },
+      { id: 'mtbic', name: 'BIC', desc: '−2 log-likelihood + ln(n)·p: a stronger penalty than AIC.' }
+    ]},
+    { id: 'traintest', name: 'Train vs test', diag: 'fitted', variants: [
+      { id: 'ttgood', name: 'Both good', desc: 'A degree-2 polynomial on 16 training rows: the right flexibility, train and test errors close.' },
+      { id: 'ttover', name: 'Overfit', desc: 'A degree-10 polynomial on the same rows: tiny training error, large test error.' },
+      { id: 'ttunder', name: 'Underfit', desc: 'A straight line on the curve: both errors high and close.' }
+    ]},
+    { id: 'learningcurve', name: 'Learning curves', diag: 'fitted', variants: [
+      { id: 'lcbias', name: 'High bias', desc: 'A straight line: training and validation errors meet early, high above the noise level.' },
+      { id: 'lcvar', name: 'High variance', desc: 'A degree-10 polynomial: a wide gap between training and validation error that closes slowly.' },
+      { id: 'lcgood', name: 'Good fit', desc: 'A degree-2 polynomial: both errors converge to the noise level.' }
+    ]},
+    { id: 'validationcurve', name: 'Validation curves', diag: 'fitted', variants: [
+      { id: 'vcdeg', name: 'vs degree', desc: 'Training and 5-fold CV error for degree 1 to 10.' },
+      { id: 'vclam', name: 'vs λ', desc: 'Training and CV error of a degree-10 polynomial with ridge λ from 10⁻⁴ to 1000.' }
+    ]},
+    { id: 'biasvariance', name: 'Bias–variance', diag: 'fitted', variants: [
+      { id: 'bvdecomp', name: 'Decomposition', desc: 'Degrees 1, 2 and 6, each fitted to 200 fresh datasets: expected error = bias² + variance + noise.' }
+    ]}
   ]},
   { id: 'inference', name: 'Inference', attrs: [
     { id: 'coefinf', name: 'Coefficient inference', variants: ['Standard error', 't-test, p-value', 'Confidence interval'] },
