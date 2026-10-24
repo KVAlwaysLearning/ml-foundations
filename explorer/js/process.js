@@ -575,7 +575,7 @@ const STEPS = [
       [sy('rmse'), 'Train vs test error', c => `train ${num(c.P.rmseTr, 3)}, test ${num(c.P.rmseTe, 3)}${c.P.rmseTe > 1.3 * c.P.rmseTr ? ` ${mark(false, true)} test noticeably worse` : ''}`],
       [sy('r2'), 'Test R²', c => num(c.P.r2Te, 3)],
       ['', 'This variant on the test rows', c => altText(c, 'test')],
-      ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y'],
+      ['', 'Back on the original scale of y', c => c.P.orig ? `predictions turned back with ${!c.d.fe || c.d.fe.kind === 'log' ? 'eᶻ' : 'the inverse Box-Cox'}: train RMSE ${num(c.P.orig.rmseTr, 3)}, test RMSE ${num(c.P.orig.rmseTe, 3)} (in the units of y)` : 'y was not transformed, so the scores above are already in the units of y'],
       ['', "This variant's error estimate vs the truth", c => valText(c, 'truth')],
       ['', "This variant's evaluation", c => evText(c)]
     ]},

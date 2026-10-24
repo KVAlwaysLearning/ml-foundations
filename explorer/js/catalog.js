@@ -341,12 +341,35 @@ const CATALOG = [
     ]}
   ]},
   { id: 'inference', name: 'Inference', attrs: [
-    { id: 'coefinf', name: 'Coefficient inference', variants: ['Standard error', 't-test, p-value', 'Confidence interval'] },
-    { id: 'ftest', name: 'Model-level test', variants: ['Overall F-test', 'Partial F-test'] },
-    { id: 'intervals', name: 'Intervals', variants: ['Confidence (mean)', 'Prediction (new point)'] },
-    { id: 'robustse', name: 'Standard errors', variants: ['Classical', 'Robust (HC)', 'Clustered', 'Newey–West'] },
-    { id: 'reading', name: 'Coefficient reading', variants: ['Raw units', 'Standardised', 'Log–log', 'Log–linear'] },
-    { id: 'causal', name: 'Causation vs correlation', variants: ['Correct reading', 'Confounded reading'] }
+    { id: 'coefinf', name: 'Coefficient inference', diag: 'fitted', variants: [
+      { id: 'cise', name: 'Standard error', desc: 'How far each coefficient would move between samples: √(s²·[(XᵀX)⁻¹]ⱼⱼ). Data: one strong, one weak and one useless feature.' },
+      { id: 'citt', name: 't-test, p-value', desc: 't = coefficient / SE, compared with the t distribution: is the coefficient different from 0?' },
+      { id: 'cici', name: 'Confidence interval', desc: 'Coefficient ± t-critical × SE: a range that covers the true value in 95% of samples.' }
+    ]},
+    { id: 'ftest', name: 'Model-level test', diag: 'fitted', variants: [
+      { id: 'ftall', name: 'Overall F-test', desc: 'Are all the slopes zero at once?' },
+      { id: 'ftpart', name: 'Partial F-test', desc: 'Are the coefficients of x₂ and x₃ zero, given x₁ is in the model?' }
+    ]},
+    { id: 'intervals', name: 'Intervals', diag: 'fitted', variants: [
+      { id: 'ivconf', name: 'Confidence (mean)', desc: 'Where the average y at a given x lies: it shrinks as N grows.' },
+      { id: 'ivpred', name: 'Prediction (new point)', desc: 'Where one new y at a given x lies: it never shrinks below the noise.' }
+    ]},
+    { id: 'robustse', name: 'Standard errors', diag: 'fitted', variants: [
+      { id: 'rsclass', name: 'Classical', desc: 'Independent errors with equal spread: the classical SE is right.' },
+      { id: 'rshc', name: 'Robust (HC)', desc: 'Errors whose spread grows with x: the heteroscedasticity-robust SE is right.' },
+      { id: 'rscl', name: 'Clustered', desc: 'Rows in 10 groups sharing a shock: the cluster-robust SE is right.' },
+      { id: 'rsnw', name: 'Newey–West', desc: 'Errors carried over from row to row: the HAC (Newey–West) SE is right.' }
+    ]},
+    { id: 'reading', name: 'Coefficient reading', diag: 'fitted', variants: [
+      { id: 'rdraw', name: 'Raw units', desc: 'One more unit of x changes ŷ by w units of y.' },
+      { id: 'rdstd', name: 'Standardised', desc: 'One more standard deviation of x changes ŷ by w̃; dividing by sd(y) gives the β coefficient.' },
+      { id: 'rdloglog', name: 'Log–log', desc: 'ln y on ln x: the slope is an elasticity, % change in y per 1% change in x.' },
+      { id: 'rdloglin', name: 'Log–linear', desc: 'ln y on x: each unit of x multiplies y by e^w (about 100·w % when w is small).' }
+    ]},
+    { id: 'causal', name: 'Causation vs correlation', diag: 'fitted', variants: [
+      { id: 'cscorrect', name: 'Correct reading', desc: 'x is assigned at random (an experiment): the slope is the causal effect 1.0.' },
+      { id: 'csconf', name: 'Confounded reading', desc: 'A hidden u drives both x and y: the slope mixes the effect of x with the effect of u.' }
+    ]}
   ]},
   { id: 'diagnostics', name: 'Diagnostics', attrs: [
     { id: 'residplots', name: 'Residual plots', variants: ['Residuals vs fitted', 'Q–Q', 'Scale–location', 'Residuals vs leverage'] },

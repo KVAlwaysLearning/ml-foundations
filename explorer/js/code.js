@@ -593,7 +593,7 @@ print(nw.bse)                                                           # app: S
 print(np.sqrt(mean_squared_error(y_te, yhat_te)))  # test RMSE: app ${n(P.rmseTe, 3)} (train ${n(P.rmseTr, 3)})
 print(r2_score(y_te, yhat_te))                     # test R²: app ${n(P.r2Te, 3)}` + (P.orig ? `
 # y was transformed in step 5: turn the predictions back before scoring in the units of y
-back = ${d.fe.kind === 'log' ? 'np.exp' : `lambda z: np.maximum(0, ${n(d.fe.lam, 6)} * z + 1) ** (1 / ${n(d.fe.lam, 6)})`}
+back = ${!d.fe || d.fe.kind === 'log' ? 'np.exp' : `lambda z: np.maximum(0, ${n(d.fe.lam, 6)} * z + 1) ** (1 / ${n(d.fe.lam, 6)})`}
 print(np.sqrt(mean_squared_error(test["raw_y"], back(yhat_te))))   # app: test RMSE in the units of y ${n(P.orig.rmseTe, 3)}` : '') });
 
     out.push({ id: 13, t: 'Step 13: interpret', code:

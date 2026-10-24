@@ -109,6 +109,8 @@ const PIPE = (() => {
     try { res.val = d.val ? VP.run(d.val, res, d) : null; } catch (err) { console.error(err); res.val = null; }
     // Evaluation: metrics, train vs test, learning and validation curves, bias–variance
     try { res.evr = d.ev ? EV.run(d.ev, res, d) : null; } catch (err) { console.error(err); res.evr = null; }
+    // Inference: tests, intervals, standard errors and readings, each checked on 300 fresh datasets
+    try { res.inr = d.inf ? IN.run(d.inf, res, d) : null; } catch (err) { console.error(err); res.inr = null; }
     return res;
   }
   return { run, splitIdx };
